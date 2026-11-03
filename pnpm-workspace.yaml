@@ -1,0 +1,6 @@
+packages:
+  - bridge
+  - ui
+
+onlyBuiltDependencies:
+  - esbuild

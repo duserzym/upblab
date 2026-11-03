@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-module-bounds"
+description = "Enables the module_bounds command without any pre-configured scope."
+commands.allow = ["module_bounds"]
+
+[[permission]]
+identifier = "deny-module-bounds"
+description = "Denies the module_bounds command without any pre-configured scope."
+commands.deny = ["module_bounds"]

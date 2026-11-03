@@ -1,0 +1,138 @@
+// Link resolution (plan section 4.4). Every cross-module action is a URL; the
+// shell maps it to a tab and a route. The OS hands the same URLs over when a
+// user clicks one in an email or a notebook (deep-link plugin), and modules
+// post them through @lab/bridge.
+//
+//   laicpmsdb://acquisition/<id>          -> Sessions, /app/acquisitions/<id>
+//   laicpmsdb://session/<id>              -> Sessions, /app/sessions/<id>
+//   laicpmsdb://sample/<id>               -> Sessions, /app/samples/<id>
+//   grainatlas://project/<id>             -> Images,   /atlas/?project=<id>
+//   grainatlas://project/<id>/spot/<id>   -> Images,   /atlas/?project=<id>&spot=<id>
+//   upbr://session/<id>                   -> launch UPbRPy Studio with that session
+//   https://… and http://…                -> system browser
+//
+// Anything else is refused; the caller logs the refusal.
+
+export type TabId = 'home' | 'images' | 'sessions' | 'reduce';
+export type ModuleTab = 'images' | 'sessions';
+
+export const SCHEMES = ['laicpmsdb', 'grainatlas', 'upbr'] as const;
+export type Scheme = (typeof SCHEMES)[number];
+
+export type Resolution =
+  | { kind: 'tab'; tab: ModuleTab; route: string; url: string }
+  | { kind: 'studio'; tab: 'reduce'; session: string; url: string }
+  | { kind: 'external'; url: string }
+  | { kind: 'refused'; url: string; reason: string };
+
+/** Object ids are UUIDs in practice; accept any URL-safe slug, nothing that could change the route. */
+const ID = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/;
+
+function refuse(url: string, reason: string): Resolution {
+  return { kind: 'refused', url, reason };
+}
+
+/** Split `scheme://a/b/c` into ['a','b','c'], tolerating the trailing slash Windows adds. */
+function segments(u: URL): string[] {
+  // Non-special schemes parse `laicpmsdb://acquisition/x` as host `acquisition`, path `/x`.
+  const raw = [u.host, ...u.pathname.split('/')].filter(Boolean);
+  return raw.map((s) => decodeURIComponent(s));
+}
+
+export function resolve(input: string): Resolution {
+  const url = input.trim();
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return refuse(url, 'not a URL');
+  }
+  const scheme = u.protocol.replace(/:$/, '').toLowerCase();
+
+  if (scheme === 'https' || scheme === 'http') {
+    return { kind: 'external', url: u.href };
+  }
+  if (!(SCHEMES as readonly string[]).includes(scheme)) {
+    return refuse(url, `unknown scheme "${scheme}:"`);
+  }
+  if (u.username || u.password || u.port) return refuse(url, 'credentials or port in link');
+
+  let parts: string[];
+  try {
+    parts = segments(u);
+  } catch {
+    return refuse(url, 'malformed escape in link');
+  }
+  const bad = parts.find((p, i) => i % 2 === 1 && !ID.test(p));
+  if (bad !== undefined) return refuse(url, `invalid id "${bad}"`);
+  const [kind, id, sub, subId] = parts;
+
+  switch (scheme as Scheme) {
+    case 'laicpmsdb': {
+      const routes: Record<string, string> = { acquisition: 'acquisitions', session: 'sessions', sample: 'samples' };
+      if (parts.length === 2 && kind in routes) {
+        return { kind: 'tab', tab: 'sessions', route: `/app/${routes[kind]}/${id}`, url };
+      }
+      return refuse(url, `unknown laicpmsdb link "${parts.join('/')}"`);
+    }
+    case 'grainatlas': {
+      if (kind === 'project' && parts.length === 2) {
+        return { kind: 'tab', tab: 'images', route: `/atlas/?project=${id}`, url };
+      }
+      if (kind === 'project' && parts.length === 4 && sub === 'spot') {
+        return { kind: 'tab', tab: 'images', route: `/atlas/?project=${id}&spot=${subId}`, url };
+      }
+      return refuse(url, `unknown grainatlas link "${parts.join('/')}"`);
+    }
+    case 'upbr': {
+      if (kind === 'session' && parts.length === 2) {
+        return { kind: 'studio', tab: 'reduce', session: id, url };
+      }
+      return refuse(url, `unknown upbr link "${parts.join('/')}"`);
+    }
+  }
+}
+
+/** Where module builds live for the current delivery. */
+export interface ModuleBases {
+  /** laicpmsdb server origin (and optional prefix), e.g. `http://localhost:8000`. */
+  server: string;
+  /** Directory URL of the grainatlas build: `…/modules/grainatlas/` on desktop, `/atlas/` on the web. */
+  atlas: string;
+}
+
+function joinBase(base: string, rest: string): string {
+  return base.replace(/\/+$/, '') + '/' + rest.replace(/^\/+/, '');
+}
+
+/** Entry URL of a module tab with no particular route. */
+export function moduleHome(tab: ModuleTab, bases: ModuleBases): string {
+  return tab === 'sessions' ? joinBase(bases.server, '/app/') : joinBase(bases.atlas, 'index.html');
+}
+
+/**
+ * Turn a logical route from `resolve` into the concrete URL to load.
+ * laicpmsdb's UI uses hash routing (its ADR-0004), so `/app/acquisitions/x`
+ * becomes `<server>/app/#/acquisitions/x`. grainatlas reads its query string.
+ */
+export function moduleUrl(tab: ModuleTab, route: string, bases: ModuleBases): string {
+  if (tab === 'sessions') {
+    const rest = route.replace(/^\/app\/?/, '');
+    return joinBase(bases.server, '/app/') + (rest ? `#/${rest}` : '');
+  }
+  const query = route.replace(/^\/atlas\/?/, '');
+  return joinBase(bases.atlas, 'index.html') + query;
+}
+
+/** Normalise a user-entered server URL: scheme required, no trailing slash, no /app suffix. */
+export function normaliseServerUrl(input: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(input.trim());
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  const path = u.pathname.replace(/\/+$/, '').replace(/\/app$/, '');
+  return `${u.protocol}//${u.host}${path}`;
+}

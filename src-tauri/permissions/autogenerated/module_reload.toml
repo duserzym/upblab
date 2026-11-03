@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-module-reload"
+description = "Enables the module_reload command without any pre-configured scope."
+commands.allow = ["module_reload"]
+
+[[permission]]
+identifier = "deny-module-reload"
+description = "Denies the module_reload command without any pre-configured scope."
+commands.deny = ["module_reload"]

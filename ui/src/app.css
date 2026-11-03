@@ -1,0 +1,72 @@
+/* Shell-only layout on top of the laicpmsdb tokens in tokens.css. */
+
+html, body, #app { height: 100%; }
+body { min-height: 0; overflow: hidden; }
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Fixed height: module webviews are laid out from the content box below it. */
+.bar {
+  flex: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-3);
+  border-radius: 0;
+  border-width: 0 0 1px 0;
+  border-color: var(--hairline);
+  box-shadow: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.brand { font-weight: 650; letter-spacing: -0.01em; padding: 0 var(--space-2); }
+.tabs { display: flex; gap: var(--space-1); }
+.tab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 550;
+  transition: background var(--motion), color var(--motion), border-color var(--motion);
+}
+.tab:hover { color: var(--text); background: var(--row-hover); }
+.tab[aria-selected='true'], .tab[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.tab.icon { display: inline-grid; place-items: center; padding: 0.35rem; }
+
+.content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+.view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.view.hidden { display: none; }
+.view.scroll { overflow: auto; }
+
+.center {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+}
+.card { max-width: 40rem; }
+.card ul { margin: 0; padding-left: 1.2rem; }
+
+.chip[aria-checked='true'] { background: var(--accent-soft); border-color: var(--accent); }

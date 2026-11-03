@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-studio-launch"
+description = "Enables the studio_launch command without any pre-configured scope."
+commands.allow = ["studio_launch"]
+
+[[permission]]
+identifier = "deny-studio-launch"
+description = "Denies the studio_launch command without any pre-configured scope."
+commands.deny = ["studio_launch"]

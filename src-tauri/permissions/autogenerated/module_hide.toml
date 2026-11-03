@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-module-hide"
+description = "Enables the module_hide command without any pre-configured scope."
+commands.allow = ["module_hide"]
+
+[[permission]]
+identifier = "deny-module-hide"
+description = "Denies the module_hide command without any pre-configured scope."
+commands.deny = ["module_hide"]
