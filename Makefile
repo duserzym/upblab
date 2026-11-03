@@ -36,8 +36,11 @@ ui-dev: ## Run only the shell page in a browser at http://localhost:1420 (web de
 	$(PNPM) --filter upbstudio-ui dev
 
 .PHONY: build
+# CI=true makes the bundler skip the Finder AppleScript that arranges the .dmg
+# window: it needs Automation permission for Finder and times out without it.
+# GitHub Actions sets CI too, so local and CI disk images are the same.
 build: ## Build the release app and installers (.app/.dmg on macOS, .msi/.exe on Windows)
-	$(TAURI) build
+	CI=true $(TAURI) build
 	@echo "Installers: src-tauri/target/release/bundle/"
 
 .PHONY: test

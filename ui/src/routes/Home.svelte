@@ -89,8 +89,9 @@
     grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
     gap: var(--space-4);
   }
+  /* tokens.css spaces stacked panels with `.panel + .panel`; not in a grid. */
+  .cards > :global(.panel) { margin-top: 0; }
   .card-btn {
-    height: 100%;
     justify-content: flex-start;
     display: flex;
     flex-direction: column;
