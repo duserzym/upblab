@@ -1,0 +1,85 @@
+# Build and test UPb Studio on macOS (arm64) and Windows (x86-64) on every push
+# (cross-platform contract, docs/cross-platform-contract.md). Installers are
+# unsigned and uploaded as workflow artifacts; docs/installing.md explains the
+# Gatekeeper and SmartScreen steps. No release is created here.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            os: macos-latest
+            bundles: |
+              src-tauri/target/release/bundle/dmg/*.dmg
+          - name: windows-x64
+            os: windows-latest
+            bundles: |
+              src-tauri/target/release/bundle/msi/*.msi
+              src-tauri/target/release/bundle/nsis/*.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm version comes from "packageManager" in package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Caches the cargo registry, src-tauri/target and ~/.cargo/bin (so the
+      # tauri-cli install below is a no-op after the first run).
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2.11" --locked
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build @lab/bridge
+        run: pnpm --filter @lab/bridge build
+
+      - name: Test bridge, shell UI and module pinning
+        run: pnpm test
+
+      - name: Fetch pinned module builds
+        # grainatlas has no release URL yet (modules.lock.json TODO) and its
+        # local build is not in this checkout, so it is skipped and the Images
+        # tab shows its placeholder.
+        run: node scripts/fetch-modules.mjs
+
+      - name: Build installers (unsigned)
+        run: cargo tauri build
+
+      - name: Test the Rust host
+        run: cargo test --manifest-path src-tauri/Cargo.toml --release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: upbstudio-${{ matrix.name }}
+          path: ${{ matrix.bundles }}
+          if-no-files-found: error
+          retention-days: 14

@@ -55,10 +55,16 @@ async function download(url) {
   return Buffer.from(await res.arrayBuffer());
 }
 
+/** bsdtar: on Windows the System32 one, not a GNU tar from Git that reads `C:` as a host name. */
+export function tarCommand() {
+  if (process.platform !== 'win32') return 'tar';
+  return path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'tar.exe');
+}
+
 function extract(archive, dest) {
   // bsdtar ships with macOS and Windows 10+, and reads .tar.gz and .zip alike.
   // It refuses absolute paths and `..` members unless -P is given.
-  const r = spawnSync('tar', ['-xf', archive, '-C', dest], { stdio: 'pipe' });
+  const r = spawnSync(tarCommand(), ['-xf', archive, '-C', dest], { stdio: 'pipe' });
   if (r.status !== 0) throw new Error(`tar failed: ${r.stderr?.toString() || r.error}`);
   // Archives made with a top-level folder: lift its contents.
   const entries = fs.readdirSync(dest);

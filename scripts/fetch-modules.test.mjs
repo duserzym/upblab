@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
-import { fetchModules, sha256, treeHash } from './fetch-modules.mjs';
+import { fetchModules, sha256, tarCommand, treeHash } from './fetch-modules.mjs';
 
 function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fetch-modules-test-'));
@@ -15,7 +15,7 @@ function fixture() {
   fs.writeFileSync(path.join(build, 'index.html'), '<!doctype html><title>atlas</title>');
   fs.writeFileSync(path.join(build, 'assets', 'app.js'), 'console.log(1)');
   const archive = path.join(dir, 'grainatlas-web-1.2.3.tar.gz');
-  const r = spawnSync('tar', ['-czf', archive, '-C', path.join(dir, 'build'), 'dist']);
+  const r = spawnSync(tarCommand(), ['-czf', archive, '-C', path.join(dir, 'build'), 'dist']);
   assert.equal(r.status, 0, r.stderr?.toString());
   return { dir, build, archive, out: path.join(dir, 'out') };
 }
