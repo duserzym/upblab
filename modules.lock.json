@@ -7,7 +7,7 @@
       "version": "0.0.0-dev",
       "url": null,
       "sha256": null,
-      "local": "../grainmap/ui/dist",
+      "local": "../grainatlas/ui/dist",
       "entry": "index.html",
       "todo": "Set url and sha256 to the grainatlas static web-build release asset (.tar.gz or .zip) once grainatlas publishes one (its roadmap phase 3); until then the local development build is used."
     }

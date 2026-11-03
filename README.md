@@ -1,7 +1,7 @@
 # UPb Studio
 
 The unified desktop and web shell for the lab's LA-ICP-MS workflow: one window
-with tabs for grain images ([grainatlas](../grainmap)), sessions and data
+with tabs for grain images ([grainatlas](../grainatlas)), sessions and data
 ([laicpmsdb](../laicpmsdb)) and reduction (UPbRPy Studio), with one sign-in and
 links between them, so a click on a spot in an image opens that spot's raw
 sweep and reduced result.
@@ -59,7 +59,7 @@ Without `make` (Windows PowerShell): `pnpm install`, `pnpm --filter @lab/bridge 
 `make fetch-modules` installs the builds pinned in `modules.lock.json` into
 `ui/public/modules/`, checking each release archive's SHA-256. grainatlas has
 no release yet, so the lock points at its local development build
-(`../grainmap/ui/dist`); build that in the grainmap repository, run
+(`../grainatlas/ui/dist`); build that in the grainatlas repository, run
 `make fetch-modules` here and restart `make dev`.
 
 ## Layout
