@@ -1,0 +1,15 @@
+{
+  "lockVersion": 1,
+  "description": "Module builds bundled into UPb Studio. scripts/fetch-modules.mjs installs them into ui/public/modules/<name>/ and verifies sha256 (of the release archive). A module with no url falls back to its local development build.",
+  "modules": [
+    {
+      "name": "grainatlas",
+      "version": "0.0.0-dev",
+      "url": null,
+      "sha256": null,
+      "local": "../grainmap/ui/dist",
+      "entry": "index.html",
+      "todo": "Set url and sha256 to the grainatlas static web-build release asset (.tar.gz or .zip) once grainatlas publishes one (its roadmap phase 3); until then the local development build is used."
+    }
+  ]
+}
