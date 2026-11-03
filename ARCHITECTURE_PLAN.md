@@ -1,12 +1,12 @@
-# isobench: the unified shell for the lab workflow
+# UPb Studio (`upbstudio`): the unified shell for the lab workflow
 
-**Status:** plan and roadmap, 2026-11-03. The repository name is provisional
-until the owner picks one; everything below uses `isobench` and is renamed
-with one search and replace.
+**Status:** plan and roadmap, 2026-11-03. Display name UPb Studio, repository and
+package name `upbstudio`, chosen 2026-11-03. The reduction module's own GUI
+keeps its name UPbRPy Studio; inside UPb Studio it appears as the Reduce tab.
 
 ## 1. Purpose
 
-isobench is the one application a lab member opens. It hosts the workflow
+UPb Studio is the one application a lab member opens. It hosts the workflow
 modules as tabs, carries identity and settings between them, and turns a click
 in one module into the right view in another:
 
@@ -15,7 +15,7 @@ in one module into the right view in another:
 | Images | grainatlas | static web build (Svelte + wasm) and Tauri app | bundled static assets in a webview |
 | Sessions | laicpmsdb | Django service with a Svelte web build at `/app/` | webview pointed at the configured laicpmsdb server |
 | Reduce | UPbRPy Studio | native PySide6 + pyqtgraph desktop app | launched as an external application with a hand-off file and `upbr://` link; not embedded |
-| Home | isobench itself | Svelte | timeline across modules, search, recent items, settings |
+| Home | the shell itself | Svelte | timeline across modules, search, recent items, settings |
 
 The shell owns no scientific data and no algorithms. Everything it shows is
 produced by a module; everything it stores is configuration and the link
@@ -89,7 +89,7 @@ same on Windows:
 ### 4.2 Repository layout
 
 ```text
-isobench/
+upbstudio/
   src-tauri/            Tauri host (Rust)
   ui/                   shell UI (Svelte)
   bridge/               @lab/bridge package used by grainatlas and laicpmsdb
