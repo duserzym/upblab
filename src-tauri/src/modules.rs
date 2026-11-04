@@ -187,6 +187,7 @@ pub async fn module_open<R: Runtime>(
     if let Some(wv) = app.get_webview(&label) {
         if navigate {
             grant_bridge(&app, &state, &label, &url)?;
+            log::info!("{label} loads {url}");
             wv.navigate(url).map_err(|e| e.to_string())?;
         }
         wv.set_bounds(bounds.rect(title_bar_offset(&app, &bounds))).map_err(|e| e.to_string())?;
@@ -194,6 +195,7 @@ pub async fn module_open<R: Runtime>(
         return Ok(());
     }
     grant_bridge(&app, &state, &label, &url)?;
+    log::info!("{label} loads {url}");
     let window = app.get_window(MAIN_WINDOW).ok_or("main window missing")?;
     let rect = bounds.rect(title_bar_offset(&app, &bounds));
     window
