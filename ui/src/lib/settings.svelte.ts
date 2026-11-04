@@ -1,7 +1,8 @@
 // Shell settings: how to reach laicpmsdb (ADR-0003: "This computer" or a lab
 // server URL), UPbRPy Studio path (or a development checkout), theme.
 // Desktop: Tauri store plugin (settings.json in the app config directory).
-// Web: localStorage. Dark is the default theme.
+// Web: localStorage. Light is the default theme (grainatlas docs/ux-conventions.md rule 1),
+// with Dark and System.
 
 import { isDesktop } from './platform';
 
@@ -35,7 +36,7 @@ export const DEFAULTS: SettingsData = {
   pgBin: '',
   studioPath: '',
   studioCheckout: '',
-  theme: 'dark',
+  theme: 'light',
   lastTab: 'home',
 };
 
@@ -91,6 +92,16 @@ function applyTheme(pref: ThemePref) {
 
 const MODES: readonly Mode[] = ['', 'local', 'server'];
 
+export type Theme = 'light' | 'dark';
+
+function prefersDark(): boolean {
+  try {
+    return typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch {
+    return false;
+  }
+}
+
 class Settings {
   mode = $state<Mode>(DEFAULTS.mode);
   serverUrl = $state(DEFAULTS.serverUrl);
@@ -102,9 +113,22 @@ class Settings {
   theme = $state<ThemePref>(DEFAULTS.theme);
   lastTab = $state(DEFAULTS.lastTab);
   loaded = $state(false);
+  /** The OS asks for dark (only matters for the System choice). */
+  systemDark = $state(prefersDark());
   private backend: Backend = isDesktop ? storeBackend : localBackend;
 
+  /** The theme in effect: the choice, or the OS's for System. Passed to module tabs as ?theme=. */
+  get effectiveTheme(): Theme {
+    if (this.theme === 'system') return this.systemDark ? 'dark' : 'light';
+    return this.theme;
+  }
+
   async load() {
+    try {
+      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => (this.systemDark = e.matches));
+    } catch {
+      /* no matchMedia (tests) */
+    }
     try {
       const data = { ...DEFAULTS, ...(await this.backend.read()) };
       this.mode = MODES.includes(data.mode) ? data.mode : '';
@@ -114,7 +138,7 @@ class Settings {
       this.pgBin = data.pgBin;
       this.studioPath = data.studioPath;
       this.studioCheckout = data.studioCheckout;
-      this.theme = (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'dark';
+      this.theme = (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'light';
       this.lastTab = data.lastTab;
     } catch (err) {
       console.warn('[settings] could not load, using defaults', err);

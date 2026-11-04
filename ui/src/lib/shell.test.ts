@@ -20,7 +20,7 @@ vi.stubGlobal('location', new URL('tauri://localhost/index.html'));
 
 const platform = await import('./platform');
 const { shell } = await import('./shell.svelte');
-const { settings } = await import('./settings.svelte');
+const { settings, DEFAULTS } = await import('./settings.svelte');
 const { localService } = await import('./localService.svelte');
 const { identity } = await import('./identity.svelte');
 const { redact, withHandoff } = await import('./shell.svelte');
@@ -47,14 +47,14 @@ describe('shell.handleLink', () => {
   it('switches to Sessions with the hash route of an acquisition', async () => {
     expect(await shell.handleLink(`laicpmsdb://acquisition/${A}`, 'os')).toBe(true);
     expect(shell.view).toBe('sessions');
-    expect(shell.targets.sessions?.url).toBe(`http://localhost:8000/app/#/acquisitions/${A}`);
+    expect(shell.targets.sessions?.url).toBe(`http://localhost:8000/app/?theme=light#/acquisitions/${A}`);
   });
 
   it('switches to Images with the bundled build', async () => {
     await shell.handleLink(`grainatlas://project/${A}/spot/${A}`, 'laicpmsdb');
     expect(shell.view).toBe('images');
     expect(shell.targets.images?.url).toBe(
-      `tauri://localhost/modules/grainatlas/index.html?server=http%3A%2F%2Flocalhost%3A8000&project=${A}&spot=${A}`,
+      `tauri://localhost/modules/grainatlas/index.html?server=http%3A%2F%2Flocalhost%3A8000&project=${A}&spot=${A}&theme=light`,
     );
   });
 
@@ -154,18 +154,18 @@ describe('This computer mode', () => {
 
   it('routes the Sessions tab to the local instance once it is ready', async () => {
     expect(shell.local).toBe(true);
-    expect(shell.homeUrl('sessions')).toBe('http://127.0.0.1:8000/app/');
+    expect(shell.homeUrl('sessions')).toBe('http://127.0.0.1:8000/app/?theme=light');
     localService.status = ready;
-    expect(shell.homeUrl('sessions')).toBe('http://127.0.0.1:8001/app/');
+    expect(shell.homeUrl('sessions')).toBe('http://127.0.0.1:8001/app/?theme=light');
     expect(await shell.handleLink(`laicpmsdb://session/${A}`, 'grainatlas')).toBe(true);
-    expect(shell.targets.sessions?.url).toBe(`http://127.0.0.1:8001/app/#/sessions/${A}`);
+    expect(shell.targets.sessions?.url).toBe(`http://127.0.0.1:8001/app/?theme=light#/sessions/${A}`);
   });
 
   it('uses the server URL in Lab server mode', () => {
     settings.mode = 'server';
     localService.status = ready;
     expect(shell.local).toBe(false);
-    expect(shell.homeUrl('sessions')).toBe('https://lab.example.edu/app/');
+    expect(shell.homeUrl('sessions')).toBe('https://lab.example.edu/app/?theme=light');
   });
 });
 
@@ -204,5 +204,22 @@ describe('shell sign-in callback (laicpmsdb://auth/callback)', () => {
   it('redacts one-time codes', () => {
     expect(redact('upbr://session/x?server=http://h&code=s3cret')).toBe('upbr://session/x?server=http://h&code=…');
     expect(redact('laicpmsdb://auth/callback#/auth/callback?code=s3cret')).toBe('laicpmsdb://auth/callback#/auth/callback?code=…');
+  });
+});
+
+describe('theme (light by default, passed to module tabs at load)', () => {
+  it('defaults to light and resolves System from the OS', () => {
+    expect(DEFAULTS.theme).toBe('light');
+    settings.theme = 'system';
+    settings.systemDark = true;
+    expect(settings.effectiveTheme).toBe('dark');
+    settings.systemDark = false;
+    expect(settings.effectiveTheme).toBe('light');
+    settings.theme = 'dark';
+    settings.mode = 'server';
+    settings.serverUrl = 'http://localhost:8000';
+    expect(shell.homeUrl('sessions')).toBe('http://localhost:8000/app/?theme=dark');
+    expect(shell.homeUrl('images')).toBe('tauri://localhost/modules/grainatlas/index.html?theme=dark');
+    settings.theme = 'light';
   });
 });

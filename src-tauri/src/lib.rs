@@ -26,8 +26,9 @@ pub const SHELL_WEBVIEW: &str = "shell";
 /// installers through `plugins.deep-link.desktop.schemes` in tauri.conf.json.
 pub const SCHEMES: [&str; 3] = ["laicpmsdb", "grainatlas", "upbr"];
 
-/// Dark wallpaper base from the glass tokens, so the window never flashes white.
-const BACKGROUND: Color = Color(12, 17, 27, 255);
+/// Light base from the glass tokens (`--bg`, light is the default theme), so a
+/// fresh window does not flash dark before the shell page paints.
+const BACKGROUND: Color = Color(238, 242, 248, 255);
 
 pub fn run() {
     let mut builder = tauri::Builder::default();

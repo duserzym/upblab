@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { moduleHome, moduleUrl, normaliseServerUrl, resolve } from './links';
+import { moduleHome, moduleUrl, normaliseServerUrl, resolve, withTheme } from './links';
 
 const A = '2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91';
 const B = '7c0e2b9d-1a3f-4e8b-8c6d-5f4a3b2c1d0e';
@@ -167,5 +167,14 @@ describe('normaliseServerUrl', () => {
 
   it.each(['localhost:8000', 'ftp://x', 'garbage'])('rejects %s', (input) => {
     expect(normaliseServerUrl(input)).toBeNull();
+  });
+});
+
+describe('withTheme', () => {
+  it('adds ?theme= before the hash route, or &theme= after a query', () => {
+    expect(withTheme('http://h/app/#/sessions/x', 'dark')).toBe('http://h/app/?theme=dark#/sessions/x');
+    expect(withTheme('/atlas/index.html?project=p', 'light')).toBe('/atlas/index.html?project=p&theme=light');
+    expect(withTheme('http://h/app/', undefined)).toBe('http://h/app/');
+    expect(moduleHome('images', { server: 'http://h', atlas: '/atlas/', theme: 'light' })).toBe('/atlas/index.html?theme=light');
   });
 });

@@ -125,6 +125,16 @@ export interface ModuleBases {
   server: string;
   /** Directory URL of the grainatlas build: `…/modules/grainatlas/` on desktop, `/atlas/` on the web. */
   atlas: string;
+  /** The shell's theme, passed to the module as `?theme=` when it loads (ux-conventions rule 1). */
+  theme?: 'light' | 'dark';
+}
+
+/** Add `?theme=` (or `&theme=`) before any `#` route. */
+export function withTheme(url: string, theme: ModuleBases['theme']): string {
+  if (!theme) return url;
+  const hash = url.indexOf('#');
+  const [head, tail] = hash < 0 ? [url, ''] : [url.slice(0, hash), url.slice(hash)];
+  return `${head}${head.includes('?') ? '&' : '?'}theme=${theme}${tail}`;
 }
 
 function joinBase(base: string, rest: string): string {
@@ -133,7 +143,7 @@ function joinBase(base: string, rest: string): string {
 
 /** Entry URL of a module tab with no particular route. */
 export function moduleHome(tab: ModuleTab, bases: ModuleBases): string {
-  return tab === 'sessions' ? joinBase(bases.server, '/app/') : joinBase(bases.atlas, 'index.html');
+  return withTheme(tab === 'sessions' ? joinBase(bases.server, '/app/') : joinBase(bases.atlas, 'index.html'), bases.theme);
 }
 
 /**
@@ -142,6 +152,10 @@ export function moduleHome(tab: ModuleTab, bases: ModuleBases): string {
  * becomes `<server>/app/#/acquisitions/x`. grainatlas reads its query string.
  */
 export function moduleUrl(tab: ModuleTab, route: string, bases: ModuleBases): string {
+  return withTheme(routeUrl(tab, route, bases), bases.theme);
+}
+
+function routeUrl(tab: ModuleTab, route: string, bases: ModuleBases): string {
   if (tab === 'sessions') {
     const rest = route.replace(/^\/app\/?/, '');
     return joinBase(bases.server, '/app/') + (rest ? `#/${rest}` : '');

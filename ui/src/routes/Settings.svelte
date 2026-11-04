@@ -243,7 +243,7 @@
           >
         {/each}
       </div>
-      <p class="faint small">The shell's own pages follow this; module tabs keep their own theme settings for now.</p>
+      <p class="faint small">Light unless you choose otherwise; System follows the operating system. Module tabs get it as <code>?theme=</code> when they load, so a change reaches them the next time they open (restart UPb Studio).</p>
     </div>
 
     <div class="glass panel stack">
