@@ -72,7 +72,7 @@
 
 <div class="shell">
   <header class="bar glass">
-    <span class="brand">UPb Studio</span>
+    <span class="brand"><img class="mark" src="./favicon.svg" alt="" width="22" height="22" />UPb Studio</span>
     {#if !firstRun}
     <div class="tabs" role="tablist" aria-label="Modules">
       {#each tabs as t, i (t.id)}

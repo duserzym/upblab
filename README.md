@@ -110,4 +110,9 @@ docs/             decisions (ADRs), cross-platform contract, deep links, install
 - [bridge/README.md](bridge/README.md): `@lab/bridge` for module authors
 - [docs/decisions/](docs/decisions/): ADR-0001 hosting pinned builds, ADR-0002 tab hosting, ADR-0003 local service mode
 
+## Credits
+
+The app icon's zircon is a Pupin S2 habit projected from the STL models of
+[Mineral Habit Matrix](https://github.com/duserzym/mineral-habit-matrix).
+
 License: MIT.
