@@ -8,10 +8,10 @@ sweep and reduced result.
 
 | Tab | Module | Hosted as |
 | --- | --- | --- |
-| Home | the shell | module status, link box and log (timeline and search later) |
+| Home | the shell | module status, your sessions with their reductions (Reduce opens Studio), mounts with their current atlas, link box and log (timeline and search later) |
 | Images | grainatlas | pinned static build bundled into the app (`modules.lock.json`) |
 | Sessions | laicpmsdb | `/app/` in a native webview, from a lab server or from the laicpmsdb the app runs on this computer |
-| Reduce | UPbRPy Studio | launched as its own application |
+| Reduce | UPbRPy Studio | launched as its own application with a `upbr://` link and a one-time sign-in code |
 
 Status: roadmap phases 0 and 1 done, phase 2b (ADR-0003, "This computer"
 mode) implemented on the shell side: the app bundles PostgreSQL 17, runs
@@ -19,7 +19,12 @@ laicpmsdb on this machine, and a first-run wizard chooses between that and a
 lab server. Until laicpmsdb publishes its service bundle
 ([docs/service-bundle-contract.md](docs/service-bundle-contract.md)),
 "This computer" runs a laicpmsdb checkout, so it works in development builds
-and release builds offer only "Lab server". Plan and roadmap:
+and release builds offer only "Lab server". Phases 3 and 4 on the shell side
+(2026-11-03): one sign-in in the tab bar (password, ORCID or Google), the
+token in the OS keychain and handed to the module tabs through `@lab/bridge`;
+`upbr://session/<id>` and `upbr://run/<id>` launch UPbRPy Studio with a
+handoff code minted on demand; Home lists sessions, runs and atlases
+([docs/installing.md](docs/installing.md#signing-in)). Plan and roadmap:
 [ARCHITECTURE_PLAN.md](ARCHITECTURE_PLAN.md).
 
 The lab workflow and the hand-offs between the apps are in [docs/WORKFLOW.md](docs/WORKFLOW.md).
@@ -39,6 +44,14 @@ make setup
 make test
 ```
 
+An opt-in check, not part of `make test`, runs against a running laicpmsdb with the demo
+data and the real keychain (signs in, reads, mints and redeems a handoff code,
+signs out):
+
+```bash
+UPBSTUDIO_LIVE_SERVER=http://127.0.0.1:8000 cargo test --manifest-path src-tauri/Cargo.toml live_ -- --ignored
+```
+
 ```bash
 make dev
 ```
@@ -54,7 +67,15 @@ first-run wizard:
   Both stop when the app quits. The first `cargo build` downloads the pinned
   PostgreSQL archive (13 MB on macOS) into `~/.theseus/postgresql/`.
 - **Lab server**: a laicpmsdb URL, e.g. `http://localhost:8000` for
-  `make dev` in the laicpmsdb repository.
+  `make dev` in the laicpmsdb repository; then **Sign in** in the tab bar
+  (the demo accounts are in laicpmsdb's `.env.example`).
+
+To launch UPbRPy Studio from a checkout instead of an installed app, set
+Settings → UPbRPy Studio → UPbRPy checkout (it runs `python -m GUI --open
+<link>` with the checkout's `.venv`). macOS cannot deliver `upbr://` or
+`laicpmsdb://` links from the OS to `make dev`; use the Home link box, or the
+built app (`make build`) for ORCID/Google sign-in, whose callback is such a
+link.
 
 Settings switches between them later. To use another PostgreSQL 17 instead
 of the bundled one during development (for example if the archive cannot be
@@ -99,8 +120,9 @@ no release yet, so the lock points at its local development build
 ## Layout
 
 ```text
-src-tauri/        Rust host: window, module webviews, deep links, probe, Studio launch,
-                  local_service/ (PostgreSQL and laicpmsdb on this computer)
+src-tauri/        Rust host: window, module webviews, deep links, probe, auth (sign-in, keychain,
+                  handoff), Studio detection and launch, local_service/ (PostgreSQL and
+                  laicpmsdb on this computer)
 ui/               shell page (Svelte 5): tab bar, Home, Settings, link resolver
 bridge/           @lab/bridge, the API grainatlas and laicpmsdb call to talk to the shell
 scripts/          fetch-modules (pinning)

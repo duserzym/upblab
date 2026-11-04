@@ -566,6 +566,55 @@ mod tests {
         assert!(!may_receive_token(&"https://example.com/".parse().unwrap(), server));
     }
 
+    /// Against a real laicpmsdb with the demo data, and the real OS keychain:
+    /// `UPBSTUDIO_LIVE_SERVER=http://127.0.0.1:8017 cargo test live_ -- --ignored`
+    /// (user analyst / laicpmsdb-demo unless UPBSTUDIO_LIVE_USER / _PASSWORD say otherwise).
+    #[test]
+    #[ignore]
+    fn live_sign_in_handoff_and_keychain() {
+        let Ok(server) = std::env::var("UPBSTUDIO_LIVE_SERVER") else { return };
+        let user = std::env::var("UPBSTUDIO_LIVE_USER").unwrap_or_else(|_| "analyst".into());
+        let pw = std::env::var("UPBSTUDIO_LIVE_PASSWORD").unwrap_or_else(|_| "laicpmsdb-demo".into());
+        let id = Identity::with_vault(Box::new(KeychainVault));
+        let t = Target { server: server.clone(), key: format!("{server} (upbstudio live test)") };
+        let rt = rt();
+        let s = rt.block_on(id.login(&t, &user, &pw)).unwrap();
+        assert_eq!(s.account.as_ref().unwrap()["username"], user.as_str());
+        // In the keychain, and restored from there by a fresh Identity.
+        assert!(KeychainVault.get(&t.key).unwrap().is_some());
+        let fresh = Identity::with_vault(Box::new(KeychainVault));
+        let r = rt.block_on(fresh.restore(&t)).unwrap();
+        assert!(r.signed_in && !r.offline, "{r:?}");
+        let sessions = rt.block_on(fresh.get(&t, "/v1/sessions")).unwrap();
+        assert_eq!(sessions.status, 200);
+        let first = sessions.body[0]["id"].as_str().unwrap().to_string();
+        let runs = rt.block_on(fresh.get(&t, &format!("/v1/sessions/{first}/reductions"))).unwrap();
+        assert_eq!(runs.status, 200);
+        let mounts = rt.block_on(fresh.get(&t, "/v1/mounts")).unwrap();
+        assert_eq!(mounts.status, 200);
+        if let Some(m) = mounts.body.get(0).and_then(|m| m["id"].as_str()) {
+            let atlas = rt.block_on(fresh.get(&t, &format!("/v1/mounts/{m}/atlas"))).unwrap();
+            eprintln!("GET /v1/mounts/{m}/atlas -> {}", atlas.status);
+        }
+        // The handoff code is what Studio exchanges for its own token.
+        let code = rt.block_on(fresh.handoff(&t)).unwrap();
+        let studio = Identity::with_vault(Box::new(MemoryVault::default()));
+        let st = Target { server: server.clone(), key: "studio".into() };
+        let ex = rt.block_on(studio.exchange(&st, &code)).unwrap();
+        assert_eq!(ex.account.unwrap()["username"], user.as_str());
+        assert!(rt.block_on(studio.exchange(&st, &code)).is_err(), "a handoff code is single-use");
+        rt.block_on(studio.logout(&st)).unwrap();
+        // Sign-out revokes the token on the server and clears the keychain entry.
+        let token = KeychainVault.get(&t.key).unwrap().unwrap();
+        rt.block_on(fresh.logout(&t)).unwrap();
+        assert_eq!(KeychainVault.get(&t.key).unwrap(), None);
+        let other = Identity::with_vault(Box::new(MemoryVault::default()));
+        other.vault.set(&t.key, &token).unwrap();
+        let after = rt.block_on(other.restore(&t)).unwrap();
+        assert!(!after.signed_in, "revoked token must be refused: {after:?}");
+        eprintln!("live: signed in as {user}, {} sessions, handoff exchanged once, signed out", sessions.body.as_array().unwrap().len());
+    }
+
     #[test]
     fn targets_are_checked() {
         assert!(Target { server: "file:///x".into(), key: "k".into() }.base().is_err());
