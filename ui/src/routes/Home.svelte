@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { localService } from '../lib/localService.svelte';
   import { isDesktop, probe, studioStatus } from '../lib/platform';
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
@@ -8,10 +9,21 @@
   let studio = $state<boolean | null>(null);
   let linkInput = $state('');
 
+  // "This computer": state comes from the host's status events.
+  const local = $derived(shell.local ? localService.status : null);
+  const localOk = $derived(local ? (local.phase === 'ready' ? true : local.phase === 'failed' ? false : null) : null);
+  const localLine = $derived.by(() => {
+    if (!local) return '';
+    if (local.phase === 'ready') return 'running';
+    if (local.phase === 'failed') return `failed: ${local.error ?? ''}`;
+    if (local.phase === 'starting') return local.step || 'starting…';
+    return local.phase;
+  });
+
   $effect(() => {
     if (!active || !settings.loaded) return;
     const url = shell.homeUrl('sessions');
-    void probe(url).then((r) => (server = r.reachable));
+    if (!shell.local) void probe(url).then((r) => (server = r.reachable));
     void studioStatus(settings.studioPath).then((s) => (studio = s.found));
   });
 
@@ -35,11 +47,24 @@
     </div>
 
     <div class="cards">
-      <button class="glass panel card-btn" onclick={() => shell.show('sessions')}>
-        <span class="row"><span class="dot" style="background: {color(server)}"></span><h3>Sessions · laicpmsdb</h3></span>
-        <span class="muted small mono">{settings.serverUrl}</span>
-        <span class="small">{server === null ? 'checking…' : server ? 'server reachable' : 'server unreachable'}</span>
-      </button>
+      {#if shell.local}
+        <button class="glass panel card-btn" onclick={() => shell.show('sessions')}>
+          <span class="row"><span class="dot" style="background: {color(localOk)}"></span><h3>Sessions · laicpmsdb</h3></span>
+          <span class="small">This computer · {localLine}</span>
+          <dl class="grid-kv small">
+            <dt>PostgreSQL</dt>
+            <dd>{local?.postgres.running ? `running on 127.0.0.1:${local.postgres.port}` : 'stopped'}{local?.postgres.source ? ` (${local.postgres.source})` : ''}</dd>
+            <dt>Service</dt>
+            <dd>{local?.service.running ? `${local.phase === 'ready' ? 'ready' : 'starting'} on 127.0.0.1:${local.service.port}` : 'stopped'}{local?.service.source ? ` (${local.service.source === 'dev' ? 'development checkout' : `bundle ${local.service.version ?? ''}`})` : ''}</dd>
+          </dl>
+        </button>
+      {:else}
+        <button class="glass panel card-btn" onclick={() => shell.show('sessions')}>
+          <span class="row"><span class="dot" style="background: {color(server)}"></span><h3>Sessions · laicpmsdb</h3></span>
+          <span class="muted small mono">{settings.serverUrl}</span>
+          <span class="small">{server === null ? 'checking…' : server ? 'server reachable' : 'server unreachable'}</span>
+        </button>
+      {/if}
       <button class="glass panel card-btn" onclick={() => shell.show('images')}>
         <span class="row"><span class="dot" style="background: {color(shell.atlas ? true : null)}"></span><h3>Images · grainatlas</h3></span>
         <span class="small">{shell.atlas ? `build ${shell.atlas.version} (${shell.atlas.source})` : 'no build pinned yet'}</span>
@@ -102,5 +127,6 @@
   }
   .card-btn:hover { border-color: var(--accent); }
   .grow { flex: 1; min-width: 12rem; }
+  .card-btn .grid-kv { margin: 0; }
   table.data tbody tr { cursor: default; }
 </style>

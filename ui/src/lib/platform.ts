@@ -92,3 +92,55 @@ export async function logInfo(message: string): Promise<void> {
     await info(message).catch(() => {});
   }
 }
+
+// ------------------------------------------------ "This computer" (ADR-0003)
+
+export type LocalPhase = 'idle' | 'starting' | 'ready' | 'stopping' | 'stopped' | 'failed';
+
+export interface LocalPart {
+  running: boolean;
+  port: number | null;
+  pid: number | null;
+  source: string | null;
+  version: string | null;
+  path: string | null;
+}
+
+/** Mirrors `Status` in src-tauri/src/local_service/mod.rs. */
+export interface LocalStatus {
+  phase: LocalPhase;
+  step: string;
+  postgres: LocalPart;
+  service: LocalPart;
+  url: string | null;
+  error: string | null;
+  logTail: string | null;
+  bundle: string | null;
+  devDefault: string | null;
+  logDir: string;
+  dataDir: string;
+}
+
+export interface LocalStartConfig {
+  dataRoot: string;
+  devPath: string | null;
+  pgBin: string | null;
+}
+
+export interface LocalLogs {
+  dir: string;
+  postgres: string;
+  service: string;
+}
+
+export const LOCAL_STATUS_EVENT = 'local-service://status';
+
+export const localServiceApi = {
+  status: () => invoke<LocalStatus>('local_service_status'),
+  start: (config: LocalStartConfig) => invoke<LocalStatus>('local_service_start', { config }),
+  stop: () => invoke<LocalStatus>('local_service_stop'),
+  bootstrap: (account: { username: string; email: string; password: string; loadDemo: boolean }) =>
+    invoke<LocalStatus>('local_service_bootstrap', account),
+  logs: (lines = 200) => invoke<LocalLogs>('local_service_logs', { lines }),
+  openLogs: () => invoke<void>('local_service_open_logs'),
+};

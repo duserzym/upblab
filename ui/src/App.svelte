@@ -5,6 +5,8 @@
   import Sessions from './routes/Sessions.svelte';
   import Reduce from './routes/Reduce.svelte';
   import Settings from './routes/Settings.svelte';
+  import FirstRun from './components/FirstRun.svelte';
+  import { localService } from './lib/localService.svelte';
   import { listenForLinks } from './lib/incoming';
   import { settings } from './lib/settings.svelte';
   import { shell, type View } from './lib/shell.svelte';
@@ -17,10 +19,18 @@
     { id: 'reduce', label: 'Reduce', hint: 'UPbRPy Studio' },
   ];
 
+  // Desktop with no mode stored yet: the first-run wizard (ADR-0003).
+  const firstRun = $derived(isDesktop && settings.loaded && settings.mode === '');
+
   onMount(async () => {
     await settings.load();
     const last = settings.lastTab as View;
     if (tabs.some((t) => t.id === last)) shell.view = last;
+    if (isDesktop) {
+      await localService.init();
+      // "This computer": start laicpmsdb and PostgreSQL with the app.
+      if (settings.mode === 'local') void localService.start();
+    }
     await shell.loadModules();
     await listenForLinks();
     if (isDesktop) await listenForMenu();
@@ -32,6 +42,7 @@
     const { listen } = await import('@tauri-apps/api/event');
     await listen<string>('shell://menu', (e) => {
       const id = e.payload;
+      if (firstRun) return;
       if (id.startsWith('tab:')) shell.show(id.slice(4) as View);
       else if (id === 'settings') shell.show('settings');
       else if (id === 'module:reload' && (shell.view === 'images' || shell.view === 'sessions')) {
@@ -42,7 +53,7 @@
 
   // Web delivery: page-level shortcuts.
   function onKey(e: KeyboardEvent) {
-    if (isDesktop) return;
+    if (isDesktop || firstRun) return;
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     const n = Number(e.key);
@@ -61,6 +72,7 @@
 <div class="shell">
   <header class="bar glass">
     <span class="brand">UPb Studio</span>
+    {#if !firstRun}
     <div class="tabs" role="tablist" aria-label="Modules">
       {#each tabs as t, i (t.id)}
         <button
@@ -88,10 +100,13 @@
         /></svg
       >
     </button>
+    {/if}
   </header>
 
   <main class="content">
-    {#if settings.loaded}
+    {#if firstRun}
+      <FirstRun />
+    {:else if settings.loaded}
       <Home active={shell.view === 'home'} />
       <Images active={shell.view === 'images'} />
       <Sessions active={shell.view === 'sessions'} />

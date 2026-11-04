@@ -1,38 +1,94 @@
 <script lang="ts">
   import { normaliseServerUrl } from '../lib/links';
-  import { isDesktop, studioStatus } from '../lib/platform';
-  import { settings, type ThemePref } from '../lib/settings.svelte';
+  import { localService } from '../lib/localService.svelte';
+  import { isDesktop, localServiceApi, studioStatus, type LocalLogs } from '../lib/platform';
+  import { DEFAULT_DATA_ROOT, settings, type Mode, type ThemePref } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
 
   let { active }: { active: boolean } = $props();
 
+  let mode = $state<Mode>('server');
   let server = $state('');
+  let dataRoot = $state('');
+  let devPath = $state('');
+  let pgBin = $state('');
   let studio = $state('');
   let serverError = $state('');
   let saved = $state('');
+  let studioSaved = $state('');
   let detected = $state<string | null>(null);
+  let logs = $state<LocalLogs | null>(null);
 
-  // Refresh the form from the stored values each time the view opens.
+  const status = $derived(localService.status);
+  const running = $derived(status?.phase === 'ready' || status?.phase === 'starting');
+
+  // Refresh the forms from the stored values each time the view opens.
   $effect(() => {
     if (!active || !settings.loaded) return;
+    mode = settings.mode === 'local' ? 'local' : 'server';
     server = settings.serverUrl;
+    dataRoot = settings.dataRoot;
+    devPath = settings.devServicePath;
+    pgBin = settings.pgBin;
     studio = settings.studioPath;
     serverError = '';
     saved = '';
+    studioSaved = '';
     if (isDesktop) void studioStatus('').then((s) => (detected = s.path));
   });
 
-  async function save(e: SubmitEvent) {
+  const localChanged = $derived(
+    settings.mode === 'local' &&
+      (dataRoot.trim() !== settings.dataRoot || devPath.trim() !== settings.devServicePath || pgBin.trim() !== settings.pgBin),
+  );
+
+  async function saveConnection(e: SubmitEvent) {
     e.preventDefault();
-    const url = normaliseServerUrl(server);
-    if (!url) {
-      serverError = 'Enter a full http:// or https:// URL, e.g. http://localhost:8000';
+    saved = '';
+    if (mode === 'server') {
+      const url = normaliseServerUrl(server);
+      if (!url) {
+        serverError = 'Enter a full http:// or https:// URL, e.g. http://localhost:8000';
+        return;
+      }
+      serverError = '';
+      server = url;
+      const leavingLocal = settings.mode === 'local';
+      await settings.update({ mode: 'server', serverUrl: url });
+      if (leavingLocal) await localService.stop().catch(() => {});
+      saved = leavingLocal ? 'Saved. The local laicpmsdb was stopped.' : 'Saved.';
       return;
     }
-    serverError = '';
-    server = url;
-    await settings.update({ serverUrl: url, studioPath: studio.trim() });
-    saved = 'Saved.';
+    const restart = settings.mode === 'local' && localChanged && running;
+    const entering = settings.mode !== 'local';
+    await settings.update({
+      mode: 'local',
+      dataRoot: dataRoot.trim() || DEFAULT_DATA_ROOT,
+      devServicePath: devPath.trim(),
+      pgBin: pgBin.trim(),
+    });
+    if (restart) {
+      await localService.restart();
+      saved = 'Saved; restarting the local laicpmsdb.';
+    } else if (entering || !running) {
+      void localService.start();
+      saved = 'Saved; starting the local laicpmsdb.';
+    } else {
+      saved = 'Saved.';
+    }
+  }
+
+  async function saveStudio(e: SubmitEvent) {
+    e.preventDefault();
+    await settings.update({ studioPath: studio.trim() });
+    studioSaved = 'Saved.';
+  }
+
+  async function showLogs() {
+    logs = logs ? null : await localServiceApi.logs(200);
+  }
+  async function refreshLogs() {
+    logs = await localServiceApi.logs(200);
   }
 
   const themes: { value: ThemePref; label: string }[] = [
@@ -40,20 +96,106 @@
     { value: 'light', label: 'Light' },
     { value: 'system', label: 'System' },
   ];
+
+  const localNote = $derived(
+    status?.bundle
+      ? `This app includes laicpmsdb ${status.bundle} and PostgreSQL ${status.postgres.version ?? '17'}.`
+      : 'This build has no bundled laicpmsdb service yet: "This computer" runs the laicpmsdb checkout below.',
+  );
 </script>
 
 <section class="view scroll" class:hidden={!active}>
   <div class="page stack narrow">
     <h1>Settings</h1>
-    <form class="glass panel stack" onsubmit={save}>
+
+    <form class="glass panel stack" onsubmit={saveConnection}>
+      <h3>laicpmsdb</h3>
+      {#if isDesktop}
+        <div class="row" role="radiogroup" aria-label="Where laicpmsdb runs">
+          <button type="button" class="chip" role="radio" aria-checked={mode === 'local'} onclick={() => (mode = 'local')}>This computer</button>
+          <button type="button" class="chip" role="radio" aria-checked={mode === 'server'} onclick={() => (mode = 'server')}>Lab server</button>
+        </div>
+      {/if}
+
+      {#if mode === 'server'}
+        <label class="field">
+          Server URL
+          <input type="url" bind:value={server} placeholder="http://localhost:8000" spellcheck="false" required />
+          <span class="faint">The Sessions tab opens <code>&lt;server&gt;/app/</code>.</span>
+          {#if serverError}<span class="error">{serverError}</span>{/if}
+        </label>
+      {:else}
+        <p class="faint small">{localNote}</p>
+        <label class="field">
+          Data root
+          <input type="text" bind:value={dataRoot} placeholder={DEFAULT_DATA_ROOT} spellcheck="false" />
+          <span class="faint">Raw files, attachments and exports. The database is in <code>{status?.dataDir}</code>.</span>
+        </label>
+        {#if !status?.bundle}
+          <label class="field">
+            laicpmsdb checkout
+            <input type="text" bind:value={devPath} placeholder={status?.devDefault ?? '/path/to/laicpmsdb'} spellcheck="false" />
+            <span class="faint">Development fallback: a checkout with <code>make venv</code> and <code>make ui</code> done.{status?.devDefault ? ' Empty uses the one pinned in modules.lock.json.' : ''}</span>
+          </label>
+        {/if}
+        <label class="field">
+          PostgreSQL bin folder
+          <input type="text" bind:value={pgBin} placeholder="bundled PostgreSQL" spellcheck="false" />
+          <span class="faint">Leave empty for the bundled PostgreSQL. Development only: a PostgreSQL 17 <code>bin</code> folder, e.g. <code>/opt/homebrew/opt/postgresql@17/bin</code>. The <code>PG_BIN</code> environment variable wins over this.</span>
+        </label>
+
+        {#if status}
+          <dl class="grid-kv">
+            <dt>State</dt>
+            <dd>
+              <span class="dot" style="background: {status.phase === 'ready' ? 'var(--ok)' : status.phase === 'failed' ? 'var(--danger)' : 'var(--text-faint)'}"></span>
+              {status.phase === 'ready' ? 'running' : status.phase}{status.phase === 'starting' && status.step ? ` · ${status.step}` : ''}
+            </dd>
+            <dt>PostgreSQL</dt>
+            <dd>{status.postgres.running ? `127.0.0.1:${status.postgres.port}` : 'stopped'}{status.postgres.source ? ` · ${status.postgres.source}` : ''}</dd>
+            <dt>Service</dt>
+            <dd>{status.url ?? (status.service.running ? `127.0.0.1:${status.service.port}` : 'stopped')}{status.service.source ? ` · ${status.service.source === 'dev' ? status.service.path : `bundle ${status.service.version}`}` : ''}</dd>
+            {#if status.error}<dt>Error</dt><dd class="error">{status.error}</dd>{/if}
+          </dl>
+        {/if}
+      {/if}
+
+      <div class="row">
+        <button class="btn primary" type="submit">Save</button>
+        {#if mode === 'local' && settings.mode === 'local'}
+          {#if running}
+            <button class="btn" type="button" onclick={() => void localService.restart()}>Restart</button>
+            <button class="btn" type="button" onclick={() => void localService.stop()}>Stop</button>
+          {:else}
+            <button class="btn" type="button" onclick={() => void localService.start()}>Start</button>
+          {/if}
+        {/if}
+        {#if isDesktop}
+          <button class="btn" type="button" aria-pressed={!!logs} onclick={showLogs}>Logs</button>
+        {/if}
+        <span class="small ok">{saved}</span>
+      </div>
+
+      {#if logs}
+        <div class="stack logs">
+          <div class="row">
+            <span class="faint small">In <code>{logs.dir}</code></span>
+            <span class="spacer"></span>
+            <button class="btn" type="button" onclick={refreshLogs}>Refresh</button>
+            <button class="btn" type="button" onclick={() => void localServiceApi.openLogs()}>Open log folder</button>
+          </div>
+          <h4>laicpmsdb.log</h4>
+          <pre class="log-tail">{logs.service || '(empty)'}</pre>
+          <h4>postgres.log</h4>
+          <pre class="log-tail">{logs.postgres || '(empty)'}</pre>
+        </div>
+      {/if}
+    </form>
+
+    <form class="glass panel stack" onsubmit={saveStudio}>
+      <h3>UPbRPy Studio</h3>
       <label class="field">
-        laicpmsdb server URL
-        <input type="url" bind:value={server} placeholder="http://localhost:8000" spellcheck="false" required />
-        <span class="faint">The Sessions tab opens <code>&lt;server&gt;/app/</code>.</span>
-        {#if serverError}<span class="error">{serverError}</span>{/if}
-      </label>
-      <label class="field">
-        UPbRPy Studio path
+        Path
         <input type="text" bind:value={studio} placeholder={detected ?? 'auto-detect'} spellcheck="false" disabled={!isDesktop} />
         <span class="faint">
           {#if !isDesktop}Only used by the desktop app.
@@ -62,8 +204,8 @@
         </span>
       </label>
       <div class="row">
-        <button class="btn primary" type="submit">Save</button>
-        <span class="small ok">{saved}</span>
+        <button class="btn primary" type="submit" disabled={!isDesktop}>Save</button>
+        <span class="small ok">{studioSaved}</span>
       </div>
     </form>
 
@@ -105,4 +247,5 @@
   .narrow { max-width: 760px; }
   .ok { color: var(--ok); }
   table.data tbody tr { cursor: default; }
+  .logs h4 { margin: 0; font-size: 0.85rem; color: var(--text-muted); }
 </style>

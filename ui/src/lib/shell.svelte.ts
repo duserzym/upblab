@@ -3,9 +3,13 @@
 
 import { moduleHome, moduleUrl, resolve, type ModuleBases, type ModuleTab, type Resolution, type TabId } from './links';
 import { isDesktop, launchStudio, logInfo, logWarn, openExternal } from './platform';
+import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
 
 export type View = TabId | 'settings';
+
+/** Placeholder while the local service starts (its usual port). */
+const LOCAL_PENDING = 'http://127.0.0.1:8000';
 
 export interface InstalledModule {
   name: string;
@@ -43,9 +47,19 @@ class Shell {
     return this.modules.find((m) => m.name === 'grainatlas');
   }
 
+  /** Desktop in "This computer" mode: laicpmsdb runs on this machine. */
+  get local(): boolean {
+    return isDesktop && settings.mode === 'local';
+  }
+
+  /** Where laicpmsdb is: the local instance (once healthy) or the configured server. */
+  get serverUrl(): string {
+    return this.local ? (localService.url ?? LOCAL_PENDING) : settings.serverUrl;
+  }
+
   get bases(): ModuleBases {
     const atlasDir = isDesktop || import.meta.env.DEV ? new URL('./modules/grainatlas/', location.href).href : '/atlas/';
-    return { server: settings.serverUrl, atlas: atlasDir };
+    return { server: this.serverUrl, atlas: atlasDir };
   }
 
   homeUrl(tab: ModuleTab): string {

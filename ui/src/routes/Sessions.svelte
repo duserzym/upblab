@@ -1,6 +1,8 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import ModuleSurface from '../components/ModuleSurface.svelte';
+  import LocalStatusPanel from '../components/LocalStatusPanel.svelte';
+  import { localService } from '../lib/localService.svelte';
   import { probe } from '../lib/platform';
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
@@ -21,9 +23,13 @@
     checkedAt = new Date();
   }
 
+  // "This computer": the host's status events say when laicpmsdb is up.
+  const local = $derived(shell.local);
+  const localReady = $derived(local && localService.status?.phase === 'ready' && !!localService.url);
+
   $effect(() => {
     const url = appUrl;
-    if (!active || !settings.loaded) return;
+    if (!active || !settings.loaded || local) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Retry quickly while down; re-check slowly while up so a stopped server is noticed.
@@ -43,7 +49,13 @@
 </script>
 
 <section class="view" class:hidden={!active}>
-  {#if status === 'reachable'}
+  {#if local}
+    {#if localReady}
+      <ModuleSurface module="sessions" title="laicpmsdb" home={appUrl} target={shell.targets.sessions} {active} />
+    {:else}
+      <div class="center"><LocalStatusPanel /></div>
+    {/if}
+  {:else if status === 'reachable'}
     <ModuleSurface module="sessions" title="laicpmsdb" home={appUrl} target={shell.targets.sessions} {active} />
   {:else}
     <div class="center">

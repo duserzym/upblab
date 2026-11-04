@@ -70,3 +70,27 @@ body { min-height: 0; overflow: hidden; }
 .card ul { margin: 0; padding-left: 1.2rem; }
 
 .chip[aria-checked='true'] { background: var(--accent-soft); border-color: var(--accent); }
+
+/* Log tails ("This computer" mode failures, Settings → Logs). */
+.log-tail {
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  border: 2px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+  flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
