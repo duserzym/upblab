@@ -5,7 +5,7 @@
 //   GET /v1/sessions                     newest first
 //   GET /v1/sessions/{id}/reductions     per shown session
 //   GET /v1/mounts
-//   GET /v1/mounts/{id}/atlas            404 = nothing published yet
+//   GET /v1/mounts/{id}/atlas            {current: {...} | null, versions, …}; current null = none published
 
 import { identity } from './identity.svelte';
 import type { ApiReply } from './platform';
@@ -81,10 +81,18 @@ export function summariseRuns(runs: RunOut[]): Omit<SessionRow, 'session'> {
   };
 }
 
-/** Read the atlas reply tolerantly; null when it names no project. */
+/**
+ * The current atlas from GET /v1/mounts/{id}/atlas (laicpmsdb docs/workflow_api.md):
+ * `{mount_id, current: {project_id, version, name, uploaded_at, …} | null, versions, …}`.
+ * A bare atlas object is read too. null when none is published.
+ */
 export function parseAtlas(body: unknown): Atlas | null {
   if (!body || typeof body !== 'object') return null;
-  const b = body as Record<string, unknown>;
+  let b = body as Record<string, unknown>;
+  if ('current' in b) {
+    if (!b.current || typeof b.current !== 'object') return null;
+    b = b.current as Record<string, unknown>;
+  }
   const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
   const projectId = str(b.project_id) ?? str(b.atlas_project_id) ?? str(b.projectId) ?? str((b.atlas as Record<string, unknown> | undefined)?.project_id);
   if (!projectId) return null;
@@ -93,7 +101,7 @@ export function parseAtlas(body: unknown): Atlas | null {
     projectId,
     name: str(b.name) ?? str(b.project_name) ?? str(b.title),
     version: typeof v === 'string' || typeof v === 'number' ? v : null,
-    publishedAt: str(b.published_at) ?? str(b.created_at) ?? str(b.uploaded_at),
+    publishedAt: str(b.uploaded_at) ?? str(b.published_at) ?? str(b.created_at),
   };
 }
 
@@ -174,6 +182,7 @@ class Overview {
     try {
       const r = await identity.get(`/v1/mounts/${encodeURIComponent(mount.id)}/atlas`);
       if (r.status === 200) return { mount, atlas: parseAtlas(r.body) };
+      // 404/405: a laicpmsdb from before the atlas endpoint.
       if (r.status === 404 || r.status === 405) return { mount, atlas: null };
     } catch {
       /* fall through */

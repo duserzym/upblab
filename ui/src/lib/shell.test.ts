@@ -201,6 +201,16 @@ describe('shell sign-in callback (laicpmsdb://auth/callback)', () => {
     expect(await shell.handleLink('laicpmsdb://auth/callback?code=again', 'os')).toBe(false);
   });
 
+  it('shows a failed browser sign-in and ends the wait', async () => {
+    identity.pending = { provider: 'orcid', at: Date.now() };
+    expect(await shell.handleLink('laicpmsdb://auth/callback?error=orcid_access_denied', 'os')).toBe(false);
+    expect(identity.pending).toBeNull();
+    expect(identity.dialog).toBe(true);
+    expect(identity.error).toMatch(/cancelled/);
+    expect(platform.desktopAuth.exchange).not.toHaveBeenCalled();
+    identity.dialog = false;
+  });
+
   it('redacts one-time codes', () => {
     expect(redact('upbr://session/x?server=http://h&code=s3cret')).toBe('upbr://session/x?server=http://h&code=…');
     expect(redact('laicpmsdb://auth/callback#/auth/callback?code=s3cret')).toBe('laicpmsdb://auth/callback#/auth/callback?code=…');

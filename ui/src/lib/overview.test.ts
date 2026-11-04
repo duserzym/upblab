@@ -37,7 +37,19 @@ describe('summariseRuns', () => {
 });
 
 describe('parseAtlas', () => {
-  it('reads the atlas reply under the likely field names', () => {
+  it('reads laicpmsdb\'s reply: current atlas, or none when current is null', () => {
+    const reply = {
+      mount_id: 'm',
+      current: { id: 'a2', project_id: 'p', version: 2, name: 'YZ-APT-01 CL', is_current: true, uploaded_at: '2026-11-03T20:00:00Z' },
+      versions: [],
+      access: null,
+      viewer_url: null,
+    };
+    expect(parseAtlas(reply)).toEqual({ projectId: 'p', name: 'YZ-APT-01 CL', version: 2, publishedAt: '2026-11-03T20:00:00Z' });
+    expect(parseAtlas({ mount_id: 'm', current: null, versions: [] })).toBeNull();
+  });
+
+  it('reads a bare atlas object too', () => {
     expect(parseAtlas({ project_id: 'p', name: 'Mount A', version: 2, published_at: '2026-11-03' })).toEqual({
       projectId: 'p',
       name: 'Mount A',

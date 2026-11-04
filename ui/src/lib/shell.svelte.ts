@@ -214,6 +214,12 @@ class Shell {
         await (done.ok ? logInfo : logWarn)(`[links] ${redact(url)} from ${from}: ${done.outcome}`);
         return done.ok;
       }
+      case 'auth-error': {
+        const done = identity.failProvider(r.error, from);
+        this.record(url, from, done.outcome, true);
+        await logWarn(`[links] ${redact(url)} from ${from}: ${done.outcome}`);
+        return false;
+      }
       case 'external':
         this.record(url, from, 'opened in the system browser');
         await openExternal(r.url);

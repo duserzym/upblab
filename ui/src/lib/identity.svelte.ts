@@ -161,6 +161,25 @@ async function adopt(t: AuthTarget, res: Response): Promise<AuthState> {
 
 const desktopBackend: Backend = { ...desktopAuth, token: () => null };
 
+/** laicpmsdb's sign-in error slugs (accounts/api.py, oidc.py), in words. */
+export function providerError(slug: string, provider: Provider): string {
+  const name = provider === 'orcid' ? 'ORCID' : 'Google';
+  const known: Record<string, string> = {
+    provider_unavailable: `${name} sign-in is not set up on this server.`,
+    provider_unreachable: `${name} could not be reached from the server; try again later.`,
+    state_mismatch: 'The sign-in took too long or was started twice; please try again.',
+    token_exchange_failed: `${name} did not confirm the sign-in; please try again.`,
+    bad_id_token: `${name}'s answer could not be verified; please try again.`,
+    email_unverified: 'Google has not verified this email address.',
+    identity_in_use: `That ${name} account is already linked to another laicpmsdb account.`,
+    account_disabled: 'This laicpmsdb account is disabled; ask a lab administrator.',
+    registration_closed: `No laicpmsdb account is linked to that ${name} account, and this server does not create accounts on sign-in; ask a lab administrator, or sign in with your password and link ${name} under Account.`,
+  };
+  if (known[slug]) return known[slug];
+  if (/_access_denied$/.test(slug)) return `${name} sign-in was cancelled.`;
+  return `${name} sign-in failed (${slug}).`;
+}
+
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -286,6 +305,17 @@ class Identity {
       this.dialog = true;
       return { ok: false, outcome: `sign-in failed: ${this.error}` };
     }
+  }
+
+  /** laicpmsdb://auth/callback?error=<slug>: show why, if this shell started that sign-in. */
+  failProvider(error: string, from: string): { ok: boolean; outcome: string } {
+    const pending = this.pending;
+    if (from !== 'os' && from !== 'you') return { ok: false, outcome: `sign-in callbacks are only accepted from the OS, not ${from}` };
+    if (!pending || Date.now() - pending.at > PENDING_MS) return { ok: false, outcome: 'no browser sign-in was started here' };
+    this.pending = null;
+    this.error = providerError(error, pending.provider);
+    this.dialog = true;
+    return { ok: false, outcome: `${pending.provider === 'orcid' ? 'ORCID' : 'Google'} sign-in failed: ${error}` };
   }
 
   async logout(reason = 'you') {

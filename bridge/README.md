@@ -106,12 +106,11 @@ The shell side of the `postMessage` transport is `createFrameHost` from
   from the shell. A Sign out inside the page should `notify({ type:
   'lab.auth.signed-out' })` so the shell signs out too.
 - The shell's ORCID and Google sign-in opens
-  `<server>/v1/auth/<provider>/start?next=laicpmsdb://auth/callback`; the
-  service has to accept that `next` (a fixed app callback, like
-  `upbr://auth/callback` for Studio) and redirect to
-  `laicpmsdb://auth/callback#/auth/callback?code=<one-time code>` (or with the
-  code in the query). The shell exchanges the code at `POST /v1/auth/exchange`
-  and accepts a callback only within ten minutes of starting that sign-in.
+  `<server>/v1/auth/<provider>/start?next=laicpmsdb://auth/callback`; laicpmsdb
+  (since ff8c070) redirects to `laicpmsdb://auth/callback?code=<one-time code>`,
+  or `?error=<slug>` when the sign-in failed. The shell exchanges the code at
+  `POST /v1/auth/exchange`, shows the error in its sign-in dialog, and accepts
+  a callback only within ten minutes of starting that sign-in.
 - For the web delivery (`/desk/`), send `X-Frame-Options: SAMEORIGIN` (or CSP
   `frame-ancestors 'self'`) on `/app/` and `/atlas/` instead of `DENY`, and
   serve the shell build at `/desk/` and the grainatlas build at `/atlas/`.

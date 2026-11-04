@@ -28,6 +28,7 @@ export type Resolution =
   | { kind: 'tab'; tab: ModuleTab; route: string; url: string }
   | { kind: 'studio'; tab: 'reduce'; object: 'session' | 'run'; id: string; url: string }
   | { kind: 'auth'; code: string; url: string }
+  | { kind: 'auth-error'; error: string; url: string }
   | { kind: 'external'; url: string }
   | { kind: 'refused'; url: string; reason: string };
 
@@ -78,7 +79,13 @@ export function resolve(input: string): Resolution {
       if (kind === 'auth' && id === 'callback' && parts.length === 2) {
         // laicpmsdb returns to `<next>#/auth/callback?code=…`; accept the code there or in the query.
         const hashQuery = u.hash.includes('?') ? u.hash.slice(u.hash.indexOf('?') + 1) : '';
-        const code = u.searchParams.get('code') ?? new URLSearchParams(hashQuery).get('code');
+        const params = (name: string) => u.searchParams.get(name) ?? new URLSearchParams(hashQuery).get(name);
+        const code = params('code');
+        const error = params('error');
+        if (!code && error) {
+          // laicpmsdb://auth/callback?error=<slug>: the browser sign-in failed.
+          return /^[A-Za-z0-9._~-]{1,128}$/.test(error) ? { kind: 'auth-error', error, url } : refuse(url, 'sign-in callback with an invalid error');
+        }
         if (!code || !/^[A-Za-z0-9._~-]{1,512}$/.test(code)) return refuse(url, 'sign-in callback without a valid code');
         return { kind: 'auth', code, url };
       }

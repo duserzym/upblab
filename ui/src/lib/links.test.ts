@@ -71,6 +71,8 @@ describe('resolve: plan section 4.4 table', () => {
     expect(resolve('laicpmsdb://auth/callback?code=Ab-1_x')).toEqual({ kind: 'auth', code: 'Ab-1_x', url: 'laicpmsdb://auth/callback?code=Ab-1_x' });
     expect(resolve('laicpmsdb://auth/callback#/auth/callback?code=Zz9')).toMatchObject({ kind: 'auth', code: 'Zz9' });
     expect(resolve('laicpmsdb://auth/callback')).toMatchObject({ kind: 'refused', reason: /without a valid code/ });
+    expect(resolve('laicpmsdb://auth/callback?error=orcid_access_denied')).toMatchObject({ kind: 'auth-error', error: 'orcid_access_denied' });
+    expect(resolve('laicpmsdb://auth/callback?error=%3Cscript%3E')).toMatchObject({ kind: 'refused' });
     expect(resolve('laicpmsdb://auth/callback?code=a%20b')).toMatchObject({ kind: 'refused' });
   });
 

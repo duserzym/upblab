@@ -11,7 +11,7 @@ three schemes with the operating system and routes them to a tab:
 | `laicpmsdb://mount/<id>` | Sessions tab, `<server>/app/#/mounts/<id>` (the mount page with its atlas view) |
 | `laicpmsdb://ingest?path=<folder>` | Sessions tab, `<server>/app/#/ingest?path=<folder>` (the ingest dialog, folder prefilled; desktop) |
 | `laicpmsdb://search?label=<label>` | Sessions tab, `<server>/app/#/search?label=<label>` |
-| `laicpmsdb://auth/callback?code=<code>` | completes the shell's ORCID or Google sign-in (only one the shell started in the last ten minutes, only from the OS) |
+| `laicpmsdb://auth/callback?code=<code>`, `?error=<slug>` | completes the shell's ORCID or Google sign-in, or shows why it failed (only one the shell started in the last ten minutes, only from the OS) |
 | `grainatlas://project/<id>` | Images tab, grainatlas build `index.html?server=<laicpmsdb>&project=<id>` |
 | `grainatlas://project/<id>/spot/<id>` | Images tab, `index.html?server=<laicpmsdb>&project=<id>&spot=<id>` |
 | `upbr://session/<id>?server=&code=` | launches UPbRPy Studio in database mode (`--open "<link>"`); without `code`, the shell mints one with its sign-in (`POST /v1/auth/handoff`) and adds its `server` (docs/WORKFLOW.md section 4); the Reduce tab shows the result, or install instructions when Studio is missing |
