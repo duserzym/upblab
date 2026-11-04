@@ -43,6 +43,13 @@ describe('resolve: plan section 4.4 table', () => {
     });
   });
 
+  it('laicpmsdb auth callback -> sign-in code, from the query or the hash laicpmsdb appends', () => {
+    expect(resolve('laicpmsdb://auth/callback?code=Ab-1_x')).toEqual({ kind: 'auth', code: 'Ab-1_x', url: 'laicpmsdb://auth/callback?code=Ab-1_x' });
+    expect(resolve('laicpmsdb://auth/callback#/auth/callback?code=Zz9')).toMatchObject({ kind: 'auth', code: 'Zz9' });
+    expect(resolve('laicpmsdb://auth/callback')).toMatchObject({ kind: 'refused', reason: /without a valid code/ });
+    expect(resolve('laicpmsdb://auth/callback?code=a%20b')).toMatchObject({ kind: 'refused' });
+  });
+
   it('https -> system browser', () => {
     expect(resolve('https://github.com/duserzym/laicpmsdb')).toEqual({
       kind: 'external',

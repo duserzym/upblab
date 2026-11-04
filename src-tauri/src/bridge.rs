@@ -5,7 +5,9 @@
 //! Event names match `EVENTS` in bridge/src/protocol.ts.
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, EventTarget, Runtime, Webview};
+use tauri::{AppHandle, Emitter, EventTarget, Runtime, State, Webview};
+
+use crate::auth::{token_for, Identity};
 
 use crate::SHELL_WEBVIEW;
 
@@ -54,12 +56,14 @@ pub fn bridge_open<R: Runtime>(app: AppHandle<R>, webview: Webview<R>, url: Stri
     forward_open(&app, &url, webview.label())
 }
 
-/// The laicpmsdb bearer token for module webviews. Single sign-in with the
-/// token in the OS keychain is roadmap phase 3; until then modules sign in
-/// themselves and this returns `None`.
+/// The laicpmsdb bearer token of the shell's sign-in (plan decision 5), for
+/// the bundled grainatlas build and for pages of the configured server only;
+/// `None` when signed out. See `auth::token_for`.
 #[tauri::command]
-pub fn bridge_token<R: Runtime>(_webview: Webview<R>) -> Option<String> {
-    None
+pub async fn bridge_token<R: Runtime>(identity: State<'_, Identity>, webview: Webview<R>) -> Result<Option<String>, String> {
+    let token = token_for(&identity, &webview).await;
+    log::info!("bridge token() for {}: {}", module_name(webview.label()), if token.is_some() { "token" } else { "null" });
+    Ok(token)
 }
 
 #[tauri::command]

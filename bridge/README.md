@@ -19,6 +19,20 @@ if (isHosted()) hideOwnSignInButton();
 | web shell, iframe | `postMessage` to `window.parent`, replies matched by id | the iframe is named `lab-shell:<module>` |
 | alone | none: `open` resolves `false`, `token` resolves `null`, `notify` does nothing | neither of the above |
 
+`token()` is the shell's laicpmsdb sign-in (plan decision 5): the user signs
+in once in the shell's tab bar (password, or ORCID / Google through the system
+browser) and every module tab gets the same bearer token. On desktop the token
+lives in the OS keychain (macOS Keychain, Windows Credential Manager) and is
+given only to the bundled grainatlas build and to pages of the configured
+laicpmsdb server; in the web shell it lives in the tab's `sessionStorage`. When
+the user signs in or out in the shell, module tabs are reloaded, so read
+`token()` at start-up and do not cache it across reloads.
+
+| `notify()` type the shell acts on | Effect |
+| --- | --- |
+| `lab.auth.signed-out` (`SHELL_EVENTS.signedOut`), also `laicpmsdb.auth.signed-out` | the shell signs out (revokes the token, clears the keychain entry) and reloads every module tab without a token; send it when the user signs out inside the module or the API answers 401 to the shell's token |
+| anything else | logged; the Home timeline uses them from roadmap phase 5 |
+
 Plain links work too: in the desktop shell a click on an `<a href="laicpmsdb://…">`
 inside a module webview is intercepted and routed like `open()`.
 
@@ -66,8 +80,18 @@ The shell side of the `postMessage` transport is `createFrameHost` from
   `#/sessions/<id>`, `#/samples/<id>`.
 - Turn spot references into `grainatlas://project/<id>/spot/<id>` links and
   reduction actions into `upbr://session/<id>` links.
-- When hosted, `token()` will return the shell's bearer token from roadmap
-  phase 3; until then it resolves `null` and laicpmsdb keeps its own sign-in.
+- When hosted, `token()` returns the shell's bearer token once the user has
+  signed in to the shell, and `null` otherwise; keep the own sign-in screen for
+  the `null` case and hide it (and the own Sign out) while the token comes
+  from the shell. A Sign out inside the page should `notify({ type:
+  'lab.auth.signed-out' })` so the shell signs out too.
+- The shell's ORCID and Google sign-in opens
+  `<server>/v1/auth/<provider>/start?next=laicpmsdb://auth/callback`; the
+  service has to accept that `next` (a fixed app callback, like
+  `upbr://auth/callback` for Studio) and redirect to
+  `laicpmsdb://auth/callback#/auth/callback?code=<one-time code>` (or with the
+  code in the query). The shell exchanges the code at `POST /v1/auth/exchange`
+  and accepts a callback only within ten minutes of starting that sign-in.
 - For the web delivery (`/desk/`), send `X-Frame-Options: SAMEORIGIN` (or CSP
   `frame-ancestors 'self'`) on `/app/` and `/atlas/` instead of `DENY`, and
   serve the shell build at `/desk/` and the grainatlas build at `/atlas/`.

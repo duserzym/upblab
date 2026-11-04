@@ -30,6 +30,22 @@ log = "0.4"
 # initdb, start and stop are done by src/local_service/postgres.rs.
 postgresql_embedded = { version = "0.22", features = ["bundled", "tokio"] }
 getrandom = "0.3"
+# Identity (plan decision 5): HTTP to laicpmsdb from Rust (no CORS or mixed
+# content in the shell page), native TLS like postgresql_embedded already uses.
+reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls", "query"] }
+tokio = { version = "1", features = ["sync", "time"] }
+url = "2"
+
+# Bearer tokens live in the OS keychain: macOS Keychain, Windows Credential Manager.
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(windows)'.dependencies.keyring]
+version = "3"
+features = ["windows-native"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["linux-native"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

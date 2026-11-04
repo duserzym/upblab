@@ -29,6 +29,15 @@ export const EVENTS = {
   notify: 'lab-bridge://notify',
 } as const;
 
+/**
+ * Well-known `notify()` types the shell acts on. `signedOut`: the module saw
+ * the user sign out (or its token rejected); the shell signs out everywhere
+ * and module tabs reload without a token.
+ */
+export const SHELL_EVENTS = {
+  signedOut: 'lab.auth.signed-out',
+} as const;
+
 /** A module event for the shell (timeline entries, status, title changes). */
 export interface BridgeEvent {
   /** Namespaced type, e.g. `grainatlas.spot.selected`. */

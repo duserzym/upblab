@@ -6,6 +6,7 @@
 
 import { EVENTS, type BridgeEvent } from '@lab/bridge';
 import { createFrameHost } from '@lab/bridge/host';
+import { identity, SIGN_OUT_EVENTS } from './identity.svelte';
 import { isDesktop, logInfo } from './platform';
 import { shell } from './shell.svelte';
 import { settings } from './settings.svelte';
@@ -19,6 +20,12 @@ interface BridgeNotifyPayload {
   source: string;
 }
 
+/** A module event: logged; a sign-out signs the shell out (clears the token for every module). */
+export function onModuleEvent(event: BridgeEvent, source: string) {
+  void logInfo(`[bridge] ${source}: ${JSON.stringify(event)}`);
+  if (SIGN_OUT_EVENTS.includes(event.type) && identity.signedIn) void identity.logout(`${source} signed out`);
+}
+
 /** Module iframes register here so the frame host can tell which module posted. */
 export const frames = new Map<string, Window>();
 
@@ -28,9 +35,7 @@ export async function listenForLinks(): Promise<void> {
     const { listen } = await import('@tauri-apps/api/event');
     await onOpenUrl((urls) => urls.forEach((u) => void shell.handleLink(u, 'os')));
     await listen<BridgeOpenPayload>(EVENTS.open, (e) => void shell.handleLink(e.payload.url, e.payload.source));
-    await listen<BridgeNotifyPayload>(EVENTS.notify, (e) =>
-      void logInfo(`[bridge] ${e.payload.source}: ${JSON.stringify(e.payload.event)}`),
-    );
+    await listen<BridgeNotifyPayload>(EVENTS.notify, (e) => onModuleEvent(e.payload.event, e.payload.source));
     const initial = await getCurrent().catch(() => null);
     initial?.forEach((u) => void shell.handleLink(u, 'os'));
     return;
@@ -39,8 +44,8 @@ export async function listenForLinks(): Promise<void> {
   createFrameHost(
     {
       open: (url, module) => shell.handleLink(url, module),
-      token: () => null, // phase 3: the web delivery uses the laicpmsdb session cookie
-      notify: (event, module) => void logInfo(`[bridge] ${module}: ${JSON.stringify(event)}`),
+      token: () => identity.frameToken(),
+      notify: (event, module) => onModuleEvent(event, module),
     },
     {
       allowedOrigins: () => {

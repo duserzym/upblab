@@ -6,6 +6,8 @@
   import Reduce from './routes/Reduce.svelte';
   import Settings from './routes/Settings.svelte';
   import FirstRun from './components/FirstRun.svelte';
+  import AccountDialog from './components/AccountDialog.svelte';
+  import { identity } from './lib/identity.svelte';
   import { localService } from './lib/localService.svelte';
   import { listenForLinks } from './lib/incoming';
   import { settings } from './lib/settings.svelte';
@@ -22,6 +24,19 @@
   // Desktop with no mode stored yet: the first-run wizard (ADR-0003).
   // Waits for the host's status, which says whether "This computer" can run.
   const firstRun = $derived(isDesktop && settings.loaded && localService.initialised && settings.mode === '');
+
+  // One identity (plan decision 5): read the stored sign-in whenever the
+  // server changes (settings, or the local instance coming up on its port).
+  $effect(() => {
+    if (!settings.loaded || firstRun) return;
+    const t = shell.identityTarget;
+    if (t) void identity.restore(t);
+  });
+
+  // Native module webviews paint over the shell page: hide them under the dialog.
+  $effect(() => {
+    shell.overlay = identity.dialog;
+  });
 
   onMount(async () => {
     await settings.load();
@@ -43,7 +58,7 @@
     const { listen } = await import('@tauri-apps/api/event');
     await listen<string>('shell://menu', (e) => {
       const id = e.payload;
-      if (firstRun) return;
+      if (firstRun || identity.dialog) return;
       if (id.startsWith('tab:')) shell.show(id.slice(4) as View);
       else if (id === 'settings') shell.show('settings');
       else if (id === 'module:reload' && (shell.view === 'images' || shell.view === 'sessions')) {
@@ -86,6 +101,16 @@
       {/each}
     </div>
     <span class="spacer"></span>
+    {#if identity.target}
+      <button
+        class="tab account"
+        class:signed-in={identity.signedIn}
+        title={identity.signedIn ? `Signed in to ${identity.target.server}` : `Sign in to ${identity.target.server}`}
+        onclick={() => (identity.dialog = true)}
+      >
+        {#if identity.signedIn}<span class="dot" style="background: {identity.state.offline ? 'var(--warning)' : 'var(--ok)'}"></span>{identity.label}{:else}Sign in{/if}
+      </button>
+    {/if}
     <button
       class="tab icon"
       aria-label="Settings"
@@ -115,4 +140,5 @@
       <Settings active={shell.view === 'settings'} />
     {/if}
   </main>
+  <AccountDialog />
 </div>

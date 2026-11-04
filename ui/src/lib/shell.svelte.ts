@@ -2,7 +2,8 @@
 // builds that are installed, and the routing of every incoming link.
 
 import { moduleHome, moduleUrl, resolve, type ModuleBases, type ModuleTab, type Resolution, type TabId } from './links';
-import { isDesktop, launchStudio, logInfo, logWarn, openExternal } from './platform';
+import { isDesktop, launchStudio, logInfo, logWarn, openExternal, type AuthTarget } from './platform';
+import { identity } from './identity.svelte';
 import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
 
@@ -10,6 +11,14 @@ export type View = TabId | 'settings';
 
 /** Placeholder while the local service starts (its usual port). */
 const LOCAL_PENDING = 'http://127.0.0.1:8000';
+
+/** Keychain entry of the local instance's token: its port may change between launches. */
+export const LOCAL_KEY = 'this-computer';
+
+/** One-time codes never go into the link list or the log. */
+export function redact(url: string): string {
+  return url.replace(/([?&#]code=)[^&#\s]+/g, '$1…');
+}
 
 export interface InstalledModule {
   name: string;
@@ -62,6 +71,12 @@ class Shell {
     return { server: this.serverUrl, atlas: atlasDir };
   }
 
+  /** Which laicpmsdb to sign in to; null while the local instance is not up yet. */
+  get identityTarget(): AuthTarget | null {
+    if (this.local) return localService.url ? { server: localService.url, key: LOCAL_KEY } : null;
+    return settings.serverUrl ? { server: settings.serverUrl, key: settings.serverUrl } : null;
+  }
+
   homeUrl(tab: ModuleTab): string {
     return moduleHome(tab, this.bases);
   }
@@ -83,7 +98,7 @@ class Shell {
   }
 
   private record(url: string, from: string, outcome: string, refused = false) {
-    this.links = [{ at: new Date(), url, from, outcome, refused }, ...this.links].slice(0, 50);
+    this.links = [{ at: new Date(), url: redact(url), from, outcome, refused }, ...this.links].slice(0, 50);
   }
 
   /** Route a URL from the OS, a module, or the user. Returns false when refused. */
@@ -92,8 +107,14 @@ class Shell {
     switch (r.kind) {
       case 'refused':
         this.record(url, from, r.reason, true);
-        await logWarn(`[links] refused ${JSON.stringify(url)} from ${from}: ${r.reason}`);
+        await logWarn(`[links] refused ${JSON.stringify(redact(url))} from ${from}: ${r.reason}`);
         return false;
+      case 'auth': {
+        const done = await identity.completeProvider(r.code, from);
+        this.record(url, from, done.outcome, !done.ok);
+        await (done.ok ? logInfo : logWarn)(`[links] ${redact(url)} from ${from}: ${done.outcome}`);
+        return done.ok;
+      }
       case 'external':
         this.record(url, from, 'opened in the system browser');
         await openExternal(r.url);

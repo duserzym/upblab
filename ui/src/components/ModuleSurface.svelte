@@ -11,6 +11,7 @@
   import { desktopModules, isDesktop, type Bounds } from '../lib/platform';
   import { shell, type ModuleTarget } from '../lib/shell.svelte';
   import { frames } from '../lib/incoming';
+  import { identity } from '../lib/identity.svelte';
 
   interface Props {
     module: ModuleTab;
@@ -78,6 +79,22 @@
   onDestroy(() => {
     if (isDesktop && shown) void desktopModules.hide(module);
     frames.delete(module);
+  });
+
+  // Signed in or out in the shell: reload, so the module asks token() again.
+  let seenRevision = identity.revision;
+  $effect(() => {
+    const r = identity.revision;
+    if (r === seenRevision) return;
+    seenRevision = r;
+    if (isDesktop) queue(() => desktopModules.reload(module));
+    else if (iframe) {
+      try {
+        iframe.contentWindow?.location.reload();
+      } catch {
+        iframe.src = iframe.src; // cross-origin frame
+      }
+    }
   });
 
   // Web: the iframe follows the latest target, else home.

@@ -6,7 +6,9 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { localService } from '../lib/localService.svelte';
-  import { localServiceApi } from '../lib/platform';
+  import { identity } from '../lib/identity.svelte';
+  import { localServiceApi, logWarn } from '../lib/platform';
+  import { LOCAL_KEY } from '../lib/shell.svelte';
   import { DEFAULT_DATA_ROOT, settings } from '../lib/settings.svelte';
   import { initialState, reduce, type Context, type Form, type WizardEvent } from '../lib/wizard';
 
@@ -51,12 +53,21 @@
       .catch((err) => send({ type: 'service-failed', message: String(err) }));
   }
 
-  // The first staff account, then the demo data if asked.
+  // The first staff account, then the demo data if asked; then the shell
+  // signs in with it, so the Sessions tab opens signed in (plan decision 5).
   function createAccount() {
     const f = state.form;
     localServiceApi
       .bootstrap({ username: f.username.trim(), email: f.email.trim(), password: f.password, loadDemo: f.loadDemo })
-      .then(() => send({ type: 'account-created' }))
+      .then(async () => {
+        const server = localService.url;
+        if (server && !(await identity.login(f.username, f.password, { server, key: LOCAL_KEY }))) {
+          // An existing database keeps its accounts (bootstrap is a no-op there): sign in from the tab bar.
+          await logWarn(`[wizard] automatic sign-in as ${f.username.trim()} failed: ${identity.error}`);
+          identity.error = '';
+        }
+        send({ type: 'account-created' });
+      })
       .catch((err) => {
         const [message, ...tail] = String(err).split('\n');
         send({ type: 'account-failed', message, logTail: tail.join('\n') });

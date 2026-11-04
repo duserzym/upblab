@@ -6,6 +6,9 @@ vi.mock('./platform', () => ({
   logInfo: vi.fn(async () => {}),
   openExternal: vi.fn(async () => {}),
   launchStudio: vi.fn(async () => {}),
+  desktopAuth: {
+    exchange: vi.fn(async () => ({ signedIn: true, account: { username: 'analyst' }, offline: false })),
+  },
   LOCAL_STATUS_EVENT: 'local-service://status',
   localServiceApi: {},
 }));
@@ -17,6 +20,8 @@ const platform = await import('./platform');
 const { shell } = await import('./shell.svelte');
 const { settings } = await import('./settings.svelte');
 const { localService } = await import('./localService.svelte');
+const { identity } = await import('./identity.svelte');
+const { redact } = await import('./shell.svelte');
 
 const A = '2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91';
 
@@ -109,5 +114,43 @@ describe('This computer mode', () => {
     localService.status = ready;
     expect(shell.local).toBe(false);
     expect(shell.homeUrl('sessions')).toBe('https://lab.example.edu/app/');
+  });
+});
+
+describe('shell sign-in callback (laicpmsdb://auth/callback)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    settings.mode = 'server';
+    settings.serverUrl = 'http://localhost:8000';
+    identity.target = { server: 'http://localhost:8000', key: 'http://localhost:8000' };
+    identity.state = { signedIn: false, account: null, offline: false };
+    identity.pending = null;
+  });
+
+  it('refuses a callback nobody asked for (login CSRF)', async () => {
+    expect(await shell.handleLink('laicpmsdb://auth/callback?code=evil', 'os')).toBe(false);
+    expect(platform.desktopAuth.exchange).not.toHaveBeenCalled();
+    expect(shell.links[0]).toMatchObject({ refused: true, url: 'laicpmsdb://auth/callback?code=…' });
+  });
+
+  it('refuses callbacks posted by a module', async () => {
+    identity.pending = { provider: 'orcid', at: Date.now() };
+    expect(await shell.handleLink('laicpmsdb://auth/callback?code=x', 'grainatlas')).toBe(false);
+    expect(platform.desktopAuth.exchange).not.toHaveBeenCalled();
+  });
+
+  it('exchanges the code of a sign-in the shell started, once', async () => {
+    identity.pending = { provider: 'orcid', at: Date.now() };
+    const before = identity.revision;
+    expect(await shell.handleLink('laicpmsdb://auth/callback#/auth/callback?code=abc', 'os')).toBe(true);
+    expect(platform.desktopAuth.exchange).toHaveBeenCalledWith(identity.target, 'abc');
+    expect(identity.signedIn).toBe(true);
+    expect(identity.revision).toBe(before + 1);
+    expect(await shell.handleLink('laicpmsdb://auth/callback?code=again', 'os')).toBe(false);
+  });
+
+  it('redacts one-time codes', () => {
+    expect(redact('upbr://session/x?server=http://h&code=s3cret')).toBe('upbr://session/x?server=http://h&code=…');
+    expect(redact('laicpmsdb://auth/callback#/auth/callback?code=s3cret')).toBe('laicpmsdb://auth/callback#/auth/callback?code=…');
   });
 });

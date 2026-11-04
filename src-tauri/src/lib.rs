@@ -8,6 +8,7 @@
 //! Studio, and in "This computer" mode runs laicpmsdb and PostgreSQL locally
 //! (`local_service`, ADR-0003).
 
+mod auth;
 mod bridge;
 pub mod local_service;
 mod menu;
@@ -59,6 +60,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(modules::ModuleState::default())
+        .manage(auth::Identity::default())
         .manage(local_service::LocalService::default())
         .invoke_handler(tauri::generate_handler![
             modules::module_open,
@@ -68,6 +70,12 @@ pub fn run() {
             probe::probe,
             studio::studio_status,
             studio::studio_launch,
+            auth::auth_restore,
+            auth::auth_login,
+            auth::auth_exchange,
+            auth::auth_logout,
+            auth::auth_handoff,
+            auth::api_get,
             bridge::bridge_open,
             bridge::bridge_token,
             bridge::bridge_notify,

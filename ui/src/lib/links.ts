@@ -9,6 +9,7 @@
 //   grainatlas://project/<id>             -> Images,   /atlas/?project=<id>
 //   grainatlas://project/<id>/spot/<id>   -> Images,   /atlas/?project=<id>&spot=<id>
 //   upbr://session/<id>                   -> launch UPbRPy Studio with that session
+//   laicpmsdb://auth/callback?code=…      -> finish the shell's ORCID or Google sign-in
 //   https://… and http://…                -> system browser
 //
 // Anything else is refused; the caller logs the refusal.
@@ -22,6 +23,7 @@ export type Scheme = (typeof SCHEMES)[number];
 export type Resolution =
   | { kind: 'tab'; tab: ModuleTab; route: string; url: string }
   | { kind: 'studio'; tab: 'reduce'; session: string; url: string }
+  | { kind: 'auth'; code: string; url: string }
   | { kind: 'external'; url: string }
   | { kind: 'refused'; url: string; reason: string };
 
@@ -69,6 +71,13 @@ export function resolve(input: string): Resolution {
 
   switch (scheme as Scheme) {
     case 'laicpmsdb': {
+      if (kind === 'auth' && id === 'callback' && parts.length === 2) {
+        // laicpmsdb returns to `<next>#/auth/callback?code=…`; accept the code there or in the query.
+        const hashQuery = u.hash.includes('?') ? u.hash.slice(u.hash.indexOf('?') + 1) : '';
+        const code = u.searchParams.get('code') ?? new URLSearchParams(hashQuery).get('code');
+        if (!code || !/^[A-Za-z0-9._~-]{1,512}$/.test(code)) return refuse(url, 'sign-in callback without a valid code');
+        return { kind: 'auth', code, url };
+      }
       const routes: Record<string, string> = { acquisition: 'acquisitions', session: 'sessions', sample: 'samples' };
       if (parts.length === 2 && kind in routes) {
         return { kind: 'tab', tab: 'sessions', route: `/app/${routes[kind]}/${id}`, url };

@@ -144,3 +144,46 @@ export const localServiceApi = {
   logs: (lines = 200) => invoke<LocalLogs>('local_service_logs', { lines }),
   openLogs: () => invoke<void>('local_service_open_logs'),
 };
+
+// ------------------------------------------------ identity (plan decision 5)
+
+/** Which laicpmsdb the shell signs in to, and the keychain entry for its token. */
+export interface AuthTarget {
+  server: string;
+  key: string;
+}
+
+/** laicpmsdb's AccountOut, the fields the shell uses. */
+export interface Account {
+  username: string;
+  display_name?: string;
+  email?: string;
+  is_lab_staff?: boolean;
+  is_admin?: boolean;
+  [field: string]: unknown;
+}
+
+/** Mirrors `AuthState` in src-tauri/src/auth.rs. */
+export interface AuthState {
+  signedIn: boolean;
+  account: Account | null;
+  /** A stored token, but the server could not confirm it (unreachable). */
+  offline: boolean;
+  error?: string;
+}
+
+export interface ApiReply<T = unknown> {
+  status: number;
+  body: T;
+}
+
+/** Desktop: the token stays in Rust and the OS keychain (src-tauri/src/auth.rs). */
+export const desktopAuth = {
+  restore: (target: AuthTarget) => invoke<AuthState>('auth_restore', { target }),
+  login: (target: AuthTarget, username: string, password: string) =>
+    invoke<AuthState>('auth_login', { target, username, password }),
+  exchange: (target: AuthTarget, code: string) => invoke<AuthState>('auth_exchange', { target, code }),
+  logout: (target: AuthTarget) => invoke<AuthState>('auth_logout', { target }),
+  handoff: (target: AuthTarget) => invoke<string>('auth_handoff', { target }),
+  get: <T>(target: AuthTarget, path: string) => invoke<ApiReply<T>>('api_get', { target, path }),
+};
