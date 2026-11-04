@@ -8,6 +8,7 @@ the desktop shell, in the web shell at `/desk/`, or on its own.
 import { open, token, notify, isHosted } from '@lab/bridge';
 
 await open('laicpmsdb://acquisition/2f1c…');  // false when not hosted
+await open('upbr://session/2f1c…');            // shell adds server + handoff code, launches Studio
 const bearer = await token();                 // null when not hosted or signed out
 await notify({ type: 'grainatlas.spot.selected', project, spot });
 if (isHosted()) hideOwnSignInButton();
@@ -77,9 +78,17 @@ The shell side of the `postMessage` transport is `createFrameHost` from
 ### laicpmsdb
 
 - Keep the hash routes the resolver targets: `#/acquisitions/<id>`,
-  `#/sessions/<id>`, `#/samples/<id>`.
+  `#/sessions/<id>`, `#/samples/<id>`, `#/mounts/<id>`, `#/search?label=`,
+  and `#/ingest?path=<folder>` (the ingest dialog with the folder prefilled;
+  the shell resolves `laicpmsdb://mount/<id>` and `laicpmsdb://ingest?path=`
+  to them).
 - Turn spot references into `grainatlas://project/<id>/spot/<id>` links and
-  reduction actions into `upbr://session/<id>` links.
+  reduction actions into `upbr://session/<id>` (and `upbr://run/<id>`) links.
+  Hosted, `open()` them without a `code`: the shell mints the one-time
+  handoff code with its own sign-in, adds `server` and launches UPbRPy
+  Studio. Standalone in a browser, build the full
+  `upbr://session/<id>?server=<base>&code=<code>` from `POST /v1/auth/handoff`
+  and let the OS open Studio.
 - When hosted, `token()` returns the shell's bearer token once the user has
   signed in to the shell, and `null` otherwise; keep the own sign-in screen for
   the `null` case and hide it (and the own Sign out) while the token comes

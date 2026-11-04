@@ -1,7 +1,7 @@
 <script lang="ts">
   import { normaliseServerUrl } from '../lib/links';
   import { localService } from '../lib/localService.svelte';
-  import { isDesktop, localServiceApi, studioStatus, type LocalLogs } from '../lib/platform';
+  import { isDesktop, localServiceApi, studioStatus, type LocalLogs, type StudioStatus } from '../lib/platform';
   import { DEFAULT_DATA_ROOT, settings, type Mode, type ThemePref } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
 
@@ -13,6 +13,8 @@
   let devPath = $state('');
   let pgBin = $state('');
   let studio = $state('');
+  let checkout = $state('');
+  let studioNow = $state<StudioStatus | null>(null);
   let serverError = $state('');
   let saved = $state('');
   let studioSaved = $state('');
@@ -31,10 +33,14 @@
     devPath = settings.devServicePath;
     pgBin = settings.pgBin;
     studio = settings.studioPath;
+    checkout = settings.studioCheckout;
     serverError = '';
     saved = '';
     studioSaved = '';
-    if (isDesktop) void studioStatus('').then((s) => (detected = s.path));
+    if (isDesktop) {
+      void studioStatus({ path: '', checkout: '' }).then((s) => (detected = s.kind === 'installed' ? s.path : null));
+      void studioStatus(shell.studioConfig).then((s) => (studioNow = s));
+    }
   });
 
   const localChanged = $derived(
@@ -80,8 +86,9 @@
 
   async function saveStudio(e: SubmitEvent) {
     e.preventDefault();
-    await settings.update({ studioPath: studio.trim() });
-    studioSaved = 'Saved.';
+    await settings.update({ studioPath: studio.trim(), studioCheckout: checkout.trim() });
+    studioNow = await studioStatus(shell.studioConfig);
+    studioSaved = studioNow.found ? 'Saved.' : 'Saved, but Studio is not found there.';
   }
 
   async function showLogs() {
@@ -203,6 +210,21 @@
           {:else}Not detected in the usual install locations; enter the <code>.app</code> (macOS) or <code>.exe</code> (Windows) path.{/if}
         </span>
       </label>
+      <label class="field">
+        UPbRPy checkout (development)
+        <input type="text" bind:value={checkout} placeholder="/path/to/UPbRPy" spellcheck="false" disabled={!isDesktop} />
+        <span class="faint">Used when Studio is not installed: runs <code>python -m GUI --open &lt;link&gt;</code> there, with its <code>.venv</code> Python if it has one.</span>
+      </label>
+      {#if isDesktop && studioNow}
+        <dl class="grid-kv">
+          <dt>Status</dt>
+          <dd>
+            <span class="dot" style="background: {studioNow.found ? 'var(--ok)' : 'var(--warning)'}"></span>
+            {studioNow.found ? (studioNow.kind === 'checkout' ? 'development checkout' : 'installed') : `not found${studioNow.error ? `: ${studioNow.error}` : ''}`}
+          </dd>
+          {#if studioNow.command}<dt>Launch</dt><dd class="mono small">{studioNow.command}</dd>{/if}
+        </dl>
+      {/if}
       <div class="row">
         <button class="btn primary" type="submit" disabled={!isDesktop}>Save</button>
         <span class="small ok">{studioSaved}</span>

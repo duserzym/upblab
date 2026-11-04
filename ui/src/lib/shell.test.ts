@@ -5,9 +5,11 @@ vi.mock('./platform', () => ({
   logWarn: vi.fn(async () => {}),
   logInfo: vi.fn(async () => {}),
   openExternal: vi.fn(async () => {}),
-  launchStudio: vi.fn(async () => {}),
+  launchStudio: vi.fn(async () => 'open -n -b org.upbrpy.studio --args --open <url>'),
+  studioStatus: vi.fn(async () => ({ found: true, kind: 'installed', path: '/Applications/UPbRPy Studio.app' })),
   desktopAuth: {
     exchange: vi.fn(async () => ({ signedIn: true, account: { username: 'analyst' }, offline: false })),
+    handoff: vi.fn(async () => 'ONE-TIME'),
   },
   LOCAL_STATUS_EVENT: 'local-service://status',
   localServiceApi: {},
@@ -21,7 +23,7 @@ const { shell } = await import('./shell.svelte');
 const { settings } = await import('./settings.svelte');
 const { localService } = await import('./localService.svelte');
 const { identity } = await import('./identity.svelte');
-const { redact } = await import('./shell.svelte');
+const { redact, withHandoff } = await import('./shell.svelte');
 
 const A = '2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91';
 
@@ -69,13 +71,63 @@ describe('shell.handleLink', () => {
     expect(shell.view).toBe('home');
   });
 
-  it('opens Reduce for upbr links and launches Studio when configured', async () => {
+  it('opens Reduce for upbr links and launches Studio with the link as is when signed out', async () => {
+    identity.state = { signedIn: false, account: null, offline: false };
     await shell.handleLink(`upbr://session/${A}`, 'laicpmsdb');
     expect(shell.view).toBe('reduce');
+    expect(platform.desktopAuth.handoff).not.toHaveBeenCalled();
+    expect(platform.launchStudio).toHaveBeenCalledWith({ path: '', checkout: '' }, `upbr://session/${A}?server=http%3A%2F%2Flocalhost%3A8000`);
+    expect(shell.studio).toMatchObject({ state: 'launched', object: 'session', id: A, minted: false });
+  });
+
+  it('mints a handoff code for the shell\'s server when signed in', async () => {
+    identity.target = { server: 'http://localhost:8000', key: 'http://localhost:8000' };
+    identity.state = { signedIn: true, account: { username: 'analyst' }, offline: false };
+    settings.studioCheckout = '/co/UPbRPy';
+    await shell.handleLink(`upbr://run/${A}`, 'os');
+    expect(platform.launchStudio).toHaveBeenCalledWith(
+      { path: '', checkout: '/co/UPbRPy' },
+      `upbr://run/${A}?server=http%3A%2F%2Flocalhost%3A8000&code=ONE-TIME`,
+    );
+    expect(shell.studio).toMatchObject({ state: 'launched', minted: true, shown: expect.stringContaining('code=…') });
+    expect(shell.links[0].url).not.toContain('ONE-TIME');
+    settings.studioCheckout = '';
+  });
+
+  it('shows install instructions and mints nothing when Studio is missing', async () => {
+    identity.state = { signedIn: true, account: { username: 'analyst' }, offline: false };
+    vi.mocked(platform.studioStatus).mockResolvedValueOnce({ found: false, path: null, error: 'UPbRPy Studio is not installed' });
+    expect(await shell.handleLink(`upbr://session/${A}`, 'laicpmsdb')).toBe(true);
+    expect(shell.studio).toMatchObject({ state: 'missing' });
+    expect(platform.desktopAuth.handoff).not.toHaveBeenCalled();
     expect(platform.launchStudio).not.toHaveBeenCalled();
-    settings.studioPath = '/Applications/UPbRPy Studio.app';
-    await shell.handleLink(`upbr://session/${A}`, 'laicpmsdb');
-    expect(platform.launchStudio).toHaveBeenCalledWith('/Applications/UPbRPy Studio.app', `upbr://session/${A}`);
+  });
+});
+
+describe('withHandoff', () => {
+  const mint = vi.fn(async () => 'C0DE');
+  beforeEach(() => mint.mockClear());
+
+  it('keeps a link that already has a code', async () => {
+    expect(await withHandoff(`upbr://session/${A}?server=http://h&code=X`, 'http://h', mint)).toEqual({ url: `upbr://session/${A}?server=http://h&code=X`, minted: false });
+    expect(mint).not.toHaveBeenCalled();
+  });
+
+  it('never mints a code for another server', async () => {
+    expect((await withHandoff(`upbr://session/${A}?server=https://other.example`, 'http://h', mint)).minted).toBe(false);
+    expect(mint).not.toHaveBeenCalled();
+  });
+
+  it('adds server and code; a trailing slash is the same server', async () => {
+    expect((await withHandoff(`upbr://session/${A}?server=http://h/`, 'http://h', mint)).url).toBe(`upbr://session/${A}?server=http%3A%2F%2Fh%2F&code=C0DE`);
+  });
+
+  it('launches without a code when minting fails', async () => {
+    const r = await withHandoff(`upbr://session/${A}`, 'http://h', async () => {
+      throw new Error('handoff refused: Not Found');
+    });
+    expect(r).toMatchObject({ minted: false, error: 'handoff refused: Not Found' });
+    expect(r.url).toBe(`upbr://session/${A}?server=http%3A%2F%2Fh`);
   });
 });
 

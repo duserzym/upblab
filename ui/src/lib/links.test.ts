@@ -38,9 +38,33 @@ describe('resolve: plan section 4.4 table', () => {
     expect(resolve(`upbr://session/${A}`)).toEqual({
       kind: 'studio',
       tab: 'reduce',
-      session: A,
+      object: 'session',
+      id: A,
       url: `upbr://session/${A}`,
     });
+  });
+
+  it('upbr run -> launch Studio, query kept', () => {
+    expect(resolve(`upbr://run/${A}?server=http://h:8000`)).toMatchObject({ kind: 'studio', object: 'run', id: A, url: `upbr://run/${A}?server=http://h:8000` });
+  });
+
+  it('laicpmsdb mount -> Sessions tab', () => {
+    expect(resolve(`laicpmsdb://mount/${A}`)).toMatchObject({ tab: 'sessions', route: `/app/mounts/${A}` });
+    expect(moduleUrl('sessions', `/app/mounts/${A}`, { server: 'http://h', atlas: '' })).toBe(`http://h/app/#/mounts/${A}`);
+  });
+
+  it('laicpmsdb ingest -> Sessions ingest dialog with the folder, re-encoded', () => {
+    const r = resolve('laicpmsdb://ingest?path=%2FVolumes%2Flab%2Fraw%2FApatite%2020Mar25&evil=1');
+    expect(r).toMatchObject({ tab: 'sessions', route: '/app/ingest?path=%2FVolumes%2Flab%2Fraw%2FApatite%2020Mar25' });
+    expect(moduleUrl('sessions', (r as { route: string }).route, { server: 'http://h', atlas: '' })).toBe(
+      'http://h/app/#/ingest?path=%2FVolumes%2Flab%2Fraw%2FApatite%2020Mar25',
+    );
+    expect(resolve('laicpmsdb://ingest?path=L:%5Craw%5Cx')).toMatchObject({ route: '/app/ingest?path=L%3A%5Craw%5Cx' });
+    expect(resolve('laicpmsdb://ingest')).toMatchObject({ kind: 'refused', reason: /without a valid path/ });
+  });
+
+  it('laicpmsdb search -> Sessions search by label', () => {
+    expect(resolve('laicpmsdb://search?label=KD27_41')).toMatchObject({ tab: 'sessions', route: '/app/search?label=KD27_41' });
   });
 
   it('laicpmsdb auth callback -> sign-in code, from the query or the hash laicpmsdb appends', () => {
@@ -80,7 +104,7 @@ describe('resolve: refusals', () => {
     ['laicpmsdb://acquisition', /unknown laicpmsdb link/],
     [`laicpmsdb://acquisition/${A}/extra`, /unknown laicpmsdb link/],
     [`grainatlas://project/${A}/grain/${B}`, /unknown grainatlas link/],
-    [`upbr://run/${A}`, /unknown upbr link/],
+    [`upbr://project/${A}`, /unknown upbr link/],
     ['laicpmsdb://acquisition/..%2F..%2Fadmin', /invalid id/],
     ['laicpmsdb://acquisition/a%3Fb', /invalid id/],
     ['laicpmsdb://acquisition/%E0%A4%A', /malformed escape|invalid id/],

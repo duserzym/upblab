@@ -2,7 +2,7 @@
 // builds that are installed, and the routing of every incoming link.
 
 import { moduleHome, moduleUrl, resolve, type ModuleBases, type ModuleTab, type Resolution, type TabId } from './links';
-import { isDesktop, launchStudio, logInfo, logWarn, openExternal, type AuthTarget } from './platform';
+import { isDesktop, launchStudio, logInfo, logWarn, openExternal, studioStatus, type AuthTarget, type StudioConfig } from './platform';
 import { identity } from './identity.svelte';
 import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
@@ -36,6 +36,55 @@ export interface LinkRecord {
   refused: boolean;
 }
 
+/** The last Studio hand-off, shown in the Reduce tab. */
+export interface StudioRequest {
+  seq: number;
+  object: 'session' | 'run';
+  id: string;
+  /** The link as received, code redacted. */
+  shown: string;
+  /** Web delivery only: the link with its fresh code, for the user to click. */
+  href?: string;
+  state: 'launching' | 'launched' | 'missing' | 'failed' | 'web';
+  /** The launch command line (code redacted). */
+  command?: string;
+  error?: string;
+  /** Whether a one-time code was minted for it. */
+  minted: boolean;
+}
+
+/** Strip a trailing slash so http://h:8000/ and http://h:8000 compare equal. */
+function sameServer(a: string, b: string): boolean {
+  const n = (s: string) => s.trim().replace(/\/+$/, '').toLowerCase();
+  return n(a) === n(b);
+}
+
+/**
+ * docs/WORKFLOW.md section 4: a upbr:// link without a code gets one minted
+ * with the shell's sign-in (POST /v1/auth/handoff), and the shell's server.
+ * Links for another server, or with a code already, pass unchanged.
+ */
+export async function withHandoff(
+  link: string,
+  server: string | null,
+  mint: () => Promise<string | null>,
+): Promise<{ url: string; minted: boolean; error?: string }> {
+  const u = new URL(link);
+  if (u.searchParams.get('code')) return { url: link, minted: false };
+  const linkServer = u.searchParams.get('server');
+  if (!server || (linkServer && !sameServer(linkServer, server))) return { url: link, minted: false };
+  if (!linkServer) u.searchParams.set('server', server);
+  let code: string | null = null;
+  let error: string | undefined;
+  try {
+    code = await mint();
+  } catch (err) {
+    error = err instanceof Error ? err.message : String(err);
+  }
+  if (code) u.searchParams.set('code', code);
+  return { url: u.href, minted: !!code, error };
+}
+
 /** A navigation request for a module tab; `seq` changes on every request. */
 export interface ModuleTarget {
   url: string;
@@ -47,7 +96,7 @@ class Shell {
   modules = $state<InstalledModule[]>([]);
   links = $state<LinkRecord[]>([]);
   targets = $state<Record<ModuleTab, ModuleTarget | null>>({ images: null, sessions: null });
-  studioRequest = $state<{ url: string; seq: number } | null>(null);
+  studio = $state<StudioRequest | null>(null);
   /** Overlays in the shell (dialogs) must hide native module webviews, which always paint on top. */
   overlay = $state(false);
   private seq = 0;
@@ -77,6 +126,10 @@ class Shell {
     return settings.serverUrl ? { server: settings.serverUrl, key: settings.serverUrl } : null;
   }
 
+  get studioConfig(): StudioConfig {
+    return { path: settings.studioPath, checkout: settings.studioCheckout };
+  }
+
   homeUrl(tab: ModuleTab): string {
     return moduleHome(tab, this.bases);
   }
@@ -99,6 +152,49 @@ class Shell {
 
   private record(url: string, from: string, outcome: string, refused = false) {
     this.links = [{ at: new Date(), url: redact(url), from, outcome, refused }, ...this.links].slice(0, 50);
+  }
+
+  /**
+   * upbr://session/<id> and upbr://run/<id>: find Studio, mint a handoff code
+   * when the link has none, and launch Studio with the link
+   * (docs/WORKFLOW.md section 4). Without Studio the Reduce tab shows how to
+   * install it, and the link.
+   */
+  async reduce(object: 'session' | 'run', id: string, link: string, from: string): Promise<boolean> {
+    this.seq += 1;
+    const seq = this.seq;
+    const base = { seq, object, id, shown: redact(link), minted: false };
+    this.studio = { ...base, state: 'launching' };
+    this.show('reduce');
+    const what = `${object} ${id}`;
+    if (!isDesktop) {
+      // The browser hands upbr:// to the OS, which opens Studio (its own installer registers the scheme).
+      const h = await withHandoff(link, this.identityTarget?.server ?? null, () => identity.handoff());
+      this.studio = { ...base, state: 'web', href: h.url, minted: h.minted, error: h.error };
+      this.record(link, from, `open it in UPbRPy Studio from the Reduce tab`);
+      return true;
+    }
+    const status = await studioStatus(this.studioConfig).catch((err) => ({ found: false, path: null, error: String(err) }));
+    if (!status.found) {
+      this.studio = { ...base, state: 'missing', error: status.error };
+      this.record(link, from, 'UPbRPy Studio not found; see the Reduce tab', true);
+      await logWarn(`[studio] not found (${status.error ?? ''}); ${redact(link)} not launched`);
+      return true;
+    }
+    const h = await withHandoff(link, this.identityTarget?.server ?? null, () => identity.handoff());
+    if (h.error) await logWarn(`[studio] no handoff code for ${what}: ${h.error}`);
+    try {
+      const command = await launchStudio(this.studioConfig, h.url);
+      if (this.studio?.seq === seq) this.studio = { ...base, shown: redact(h.url), state: 'launched', command, minted: h.minted, error: h.error };
+      this.record(link, from, `UPbRPy Studio launched for ${what}${h.minted ? ' with a handoff code' : ''}`);
+      await logInfo(`[studio] ${redact(h.url)} from ${from}: ${command}`);
+      return true;
+    } catch (err) {
+      if (this.studio?.seq === seq) this.studio = { ...base, state: 'failed', error: String(err), minted: h.minted };
+      this.record(link, from, `Studio launch failed: ${err}`, true);
+      await logWarn(`[studio] could not launch for ${redact(link)}: ${err}`);
+      return false;
+    }
   }
 
   /** Route a URL from the OS, a module, or the user. Returns false when refused. */
@@ -127,24 +223,8 @@ class Shell {
         await logInfo(`[links] ${url} -> ${r.tab} ${r.route}`);
         return true;
       }
-      case 'studio': {
-        this.seq += 1;
-        this.studioRequest = { url: r.url, seq: this.seq };
-        this.show('reduce');
-        if (settings.studioPath && isDesktop) {
-          try {
-            await launchStudio(settings.studioPath, r.url);
-            this.record(url, from, `UPbRPy Studio launched for session ${r.session}`);
-          } catch (err) {
-            this.record(url, from, `Studio launch failed: ${err}`, true);
-            await logWarn(`[links] could not launch Studio for ${url}: ${err}`);
-            return false;
-          }
-        } else {
-          this.record(url, from, 'Studio not configured; see the Reduce tab');
-        }
-        return true;
-      }
+      case 'studio':
+        return this.reduce(r.object, r.id, r.url, from);
     }
   }
 }

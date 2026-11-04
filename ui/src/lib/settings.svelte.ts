@@ -1,5 +1,5 @@
 // Shell settings: how to reach laicpmsdb (ADR-0003: "This computer" or a lab
-// server URL), UPbRPy Studio path, theme.
+// server URL), UPbRPy Studio path (or a development checkout), theme.
 // Desktop: Tauri store plugin (settings.json in the app config directory).
 // Web: localStorage. Dark is the default theme.
 
@@ -19,6 +19,8 @@ export interface SettingsData {
   /** This computer: a PostgreSQL 17 `bin` folder instead of the bundled one (development). */
   pgBin: string;
   studioPath: string;
+  /** Development: a UPbRPy checkout to run as `python -m GUI` when Studio is not installed. */
+  studioCheckout: string;
   theme: ThemePref;
   lastTab: string;
 }
@@ -32,6 +34,7 @@ export const DEFAULTS: SettingsData = {
   devServicePath: '',
   pgBin: '',
   studioPath: '',
+  studioCheckout: '',
   theme: 'dark',
   lastTab: 'home',
 };
@@ -95,6 +98,7 @@ class Settings {
   devServicePath = $state(DEFAULTS.devServicePath);
   pgBin = $state(DEFAULTS.pgBin);
   studioPath = $state(DEFAULTS.studioPath);
+  studioCheckout = $state(DEFAULTS.studioCheckout);
   theme = $state<ThemePref>(DEFAULTS.theme);
   lastTab = $state(DEFAULTS.lastTab);
   loaded = $state(false);
@@ -109,6 +113,7 @@ class Settings {
       this.devServicePath = data.devServicePath;
       this.pgBin = data.pgBin;
       this.studioPath = data.studioPath;
+      this.studioCheckout = data.studioCheckout;
       this.theme = (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'dark';
       this.lastTab = data.lastTab;
     } catch (err) {
@@ -132,6 +137,7 @@ class Settings {
       devServicePath: this.devServicePath,
       pgBin: this.pgBin,
       studioPath: this.studioPath,
+      studioCheckout: this.studioCheckout,
       theme: this.theme,
       lastTab: this.lastTab,
     };

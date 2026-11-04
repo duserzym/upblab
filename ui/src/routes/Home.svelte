@@ -1,12 +1,12 @@
 <script lang="ts">
   import { localService } from '../lib/localService.svelte';
-  import { isDesktop, probe, studioStatus } from '../lib/platform';
+  import { isDesktop, probe, studioStatus, type StudioStatus } from '../lib/platform';
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
 
   let { active }: { active: boolean } = $props();
   let server = $state<boolean | null>(null);
-  let studio = $state<boolean | null>(null);
+  let studio = $state<StudioStatus | null>(null);
   let linkInput = $state('');
 
   // "This computer": state comes from the host's status events.
@@ -24,7 +24,7 @@
     if (!active || !settings.loaded) return;
     const url = shell.homeUrl('sessions');
     if (!shell.local) void probe(url).then((r) => (server = r.reachable));
-    void studioStatus(settings.studioPath).then((s) => (studio = s.found));
+    void studioStatus(shell.studioConfig).then((s) => (studio = s));
   });
 
   function openLink(e: SubmitEvent) {
@@ -70,8 +70,9 @@
         <span class="small">{shell.atlas ? `build ${shell.atlas.version} (${shell.atlas.source})` : 'no build pinned yet'}</span>
       </button>
       <button class="glass panel card-btn" onclick={() => shell.show('reduce')}>
-        <span class="row"><span class="dot" style="background: {color(isDesktop ? studio : null)}"></span><h3>Reduce · UPbRPy Studio</h3></span>
-        <span class="small">{!isDesktop ? 'desktop app only' : studio === null ? 'checking…' : studio ? 'installed' : 'not found'}</span>
+        <span class="row"><span class="dot" style="background: {color(isDesktop && studio ? studio.found : null)}"></span><h3>Reduce · UPbRPy Studio</h3></span>
+        <span class="small">{!isDesktop ? 'desktop app only' : studio === null ? 'checking…' : studio.found ? (studio.kind === 'checkout' ? 'development checkout' : 'installed') : 'not found'}</span>
+        {#if studio?.path}<span class="muted small mono">{studio.path}</span>{/if}
       </button>
     </div>
 

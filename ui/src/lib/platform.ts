@@ -62,19 +62,36 @@ export async function openExternal(url: string): Promise<void> {
   }
 }
 
+/** Settings that locate UPbRPy Studio (src-tauri/src/studio.rs `StudioConfig`). */
+export interface StudioConfig {
+  /** Installed app: `.app` (macOS) or `.exe` (Windows); empty for auto-detection. */
+  path: string;
+  /** Development fallback: a UPbRPy checkout run as `python -m GUI`. */
+  checkout: string;
+}
+
+/** Mirrors `StudioStatus` in src-tauri/src/studio.rs. */
 export interface StudioStatus {
-  path: string | null;
   found: boolean;
+  kind?: 'installed' | 'checkout';
+  path: string | null;
+  /** How it is launched, with `<url>` for the link. */
+  command?: string;
+  error?: string;
 }
 
-export async function studioStatus(configured: string): Promise<StudioStatus> {
-  if (!isDesktop) return { path: null, found: false };
-  return invoke<StudioStatus>('studio_status', { configured: configured || null });
+const studioArgs = (c: StudioConfig) => ({ path: c.path || null, checkout: c.checkout || null });
+
+export async function studioStatus(config: StudioConfig): Promise<StudioStatus> {
+  if (!isDesktop) return { found: false, path: null, error: 'desktop app only' };
+  return invoke<StudioStatus>('studio_status', { config: studioArgs(config) });
 }
 
-export async function launchStudio(path: string, url: string | null): Promise<void> {
+/** Launch Studio, with a upbr:// link; resolves with the command line (codes redacted). */
+export async function launchStudio(config: StudioConfig, url: string | null): Promise<string> {
   if (!isDesktop) throw new Error('UPbRPy Studio can only be launched from the desktop app.');
-  await invoke('studio_launch', { path, url });
+  const r = await invoke<{ command: string }>('studio_launch', { config: studioArgs(config), url });
+  return r.command;
 }
 
 export async function logWarn(message: string): Promise<void> {

@@ -6,9 +6,13 @@
 //   laicpmsdb://acquisition/<id>          -> Sessions, /app/acquisitions/<id>
 //   laicpmsdb://session/<id>              -> Sessions, /app/sessions/<id>
 //   laicpmsdb://sample/<id>               -> Sessions, /app/samples/<id>
+//   laicpmsdb://mount/<id>                -> Sessions, /app/mounts/<id> (the mount page with its atlas)
+//   laicpmsdb://ingest?path=<folder>      -> Sessions, /app/ingest?path=<folder> (desktop: the ingest dialog)
+//   laicpmsdb://search?label=<label>      -> Sessions, /app/search?label=<label>
 //   grainatlas://project/<id>             -> Images,   /atlas/?project=<id>
 //   grainatlas://project/<id>/spot/<id>   -> Images,   /atlas/?project=<id>&spot=<id>
-//   upbr://session/<id>                   -> launch UPbRPy Studio with that session
+//   upbr://session/<id>?server=&code=     -> launch UPbRPy Studio in database mode (docs/WORKFLOW.md 4)
+//   upbr://run/<id>?server=               -> launch Studio on the project of that reduction run
 //   laicpmsdb://auth/callback?code=…      -> finish the shell's ORCID or Google sign-in
 //   https://… and http://…                -> system browser
 //
@@ -22,7 +26,7 @@ export type Scheme = (typeof SCHEMES)[number];
 
 export type Resolution =
   | { kind: 'tab'; tab: ModuleTab; route: string; url: string }
-  | { kind: 'studio'; tab: 'reduce'; session: string; url: string }
+  | { kind: 'studio'; tab: 'reduce'; object: 'session' | 'run'; id: string; url: string }
   | { kind: 'auth'; code: string; url: string }
   | { kind: 'external'; url: string }
   | { kind: 'refused'; url: string; reason: string };
@@ -78,9 +82,22 @@ export function resolve(input: string): Resolution {
         if (!code || !/^[A-Za-z0-9._~-]{1,512}$/.test(code)) return refuse(url, 'sign-in callback without a valid code');
         return { kind: 'auth', code, url };
       }
-      const routes: Record<string, string> = { acquisition: 'acquisitions', session: 'sessions', sample: 'samples' };
+      const routes: Record<string, string> = {
+        acquisition: 'acquisitions',
+        session: 'sessions',
+        sample: 'samples',
+        mount: 'mounts',
+      };
       if (parts.length === 2 && kind in routes) {
         return { kind: 'tab', tab: 'sessions', route: `/app/${routes[kind]}/${id}`, url };
+      }
+      // Query links: only the one known parameter is passed on, re-encoded.
+      const queries: Record<string, string> = { ingest: 'path', search: 'label' };
+      if (parts.length === 1 && kind in queries) {
+        const name = queries[kind];
+        const value = u.searchParams.get(name);
+        if (!value || value.length > 2048 || /[\u0000-\u001f]/.test(value)) return refuse(url, `${kind} link without a valid ${name}`);
+        return { kind: 'tab', tab: 'sessions', route: `/app/${kind}?${name}=${encodeURIComponent(value)}`, url };
       }
       return refuse(url, `unknown laicpmsdb link "${parts.join('/')}"`);
     }
@@ -94,8 +111,8 @@ export function resolve(input: string): Resolution {
       return refuse(url, `unknown grainatlas link "${parts.join('/')}"`);
     }
     case 'upbr': {
-      if (kind === 'session' && parts.length === 2) {
-        return { kind: 'studio', tab: 'reduce', session: id, url };
+      if ((kind === 'session' || kind === 'run') && parts.length === 2) {
+        return { kind: 'studio', tab: 'reduce', object: kind, id, url };
       }
       return refuse(url, `unknown upbr link "${parts.join('/')}"`);
     }

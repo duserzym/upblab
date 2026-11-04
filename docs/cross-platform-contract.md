@@ -25,7 +25,8 @@ and here together.
 | --- | --- |
 | Webview | the shell page uses `-webkit-backdrop-filter` with an `@supports` solid fallback (tokens from laicpmsdb); module tabs are native child webviews on both OS (ADR-0002) |
 | Deep links | `plugins.deep-link.desktop.schemes` in `src-tauri/tauri.conf.json`; single-instance forwarding on Windows; see [deep-links.md](deep-links.md) |
-| Processes | `src-tauri/src/studio.rs`: Settings path, else `/Applications` and `~/Applications` on macOS, `%LOCALAPPDATA%\Programs` and `%ProgramFiles%` on Windows |
+| Processes | `src-tauri/src/studio.rs`: Settings path, else on macOS `/Applications`, `~/Applications` and LaunchServices (`org.upbrpy.studio`, launched with `open -n -b … --args --open <url>`), on Windows the registry (App Paths, the Uninstall entry, Studio's `upbr` handler) then `%LOCALAPPDATA%\Programs` and `%ProgramFiles%` (`"<exe>" --open <url>`), else a UPbRPy checkout from Settings (`python -m GUI --open <url>`, `.venv` Python, `pythonw.exe` on Windows); Studio runs detached in its own process group |
+| Identity | `src-tauri/src/auth.rs`: tokens in the macOS Keychain or the Windows Credential Manager (`keyring` crate), service `edu.umn.upbstudio`, one entry per server |
 | Local service (ADR-0003) | `src-tauri/src/local_service/`: PostgreSQL and laicpmsdb as children tied to the shell (process group plus watchdog on macOS, job object and no console window on Windows), loopback only, forward-slash paths in the environment; the bundle layout per OS is in [service-bundle-contract.md](service-bundle-contract.md) |
 | Builds | `.github/workflows/build.yml`; unsigned-install steps in [installing.md](installing.md) |
 | Tests | unit tests run on both OS in CI; the Playwright smoke test is roadmap phase 6 |
