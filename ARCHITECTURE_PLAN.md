@@ -13,7 +13,7 @@ in one module into the right view in another:
 | Tab | Module | Built as | How the shell hosts it |
 | --- | --- | --- | --- |
 | Images | grainatlas | static web build (Svelte + wasm) and Tauri app | bundled static assets in a webview |
-| Sessions | laicpmsdb | Django service with a Svelte web build at `/app/` | webview pointed at the configured laicpmsdb server |
+| Sessions | laicpmsdb | Django service with a Svelte web build at `/app/` | webview pointed at the configured laicpmsdb server, or at the instance the shell starts on this computer (ADR-0003) |
 | Reduce | UPbRPy Studio | native PySide6 + pyqtgraph desktop app | launched as an external application with a hand-off file and `upbr://` link; not embedded |
 | Home | the shell itself | Svelte | timeline across modules, search, recent items, settings |
 
@@ -28,7 +28,8 @@ graph between module objects.
    macOS arm64 and Windows x86-64 are both first-class from the first release;
    CI builds and smoke-tests both on every push (GitHub Actions matrix).
 2. **Modules are hosted, not forked.** The shell bundles a pinned release of
-   the grainatlas web build and points at a laicpmsdb server URL. It never
+   the grainatlas web build and either points at a laicpmsdb server URL or
+   starts the pinned laicpmsdb service bundle locally (decision 9). It never
    copies module source. Module versions are pinned in `modules.lock.json`
    (name, version, release URL, SHA-256) and updated by a script.
 3. **One Svelte shell page, two deliveries.** The same shell UI runs inside
@@ -57,6 +58,13 @@ graph between module objects.
    revisited only if Studio grows a web front end.
 8. **Open source, MIT**, code only in git, no telemetry, offline-capable for
    the Images tab and read-only cached views of the Sessions tab.
+9. **A release is a double-click application.** In "This computer" mode the
+   shell bundles PostgreSQL 17 (`postgresql_embedded`) and a relocatable
+   Python runtime carrying the laicpmsdb service, starts both on launch,
+   waits for the service's health check, and stops both on quit. "Lab
+   server" mode is the URL as before. The same service bundle runs headless
+   on the lab server. ADR-0003 has the details, the first-run wizard and the
+   rejected alternatives (Docker, a separate server app, PyInstaller, SQLite).
 
 ## 3. Cross-platform contract (applies to the shell and both modules)
 
@@ -85,6 +93,7 @@ same on Windows:
 | `bridge/` | TypeScript package published to the modules | the tiny API a module calls: `bridge.open(url)`, `bridge.token()`, `bridge.notify(event)`, with a no-op fallback when a module runs alone |
 | `modules.lock.json` and `scripts/` | JSON, Node | pinning and fetching module releases into `ui/public/modules/` |
 | `deploy/` | Django URL config snippet, nginx example | serving the web delivery at `/desk/` and `/atlas/` from laicpmsdb |
+| `src-tauri/src/local_service/` and `src-tauri/resources/` | Rust (`postgresql_embedded`), bundled PostgreSQL 17 and the laicpmsdb service bundle | "This computer" mode: data directory, ports, process supervision, health check, logs (ADR-0003) |
 
 ### 4.2 Repository layout
 
@@ -121,7 +130,20 @@ module --bridge.open(url)--> shell resolver
 Unknown schemes are refused and logged. The OS hands the same URLs to the
 shell when a user clicks one in an email or a notebook.
 
-### 4.5 Home tab
+### 4.5 Local service mode
+
+```text
+launch ──> initdb once ──> postgres 127.0.0.1:<free> ──> laicpmsdb serve 127.0.0.1:8000
+                                                         (migrate, then waitress)
+                                   health GET /v1/health ok ──> Sessions tab = http://127.0.0.1:8000
+quit ───> stop service ──> pg_ctl stop -m fast
+```
+
+Data directory under the app data folder, data root `~/laicpmsdb` by default,
+first staff account created by the first-run wizard, demo data optional.
+Details, sizes and failure handling: ADR-0003.
+
+### 4.6 Home tab
 
 A cross-module timeline: laicpmsdb's `timeline_event` view plus local
 grainatlas project activity, filtered by the signed-in account; a search box
@@ -135,13 +157,15 @@ over samples, sessions, spots and projects; recent items; module status
 | 0 | repository, plan, ADRs, CI matrix skeleton | this document committed; a Tauri "hello" window builds on macOS and Windows in CI |
 | 1 | shell UI and tabs | tab bar, Home placeholder, Settings (server URL, Studio path, theme); Sessions tab shows a configured laicpmsdb; Images tab shows a bundled grainatlas build fetched by `modules.lock.json` |
 | 2 | bridge and links | `@lab/bridge` published and adopted by grainatlas and laicpmsdb; scheme registration on both OS; a spot click in Images opens the acquisition in Sessions |
+| 2b | local service (double-click release) | laicpmsdb publishes the per-OS service bundle with `laicpmsdb serve`, `bootstrap` and `/v1/health`; the shell bundles PostgreSQL 17 and the service, first-run wizard, start and stop with the app, no orphan processes after a forced kill; a clean macOS and a clean Windows machine show demo data in the Sessions tab within 30 s of a double-click |
 | 3 | identity | single sign-in, token in keychain, token handed to module webviews; web delivery at `/desk/` using the laicpmsdb session |
 | 4 | Studio hand-off | launch UPbRPy Studio with a session export; receive the reduction bundle through laicpmsdb; status shown on Home |
 | 5 | Home | cross-module timeline, search, recents, module status |
 | 6 | release | signed or documented installers for macOS and Windows, auto-update from GitHub Releases, Playwright smoke test on both OS |
 
 Phases 1 and 2 need grainatlas phase 3 (its web build) and laicpmsdb's
-existing `/app/`; phase 4 needs laicpmsdb's UPbRPy export and import (its
+existing `/app/`; phase 2b needs the service entry points listed in
+ADR-0003 on the laicpmsdb side; phase 4 needs laicpmsdb's UPbRPy export and import (its
 phase 4). Phase 0 can start now.
 
 ## 6. Verification
@@ -161,3 +185,5 @@ phase 4). Phase 0 can start now.
 | WebView2 missing on a lab Windows machine | the installer bundles the evergreen bootstrapper |
 | Module release drift | the shell pins versions and shows a mismatch warning; modules keep the bridge backward compatible |
 | Studio not installed | the Reduce tab shows install instructions and still accepts exported bundles through laicpmsdb |
+| Bundled PostgreSQL refuses to start (locale, port, stale pid, antivirus on Windows) | `initdb` with explicit UTF-8 and C locale, free-port probing, `pg_ctl` pid handling, the log tail surfaced in the first-run screen; "Lab server" mode as the fallback |
+| Installer size with Python, pyarrow and PostgreSQL (150 to 200 MB) | accepted; the service bundle is pinned and downloaded once per version, and Studio's PySide6 stays an opt-in flavour |

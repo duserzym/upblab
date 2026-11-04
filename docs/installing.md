@@ -59,6 +59,10 @@ also register the three link schemes.
 
 ## After installing
 
+- First run (planned, roadmap phase 2b): choose **This computer** to let
+  UPb Studio run its own laicpmsdb and PostgreSQL on this machine, or **Lab
+  server** to use a URL. Until that phase ships, the Sessions tab needs a
+  running laicpmsdb (`make dev` in its checkout, or the lab server URL).
 - Settings (gear icon or Ctrl/⌘ ,): set the laicpmsdb server URL (default
   `http://localhost:8000`) and, if UPbRPy Studio is not in its usual place,
   its path.
