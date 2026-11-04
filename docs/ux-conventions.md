@@ -1,0 +1,28 @@
+# UX conventions in the shell
+
+The rules are written once, in grainatlas:
+[`docs/ux-conventions.md`](../../grainatlas/docs/ux-conventions.md) (the
+source; read it there). This page only says where UPb Studio's shell follows
+each one, and which do not apply to it. Module tabs follow the rules in their
+own code; the shell's part is to pass them what they need (theme, files,
+sign-in) and to give them the whole area under the tab bar.
+
+| Rule | In the shell |
+| --- | --- |
+| 1. Light by default, with dark and system | Settings → Appearance and layout, three-way switch; nothing stored means light (`ui/src/lib/settings.svelte.ts`). Kept in the viewer's own settings (`settings.json` on the desktop, `localStorage` on the web), never on a server. Module tabs get the effective theme as `?theme=light\|dark` on the URL they load (`withTheme` in `ui/src/lib/links.ts`); a change reaches a module the next time it loads. |
+| 2. One gesture module for image views | Does not apply: the shell shows no image. Images are grainatlas's, inside its tab. |
+| 3. One click for a good result, Auto, Reset | Does not apply: the shell has no processing controls. |
+| 4. Open anything, never ask what it is | A folder or files dropped anywhere on the window (tab bar, Home, either module tab), opened from the Finder or Explorer, or picked with Home's **Open folder…** / **Open files…** go to the tab that reads them, decided by content (`ui/src/lib/drop.ts`, rules at the top): packages, area folders, images and `.grainatlas` projects to Images; Qtegra export folders, zips and CSVs to Sessions (`laicpmsdb://ingest?path=` on the desktop). The files reach the module through `@lab/bridge` `open-files` (protocol v2, `bridge/README.md`); the host lists and reads them (`src-tauri/src/files.rs`), the module never sees a host path it was not given. A `.zag` file stands for its package folder. Nothing the modules cannot read is refused with a line saying what can be opened. File associations: `docs/installing.md`. |
+| 5. The scale is known, or asked once | Does not apply to the shell: the scale is grainatlas's question, asked after the files arrive through `open-files`. |
+| 6. Server features are additive and say where data comes from | One server setting (Settings → laicpmsdb: a lab server or "This computer"); the tab bar names the server in the sign-in button's tooltip and dialog; the sign-in is the shell's (`token()` for modules), kept in the OS keychain, never in a URL or file. Home says which part is missing (no server, unreachable, signed out) next to the list it affects. |
+| 7. Fit a 14-inch laptop | Checked at 1440 × 900 and 1280 × 800 CSS pixels, and Home and Settings at 1024 × 640, in Chromium and WebKit: first-run wizard, Home (also while files are dragged over it), Images, Sessions, Reduce, Settings, sign-in dialog; module tabs get the full width and all the height under the 48 px tab bar (`ui/tests/sizes.spec.ts`, `make e2e`, part of `make test`). Long URLs, paths and ids wrap; pages scroll inside the window, never sideways. The window opens at 1280 × 800 centred, cannot go below 1024 × 640, and reopens where it was left, fitted to the monitor it is on (`src-tauri/src/geometry.rs`, `window.json` in the app config folder). Settings → Appearance and layout → **Reset layout** returns it to 1280 × 800 centred. The shell has no splitters or panels of its own to remember. |
+
+## What the modules still adopt
+
+- **grainatlas**: register `onOpenFiles` when hosted and pass the set to its
+  Open screen code; in the desktop shell every drop on the window arrives
+  that way (`bridge/README.md`, grainatlas section).
+- **laicpmsdb**: the `#/ingest` route (with `?path=`; today the ingest dialog
+  lives on the timeline and laicpmsdb has no such route) and `onOpenFiles`
+  there, feeding the ingest dialog (`bridge/README.md`, laicpmsdb section).
+  It already reads `?theme=` (laicpmsdb 25c69fd).

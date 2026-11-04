@@ -8,7 +8,7 @@ sweep and reduced result.
 
 | Tab | Module | Hosted as |
 | --- | --- | --- |
-| Home | the shell | module status, your sessions with their reductions (Reduce opens Studio), mounts with their current atlas, link box and log (timeline and search later) |
+| Home | the shell | Open folder… / Open files… (anything dropped on the window goes to the right tab by itself), module status, your sessions with their reductions (Reduce opens Studio), mounts with their current atlas, link box and log (timeline and search later) |
 | Images | grainatlas | pinned static build bundled into the app (`modules.lock.json`) |
 | Sessions | laicpmsdb | `/app/` in a native webview, from a lab server or from the laicpmsdb the app runs on this computer |
 | Reduce | UPbRPy Studio | launched as its own application with a `upbr://` link and a one-time sign-in code |
@@ -24,7 +24,13 @@ and release builds offer only "Lab server". Phases 3 and 4 on the shell side
 token in the OS keychain and handed to the module tabs through `@lab/bridge`;
 `upbr://session/<id>` and `upbr://run/<id>` launch UPbRPy Studio with a
 handoff code minted on demand; Home lists sessions, runs and atlases
-([docs/installing.md](docs/installing.md#signing-in)). Plan and roadmap:
+([docs/installing.md](docs/installing.md#signing-in)). UX conventions
+(2026-11-04, [docs/ux-conventions.md](docs/ux-conventions.md)): light by
+default; open anything: a folder or files dropped on the window, opened from
+the Finder or Explorer, or picked on Home go to Images or Sessions by content
+and reach the module through `@lab/bridge` `open-files` (protocol v2); every
+screen fits 1280 × 800, checked in Chromium and WebKit; the window reopens
+where it was left, fitted to the screen. Plan and roadmap:
 [ARCHITECTURE_PLAN.md](ARCHITECTURE_PLAN.md).
 
 The lab workflow and the hand-offs between the apps are in [docs/WORKFLOW.md](docs/WORKFLOW.md).
@@ -43,6 +49,10 @@ make setup
 ```bash
 make test
 ```
+
+`make test` ends with `make e2e`: Playwright walks every shell screen at
+1440 × 900 and 1280 × 800 in Chromium and WebKit (`ui/tests/sizes.spec.ts`,
+with a stand-in for the Tauri host); `make setup` installs the two browsers.
 
 An opt-in check, not part of `make test`, runs against a running laicpmsdb with the demo
 data and the real keychain (signs in, reads, mints and redeems a handoff code,
@@ -120,10 +130,11 @@ no release yet, so the lock points at its local development build
 ## Layout
 
 ```text
-src-tauri/        Rust host: window, module webviews, deep links, probe, auth (sign-in, keychain,
-                  handoff), Studio detection and launch, local_service/ (PostgreSQL and
-                  laicpmsdb on this computer)
-ui/               shell page (Svelte 5): tab bar, Home, Settings, link resolver
+src-tauri/        Rust host: window (geometry), module webviews, deep links, dropped and opened
+                  files (files.rs), probe, auth (sign-in, keychain, handoff), Studio detection
+                  and launch, local_service/ (PostgreSQL and laicpmsdb on this computer)
+ui/               shell page (Svelte 5): tab bar, Home, Settings, link resolver, drop routing;
+                  tests/ the screen-size check
 bridge/           @lab/bridge, the API grainatlas and laicpmsdb call to talk to the shell
 scripts/          fetch-modules (pinning)
 modules.lock.json pinned module builds and the laicpmsdb service bundle
@@ -134,8 +145,9 @@ docs/             decisions (ADRs), cross-platform contract, deep links, install
 
 - [docs/cross-platform-contract.md](docs/cross-platform-contract.md): rules every module follows on macOS and Windows
 - [docs/service-bundle-contract.md](docs/service-bundle-contract.md): what the laicpmsdb service bundle provides and how the shell runs it
-- [docs/installing.md](docs/installing.md): installing, the two modes, data and log locations
+- [docs/installing.md](docs/installing.md): installing, opening files and folders with UPb Studio, the two modes, data and log locations
 - [docs/deep-links.md](docs/deep-links.md): the `laicpmsdb://`, `grainatlas://` and `upbr://` links
+- [docs/ux-conventions.md](docs/ux-conventions.md): where the shell follows the lab's UX rules (source: grainatlas `docs/ux-conventions.md`)
 - [bridge/README.md](bridge/README.md): `@lab/bridge` for module authors
 - [docs/decisions/](docs/decisions/): ADR-0001 hosting pinned builds, ADR-0002 tab hosting, ADR-0003 local service mode
 

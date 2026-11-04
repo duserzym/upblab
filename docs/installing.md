@@ -149,6 +149,7 @@ administrator*: PostgreSQL refuses to start under an administrator token.
 | --- | --- | --- |
 | Settings (`settings.json`: mode, server URL, data root, paths) | `~/Library/Application Support/edu.umn.upbstudio/` | `%APPDATA%\edu.umn.upbstudio\` |
 | Generated database passwords and secret key (`local-service.json`) | same folder as settings | same folder as settings |
+| Window size and position (`window.json`; Settings → Reset layout forgets it) | same folder as settings | same folder as settings |
 | PostgreSQL data directory (This computer) | `~/Library/Application Support/edu.umn.upbstudio/laicpmsdb/pg/` | `%LOCALAPPDATA%\edu.umn.upbstudio\laicpmsdb\pg\` |
 | Unpacked PostgreSQL binaries | `…/laicpmsdb/postgresql/<version>/` next to `pg/` | same, under `%LOCALAPPDATA%` |
 | laicpmsdb data root (raw files, attachments, exports) | `~/laicpmsdb` unless changed in the wizard or Settings | `%USERPROFILE%\laicpmsdb` unless changed |
