@@ -132,7 +132,7 @@
     background: color-mix(in srgb, var(--bg) 55%, transparent);
     padding: var(--space-4);
   }
-  .dialog { width: min(28rem, 100%); }
+  .dialog { width: min(28rem, 100%); max-height: 100%; overflow: auto; }
   .dialog h2 { margin: 0; }
   .dialog p { margin: 0; }
   .tight { gap: var(--space-2); }

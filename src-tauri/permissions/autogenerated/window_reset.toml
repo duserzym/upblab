@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-window-reset"
+description = "Enables the window_reset command without any pre-configured scope."
+commands.allow = ["window_reset"]
+
+[[permission]]
+identifier = "deny-window-reset"
+description = "Denies the window_reset command without any pre-configured scope."
+commands.deny = ["window_reset"]

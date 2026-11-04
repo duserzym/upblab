@@ -112,3 +112,9 @@ body { min-height: 0; overflow: hidden; }
   color: var(--text);
   font-size: 0.85rem;
 }
+
+/* ux-conventions rule 7: nothing scrolls sideways at 1280 x 800. Long ids,
+   URLs and paths in tables (links, module sources, sessions) wrap. */
+.view table.data { width: 100%; }
+.view table.data td, .view table.data th { overflow-wrap: anywhere; }
+.view table.data td.actions, .view table.data td.num { overflow-wrap: normal; }

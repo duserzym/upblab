@@ -25,6 +25,7 @@ fn main() {
             "files_scan",
             "files_offer",
             "files_take_opened",
+            "window_reset",
             "local_service_status",
             "local_service_start",
             "local_service_stop",

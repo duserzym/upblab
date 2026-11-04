@@ -1,7 +1,7 @@
 <script lang="ts">
   import { normaliseServerUrl } from '../lib/links';
   import { localService } from '../lib/localService.svelte';
-  import { isDesktop, localServiceApi, studioStatus, type LocalLogs, type StudioStatus } from '../lib/platform';
+  import { isDesktop, localServiceApi, resetWindowLayout, studioStatus, type LocalLogs, type StudioStatus } from '../lib/platform';
   import { DEFAULT_DATA_ROOT, settings, type Mode, type ThemePref } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
 
@@ -93,6 +93,9 @@
 
   async function showLogs() {
     logs = logs ? null : await localServiceApi.logs(200);
+  }
+  async function resetWindow() {
+    await resetWindowLayout().catch((err) => console.warn('[settings] reset layout', err));
   }
   async function refreshLogs() {
     logs = await localServiceApi.logs(200);
@@ -232,7 +235,7 @@
     </form>
 
     <div class="glass panel stack">
-      <h3>Theme</h3>
+      <h3>Appearance and layout</h3>
       <div class="row" role="radiogroup" aria-label="Theme">
         {#each themes as t (t.value)}
           <button
@@ -244,6 +247,12 @@
         {/each}
       </div>
       <p class="faint small">Light unless you choose otherwise; System follows the operating system. Module tabs get it as <code>?theme=</code> when they load, so a change reaches them the next time they open (restart UPb Studio).</p>
+      {#if isDesktop}
+        <div class="row">
+          <button class="btn" onclick={() => void resetWindow()}>Reset layout</button>
+          <span class="faint small">The window opens where you left it, fitted to the screen it is on. Reset puts it back to 1280 × 800, centred.</span>
+        </div>
+      {/if}
     </div>
 
     <div class="glass panel stack">

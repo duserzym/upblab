@@ -250,3 +250,10 @@ export async function pickPaths(folder: boolean): Promise<string[]> {
   if (!picked) return [];
   return Array.isArray(picked) ? picked : [picked];
 }
+
+// ------------------------------------------------ window (ux-conventions rule 7)
+
+/** Desktop: forget the remembered window place; 1280 x 800, centred (src-tauri/src/geometry.rs). */
+export function resetWindowLayout(): Promise<void> {
+  return invoke('window_reset');
+}

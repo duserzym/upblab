@@ -13,6 +13,7 @@
     "allow-files-scan",
     "allow-files-offer",
     "allow-files-take-opened",
+    "allow-window-reset",
     "allow-module-open",
     "allow-module-bounds",
     "allow-module-hide",

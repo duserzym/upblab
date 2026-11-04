@@ -254,7 +254,7 @@
 <style>
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
     gap: var(--space-4);
   }
   /* tokens.css spaces stacked panels with `.panel + .panel`; not in a grid. */
@@ -267,7 +267,10 @@
     gap: var(--space-2);
     text-align: left;
     cursor: pointer;
+    min-width: 0;
   }
+  /* Long server URLs, build sources and paths wrap instead of widening the card. */
+  .card-btn > :global(*) { max-width: 100%; overflow-wrap: anywhere; }
   .card-btn:hover { border-color: var(--accent); }
   .grow { flex: 1; min-width: 12rem; margin: 0; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }

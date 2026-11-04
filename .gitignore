@@ -13,3 +13,5 @@ Thumbs.db
 # laicpmsdb service bundle unpacked by scripts/fetch-modules.mjs (kept: its README)
 /src-tauri/resources/laicpmsdb-service/*
 !/src-tauri/resources/laicpmsdb-service/README.md
+/ui/test-results
+/ui/playwright-report
