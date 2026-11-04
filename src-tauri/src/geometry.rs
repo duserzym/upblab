@@ -87,27 +87,24 @@ fn file<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 fn apply<R: Runtime>(w: &Window<R>, g: Geometry) {
     let _ = w.set_size(LogicalSize::new(g.w, g.h));
     let _ = w.set_position(LogicalPosition::new(g.x, g.y));
-    if g.maximized {
-        let _ = w.maximize();
-    }
 }
 
-/// Before the window is shown: the saved place if it still fits a monitor,
-/// else the default size on the primary monitor, centred.
-pub fn restore<R: Runtime>(w: &Window<R>) {
-    let areas: Vec<Area> = w.available_monitors().unwrap_or_default().iter().map(area_of).collect();
-    let saved = file(w.app_handle())
+/// Where the main window opens, decided before it is built: the saved place
+/// if it still fits a connected monitor, else the default size on the
+/// primary monitor, centred. The window is built at this place rather than
+/// moved there afterwards: resizing it before the shell webview exists
+/// leaves that webview (auto-resized by ratio) at the wrong size.
+pub fn initial<R: Runtime>(app: &AppHandle<R>) -> Geometry {
+    let areas: Vec<Area> = app.available_monitors().unwrap_or_default().iter().map(area_of).collect();
+    let saved = file(app)
         .and_then(|p| std::fs::read(p).ok())
         .and_then(|b| serde_json::from_slice::<Geometry>(&b).ok());
     if let Some(g) = saved.and_then(|g| fit(g, &areas)) {
         log::info!("window restored at {:.0}x{:.0}+{:.0}+{:.0}", g.w, g.h, g.x, g.y);
-        apply(w, g);
-        return;
+        return g;
     }
-    let primary = w.primary_monitor().ok().flatten().map(|m| area_of(&m)).or_else(|| areas.first().copied());
-    if let Some(a) = primary {
-        apply(w, default_on(a));
-    }
+    let primary = app.primary_monitor().ok().flatten().map(|m| area_of(&m)).or_else(|| areas.first().copied());
+    primary.map(default_on).unwrap_or(Geometry { x: 100.0, y: 100.0, w: DEFAULT.0, h: DEFAULT.1, maximized: false })
 }
 
 /// Records the window's place (not while minimised; a maximised window keeps its normal size).

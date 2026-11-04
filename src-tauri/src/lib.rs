@@ -114,17 +114,16 @@ pub fn run() {
 
             menu::install(app.handle())?;
 
-            // Hidden until it has its remembered place (or the default, fitted
-            // to this screen), so it does not jump (ux-conventions rule 7).
+            // At its remembered place, or the default fitted to this screen
+            // (ux-conventions rule 7).
+            let place = geometry::initial(app.handle());
             let window = WindowBuilder::new(app, MAIN_WINDOW)
                 .title("UPb Studio")
-                .inner_size(geometry::DEFAULT.0, geometry::DEFAULT.1)
+                .inner_size(place.w, place.h)
+                .position(place.x, place.y)
                 .min_inner_size(geometry::MIN.0, geometry::MIN.1)
                 .background_color(BACKGROUND)
-                .visible(false)
                 .build()?;
-            geometry::restore(&window);
-            geometry::track(&window);
             let size = window.inner_size()?.to_logical::<f64>(window.scale_factor()?);
             window.add_child(
                 WebviewBuilder::new(SHELL_WEBVIEW, WebviewUrl::App("index.html".into()))
@@ -133,7 +132,10 @@ pub fn run() {
                 LogicalPosition::new(0.0, 0.0),
                 size,
             )?;
-            window.show()?;
+            if place.maximized {
+                let _ = window.maximize();
+            }
+            geometry::track(&window);
             log::info!("UPb Studio {} started", app.package_info().version);
             // Windows: launched by a file association or the folder verb with a path.
             // (macOS hands opened files over as file:// URLs through the deep-link plugin.)
