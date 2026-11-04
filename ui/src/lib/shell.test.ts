@@ -54,7 +54,7 @@ describe('shell.handleLink', () => {
     await shell.handleLink(`grainatlas://project/${A}/spot/${A}`, 'laicpmsdb');
     expect(shell.view).toBe('images');
     expect(shell.targets.images?.url).toBe(
-      `tauri://localhost/modules/grainatlas/index.html?project=${A}&spot=${A}`,
+      `tauri://localhost/modules/grainatlas/index.html?server=http%3A%2F%2Flocalhost%3A8000&project=${A}&spot=${A}`,
     );
   });
 

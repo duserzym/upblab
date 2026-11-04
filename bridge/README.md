@@ -59,9 +59,13 @@ The shell side of the `postMessage` transport is `createFrameHost` from
 
 ### grainatlas
 
-- Read `?project=<id>&spot=<id>` from `location.search` at start-up and open
-  that project and spot: the shell routes `grainatlas://project/<id>/spot/<id>`
-  to `modules/grainatlas/index.html?project=<id>&spot=<id>`.
+- Read `?server=<base>&project=<id>&spot=<id>` from `location.search` at
+  start-up and open that project and spot: the shell routes
+  `grainatlas://project/<id>[/spot/<id>]` to
+  `modules/grainatlas/index.html?server=<laicpmsdb base URL>&project=<id>[&spot=<id>]`.
+  Open the project from the recent list, else the published atlas from
+  `<server>/atlas/projects/<id>/` with `token()` (docs/WORKFLOW.md section 6).
+  Home's "Open images" on a mount's current atlas uses this link.
 - When hosted, use the web build's file paths (`<input type=file
   webkitdirectory>`, drag-drop): grainatlas's own Tauri commands do not exist
   in the shell.

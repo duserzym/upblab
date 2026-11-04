@@ -146,7 +146,12 @@ export function moduleUrl(tab: ModuleTab, route: string, bases: ModuleBases): st
     const rest = route.replace(/^\/app\/?/, '');
     return joinBase(bases.server, '/app/') + (rest ? `#/${rest}` : '');
   }
+  // grainatlas opens a published project from `<server>/atlas/projects/<id>/`
+  // when it is not in its recent list (docs/WORKFLOW.md section 6): pass the server.
   const query = route.replace(/^\/atlas\/?/, '');
+  if (query.startsWith('?project=') && bases.server) {
+    return joinBase(bases.atlas, 'index.html') + `?server=${encodeURIComponent(bases.server)}&` + query.slice(1);
+  }
   return joinBase(bases.atlas, 'index.html') + query;
 }
 

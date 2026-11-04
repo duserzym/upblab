@@ -133,13 +133,13 @@ describe('moduleUrl', () => {
 
   it('maps grainatlas routes onto the bundled build', () => {
     expect(moduleUrl('images', `/atlas/?project=${A}&spot=${B}`, bases)).toBe(
-      `tauri://localhost/modules/grainatlas/index.html?project=${A}&spot=${B}`,
+      `tauri://localhost/modules/grainatlas/index.html?server=http%3A%2F%2Flocalhost%3A8000&project=${A}&spot=${B}`,
     );
   });
 
   it('maps grainatlas routes onto /atlas/ on the web', () => {
     expect(moduleUrl('images', `/atlas/?project=${A}`, { ...bases, atlas: '/atlas/' })).toBe(
-      `/atlas/index.html?project=${A}`,
+      `/atlas/index.html?server=http%3A%2F%2Flocalhost%3A8000&project=${A}`,
     );
   });
 

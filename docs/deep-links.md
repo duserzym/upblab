@@ -12,8 +12,8 @@ three schemes with the operating system and routes them to a tab:
 | `laicpmsdb://ingest?path=<folder>` | Sessions tab, `<server>/app/#/ingest?path=<folder>` (the ingest dialog, folder prefilled; desktop) |
 | `laicpmsdb://search?label=<label>` | Sessions tab, `<server>/app/#/search?label=<label>` |
 | `laicpmsdb://auth/callback?code=<code>` | completes the shell's ORCID or Google sign-in (only one the shell started in the last ten minutes, only from the OS) |
-| `grainatlas://project/<id>` | Images tab, grainatlas build `index.html?project=<id>` |
-| `grainatlas://project/<id>/spot/<id>` | Images tab, `index.html?project=<id>&spot=<id>` |
+| `grainatlas://project/<id>` | Images tab, grainatlas build `index.html?server=<laicpmsdb>&project=<id>` |
+| `grainatlas://project/<id>/spot/<id>` | Images tab, `index.html?server=<laicpmsdb>&project=<id>&spot=<id>` |
 | `upbr://session/<id>?server=&code=` | launches UPbRPy Studio in database mode (`--open "<link>"`); without `code`, the shell mints one with its sign-in (`POST /v1/auth/handoff`) and adds its `server` (docs/WORKFLOW.md section 4); the Reduce tab shows the result, or install instructions when Studio is missing |
 | `upbr://run/<id>?server=` | the same, for the project of a reduction run |
 | `https://…`, `http://…` | the system browser |
