@@ -4,10 +4,12 @@
 //! one child webview per module tab (`module-images`, `module-sessions`),
 //! laid over the area the shell reserves for them (ADR-0002). The host owns
 //! no scientific data: it positions webviews, forwards @lab/bridge calls and
-//! deep links to the shell, probes the laicpmsdb server and launches UPbRPy
-//! Studio.
+//! deep links to the shell, probes the laicpmsdb server, launches UPbRPy
+//! Studio, and in "This computer" mode runs laicpmsdb and PostgreSQL locally
+//! (`local_service`, ADR-0003).
 
 mod bridge;
+pub mod local_service;
 mod menu;
 mod modules;
 mod probe;
@@ -57,6 +59,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(modules::ModuleState::default())
+        .manage(local_service::LocalService::default())
         .invoke_handler(tauri::generate_handler![
             modules::module_open,
             modules::module_bounds,
@@ -68,6 +71,12 @@ pub fn run() {
             bridge::bridge_open,
             bridge::bridge_token,
             bridge::bridge_notify,
+            local_service::local_service_status,
+            local_service::local_service_start,
+            local_service::local_service_stop,
+            local_service::local_service_bootstrap,
+            local_service::local_service_logs,
+            local_service::local_service_open_logs,
         ])
         .setup(|app| {
             // macOS registers schemes from the bundle's Info.plist; Windows and
@@ -98,8 +107,16 @@ pub fn run() {
                 size,
             )?;
             log::info!("UPb Studio {} started", app.package_info().version);
+            local_service::init(app.handle());
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running UPb Studio");
+        .build(tauri::generate_context!())
+        .expect("error while building UPb Studio")
+        .run(|app, event| {
+            // Quit (menu, last window closed, Cmd-Q): stop laicpmsdb, then
+            // PostgreSQL, before the process ends (ADR-0003, life cycle 3).
+            if let tauri::RunEvent::Exit = event {
+                local_service::shutdown(app);
+            }
+        });
 }

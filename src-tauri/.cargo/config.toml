@@ -1,0 +1,10 @@
+# Build-time environment for dependencies' build scripts.
+[env]
+# PostgreSQL bundled into UPb Studio by postgresql_embedded's `bundled`
+# feature (ADR-0003). An exact version makes the build reproducible and lets
+# the archive be cached in ~/.theseus/postgresql/ after the first download.
+# Major version 17 only: a major upgrade needs pg_upgrade (ADR-0003, step 5).
+POSTGRESQL_VERSION = "=17.11.0"
+# 17.11.0 rather than 17.11.1: the .1 rebuilds add PL/Python and JIT bitcode,
+# which grows the macOS archive from 13 MB to 90 MB for features laicpmsdb
+# does not use.

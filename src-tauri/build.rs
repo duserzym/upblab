@@ -14,6 +14,12 @@ fn main() {
             "bridge_open",
             "bridge_token",
             "bridge_notify",
+            "local_service_status",
+            "local_service_start",
+            "local_service_stop",
+            "local_service_bootstrap",
+            "local_service_logs",
+            "local_service_open_logs",
         ]),
     ))
     .expect("failed to run tauri-build");

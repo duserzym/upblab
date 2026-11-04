@@ -15,6 +15,12 @@
     "allow-module-reload",
     "allow-probe",
     "allow-studio-status",
-    "allow-studio-launch"
+    "allow-studio-launch",
+    "allow-local-service-status",
+    "allow-local-service-start",
+    "allow-local-service-stop",
+    "allow-local-service-bootstrap",
+    "allow-local-service-logs",
+    "allow-local-service-open-logs"
   ]
 }
