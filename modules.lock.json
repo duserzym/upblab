@@ -1,6 +1,6 @@
 {
   "lockVersion": 1,
-  "description": "Module builds bundled into UPb Studio. scripts/fetch-modules.mjs installs them into ui/public/modules/<name>/ and verifies sha256 (of the release archive). A module with no url falls back to its local development build.",
+  "description": "Module builds bundled into UPb Studio. scripts/fetch-modules.mjs installs web modules into ui/public/modules/<name>/ and services (kind \"service\") into their `out` folder, verifying sha256 (of the release archive). A web module with no url falls back to its local development build; a service with no url for the build platform is left out, and the `local` checkout is what development builds run instead (docs/service-bundle-contract.md).",
   "modules": [
     {
       "name": "grainatlas",
@@ -10,6 +10,24 @@
       "local": "../grainatlas/ui/dist",
       "entry": "index.html",
       "todo": "Set url and sha256 to the grainatlas static web-build release asset (.tar.gz or .zip) once grainatlas publishes one (its roadmap phase 3); until then the local development build is used."
+    },
+    {
+      "name": "laicpmsdb-service",
+      "kind": "service",
+      "version": "0.0.0-dev",
+      "platforms": {
+        "macos-arm64": {
+          "url": null,
+          "sha256": null
+        },
+        "windows-x64": {
+          "url": null,
+          "sha256": null
+        }
+      },
+      "local": "../laicpmsdb",
+      "out": "src-tauri/resources/laicpmsdb-service",
+      "todo": "Set url and sha256 per platform to laicpmsdb's laicpmsdb-service-<version>-<platform>.tar.gz release assets once its CI publishes them (docs/service-bundle-contract.md section 5). Until then release builds offer only Lab server mode, and development builds run the local checkout."
     }
   ]
 }

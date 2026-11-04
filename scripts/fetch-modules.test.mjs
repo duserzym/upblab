@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { pathToFileURL } from 'node:url';
-import { fetchModules, sha256, tarCommand, treeHash } from './fetch-modules.mjs';
+import { currentPlatform, fetchModules, sha256, tarCommand, treeHash } from './fetch-modules.mjs';
 
 function fixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fetch-modules-test-'));
@@ -99,4 +99,70 @@ test('tree hash ignores file order and platform separators', () => {
   assert.equal(treeHash(copy), treeHash(f.build));
   fs.writeFileSync(path.join(copy, 'assets', 'app.js'), 'changed');
   assert.notEqual(treeHash(copy), treeHash(f.build));
+});
+
+// The laicpmsdb service bundle (docs/service-bundle-contract.md section 5).
+function serviceFixture({ version = '0.4.0', python = 'python/bin/python3' } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fetch-service-test-'));
+  const bundle = path.join(dir, 'build', 'laicpmsdb-service');
+  fs.mkdirSync(path.join(bundle, path.dirname(python)), { recursive: true });
+  fs.writeFileSync(path.join(bundle, python), '#!/bin/sh\n');
+  if (version !== null) fs.writeFileSync(path.join(bundle, 'VERSION'), `${version}\n`);
+  const archive = path.join(dir, `laicpmsdb-service-${version}-macos-arm64.tar.gz`);
+  const r = spawnSync(tarCommand(), ['-czf', archive, '-C', path.join(dir, 'build'), 'laicpmsdb-service']);
+  assert.equal(r.status, 0, r.stderr?.toString());
+  const out = path.join(dir, 'resources', 'laicpmsdb-service');
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, 'README.md'), 'kept');
+  return { dir, archive, out };
+}
+
+function serviceEntry(f, pin) {
+  return {
+    name: 'laicpmsdb-service',
+    kind: 'service',
+    version: '0.4.0',
+    platforms: { 'macos-arm64': pin, 'windows-x64': { url: null, sha256: null } },
+    local: '../laicpmsdb',
+    out: 'resources/laicpmsdb-service',
+  };
+}
+
+test('names the build platform like the lock does', () => {
+  assert.equal(currentPlatform('darwin', 'arm64'), 'macos-arm64');
+  assert.equal(currentPlatform('win32', 'x64'), 'windows-x64');
+});
+
+test('unpacks the service bundle for the platform, keeping the README', async () => {
+  const f = serviceFixture();
+  const pin = { url: pathToFileURL(f.archive).href, sha256: sha256(fs.readFileSync(f.archive)) };
+  const lock = writeLock(f.dir, [serviceEntry(f, pin)]);
+  const r = await fetchModules({ lock, out: path.join(f.dir, 'web'), platform: 'macos-arm64', ...quiet });
+  assert.deepEqual(r.services.map((s) => [s.name, s.version, s.platform]), [['laicpmsdb-service', '0.4.0', 'macos-arm64']]);
+  assert.equal(fs.readFileSync(path.join(f.out, 'VERSION'), 'utf8').trim(), '0.4.0');
+  assert.ok(fs.existsSync(path.join(f.out, 'python', 'bin', 'python3')));
+  assert.equal(fs.readFileSync(path.join(f.out, 'README.md'), 'utf8'), 'kept');
+  // Services are not web modules: the shell page's manifest does not list them.
+  const manifest = JSON.parse(fs.readFileSync(path.join(f.dir, 'web', 'manifest.json'), 'utf8'));
+  assert.deepEqual(manifest.modules, []);
+});
+
+test('without a release for the platform the bundle folder is emptied (Lab server only)', async () => {
+  const f = serviceFixture();
+  fs.writeFileSync(path.join(f.out, 'VERSION'), 'stale');
+  const lock = writeLock(f.dir, [serviceEntry(f, { url: null, sha256: null })]);
+  const r = await fetchModules({ lock, out: path.join(f.dir, 'web'), platform: 'windows-x64', ...quiet });
+  assert.deepEqual(r.skipped, ['laicpmsdb-service']);
+  assert.deepEqual(fs.readdirSync(f.out), ['README.md']);
+  await assert.rejects(fetchModules({ lock, out: path.join(f.dir, 'web'), platform: 'windows-x64', strict: true, ...quiet }), /no release for windows-x64/);
+});
+
+test('refuses a service archive with a wrong hash or without VERSION', async () => {
+  const f = serviceFixture();
+  const bad = writeLock(f.dir, [serviceEntry(f, { url: pathToFileURL(f.archive).href, sha256: 'f'.repeat(64) })]);
+  await assert.rejects(fetchModules({ lock: bad, out: path.join(f.dir, 'web'), platform: 'macos-arm64', ...quiet }), /SHA-256 mismatch/);
+  const g = serviceFixture({ version: null });
+  const noVersion = writeLock(g.dir, [serviceEntry(g, { url: pathToFileURL(g.archive).href, sha256: sha256(fs.readFileSync(g.archive)) })]);
+  await assert.rejects(fetchModules({ lock: noVersion, out: path.join(g.dir, 'web'), platform: 'macos-arm64', ...quiet }), /no VERSION/);
+  assert.deepEqual(fs.readdirSync(g.out), ['README.md'], 'a refused archive leaves the folder alone');
 });

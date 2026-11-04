@@ -3,14 +3,23 @@
 // ui/public/modules/<name>/ and write ui/public/modules/manifest.json, which
 // the shell reads to decide what the Images tab can show.
 //
-// Per module:
+// Per web module:
 //   url + sha256   download the release archive (.tar.gz, .tgz or .zip),
 //                  verify its SHA-256 against the lock, extract it
 //   local          copy a development build (path relative to the lock file)
 //                  and record a tree hash; used when there is no url yet, or
 //                  with --prefer local
 //
-// Usage: node scripts/fetch-modules.mjs [--prefer local|release] [--strict]
+// Per service (`"kind": "service"`, the laicpmsdb service bundle of ADR-0003):
+//   platforms.<platform>.url + sha256
+//                  download the archive for the build platform (macos-arm64,
+//                  windows-x64), verify it, and unpack it into `out` (relative
+//                  to the lock file; its README.md is kept). Without a url for
+//                  the platform, `out` is emptied and the build is "Lab server
+//                  only"; `local` is never copied (development builds run it
+//                  in place, see docs/service-bundle-contract.md section 7).
+//
+// Usage: node scripts/fetch-modules.mjs [--prefer local|release] [--strict] [--platform macos-arm64]
 //                                       [--lock modules.lock.json] [--out ui/public/modules]
 // Without --strict a module whose source is missing is skipped with a warning,
 // so a fresh clone (and CI) still builds; the Images tab then shows its placeholder.
@@ -81,9 +90,66 @@ function replaceDir(staged, target) {
   fs.renameSync(staged, target);
 }
 
+/** The build machine as named in the lock's `platforms`. */
+export function currentPlatform(platform = process.platform, arch = process.arch) {
+  const os = { darwin: 'macos', win32: 'windows', linux: 'linux' }[platform] ?? platform;
+  return `${os}-${arch === 'x64' ? 'x64' : arch}`;
+}
+
+/** Remove everything in `dir` except a README.md. */
+function emptyKeepingReadme(dir) {
+  fs.mkdirSync(dir, { recursive: true });
+  for (const e of fs.readdirSync(dir)) {
+    if (e !== 'README.md') fs.rmSync(path.join(dir, e), { recursive: true, force: true });
+  }
+}
+
+const SERVICE_PYTHON = ['python/bin/python3', 'python/python.exe'];
+
+async function fetchService(m, { lockDir, platform, strict, log }) {
+  if (typeof m.out !== 'string' || !m.out) throw new Error(`${m.name}: a service needs an "out" folder in the lock`);
+  const out = path.resolve(lockDir, m.out);
+  const pin = m.platforms?.[platform] ?? {};
+  const hasRelease = typeof pin.url === 'string' && pin.url.length > 0;
+  if (!hasRelease) {
+    const msg = `${m.name}: no release for ${platform} in the lock`;
+    if (strict) throw new Error(msg);
+    emptyKeepingReadme(out);
+    log(`skip  ${msg}; this build offers Lab server mode only${m.local ? ` (development builds run ${m.local})` : ''}`);
+    return null;
+  }
+  if (!/^[0-9a-f]{64}$/.test(pin.sha256 ?? '')) throw new Error(`${m.name}: ${platform} url needs a 64-hex-digit sha256 in the lock`);
+  const data = await download(pin.url);
+  const got = sha256(data);
+  if (got !== pin.sha256) throw new Error(`${m.name}: SHA-256 mismatch for ${pin.url}\n  lock ${pin.sha256}\n  got  ${got}`);
+  const staged = fs.mkdtempSync(path.join(os.tmpdir(), `upbstudio-${m.name}-`));
+  try {
+    const archive = `${staged}${/\.zip($|\?)/i.test(pin.url) ? '.zip' : '.tar.gz'}`;
+    fs.writeFileSync(archive, data);
+    try {
+      extract(archive, staged);
+    } finally {
+      fs.rmSync(archive, { force: true });
+    }
+    const version = fs.existsSync(path.join(staged, 'VERSION')) ? fs.readFileSync(path.join(staged, 'VERSION'), 'utf8').trim() : '';
+    if (!version) throw new Error(`${m.name}: the archive has no VERSION file (contract section 1)`);
+    if (!SERVICE_PYTHON.some((p) => fs.existsSync(path.join(staged, p)))) {
+      throw new Error(`${m.name}: the archive has no ${SERVICE_PYTHON.join(' or ')} (contract section 1)`);
+    }
+    emptyKeepingReadme(out);
+    for (const e of fs.readdirSync(staged)) {
+      if (e !== 'README.md') fs.renameSync(path.join(staged, e), path.join(out, e));
+    }
+    log(`ok    ${m.name} ${version} for ${platform} (release, sha256 ${got.slice(0, 12)}…) -> ${path.relative(lockDir, out)}`);
+    return { name: m.name, version, platform, source: 'release', sha256: got, hashKind: 'archive', from: pin.url };
+  } finally {
+    fs.rmSync(staged, { recursive: true, force: true });
+  }
+}
+
 /**
- * @param {{ lock?: string, out?: string, prefer?: 'local'|'release', strict?: boolean, log?: (m: string) => void }} opts
- * @returns {Promise<{ modules: object[], skipped: string[] }>}
+ * @param {{ lock?: string, out?: string, prefer?: 'local'|'release', strict?: boolean, platform?: string, log?: (m: string) => void }} opts
+ * @returns {Promise<{ modules: object[], services: object[], skipped: string[] }>}
  */
 export async function fetchModules(opts = {}) {
   const lockPath = path.resolve(opts.lock ?? path.join(root, 'modules.lock.json'));
@@ -95,9 +161,17 @@ export async function fetchModules(opts = {}) {
   fs.mkdirSync(out, { recursive: true });
 
   const installed = [];
+  const services = [];
   const skipped = [];
+  const platform = opts.platform ?? currentPlatform();
   for (const m of lock.modules ?? []) {
     if (!NAME.test(m.name ?? '')) throw new Error(`invalid module name ${JSON.stringify(m.name)}`);
+    if (m.kind === 'service') {
+      const record = await fetchService(m, { lockDir, platform, strict: opts.strict, log });
+      if (record) services.push(record);
+      else skipped.push(m.name);
+      continue;
+    }
     const target = path.join(out, m.name);
     const entry = m.entry ?? 'index.html';
     const hasRelease = typeof m.url === 'string' && m.url.length > 0;
@@ -153,7 +227,7 @@ export async function fetchModules(opts = {}) {
 
   const manifest = { generatedBy: 'scripts/fetch-modules.mjs', lockVersion: 1, modules: installed };
   fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  return { modules: installed, skipped };
+  return { modules: installed, services, skipped };
 }
 
 function parseArgs(argv) {
@@ -164,8 +238,9 @@ function parseArgs(argv) {
     else if (a === '--prefer') opts.prefer = argv[++i];
     else if (a === '--lock') opts.lock = argv[++i];
     else if (a === '--out') opts.out = argv[++i];
+    else if (a === '--platform') opts.platform = argv[++i];
     else if (a === '-h' || a === '--help') {
-      console.log('usage: fetch-modules.mjs [--prefer local|release] [--strict] [--lock file] [--out dir]');
+      console.log('usage: fetch-modules.mjs [--prefer local|release] [--strict] [--platform macos-arm64|windows-x64] [--lock file] [--out dir]');
       process.exit(0);
     } else throw new Error(`unknown argument ${a}`);
   }

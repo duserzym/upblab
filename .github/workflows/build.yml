@@ -34,6 +34,12 @@ jobs:
               src-tauri/target/release/bundle/msi/*.msi
               src-tauri/target/release/bundle/nsis/*.exe
     runs-on: ${{ matrix.os }}
+    env:
+      # postgresql_embedded's `bundled` feature downloads the pinned
+      # PostgreSQL 17 build (src-tauri/.cargo/config.toml) from the
+      # theseus-rs GitHub releases at build time; the token avoids the
+      # anonymous API rate limit.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -65,10 +71,18 @@ jobs:
       - name: Test bridge, shell UI and module pinning
         run: pnpm test
 
+      # Archive cache of postgresql_embedded's build script (exact version).
+      - uses: actions/cache@v4
+        with:
+          path: ~/.theseus/postgresql
+          key: theseus-postgresql-${{ runner.os }}-${{ hashFiles('src-tauri/.cargo/config.toml') }}
+
       - name: Fetch pinned module builds
         # grainatlas has no release URL yet (modules.lock.json TODO) and its
         # local build is not in this checkout, so it is skipped and the Images
-        # tab shows its placeholder.
+        # tab shows its placeholder. The laicpmsdb service bundle has no
+        # release URL yet either: the installers are "Lab server only" builds
+        # until laicpmsdb publishes it (docs/service-bundle-contract.md).
         run: node scripts/fetch-modules.mjs
 
       - name: Build installers (unsigned)
@@ -76,6 +90,14 @@ jobs:
 
       - name: Test the Rust host
         run: cargo test --manifest-path src-tauri/Cargo.toml --release
+
+      # initdb, start, role and database, orphan and stale-pid handling with
+      # the bundled binaries. macOS only: GitHub's Windows runners run
+      # elevated, and postgres.exe refuses to start under an administrator
+      # token (UPb Studio users run unelevated).
+      - name: Test the bundled PostgreSQL
+        if: runner.os == 'macOS'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --release -- --ignored bundled_cluster
 
       - uses: actions/upload-artifact@v7
         with:
