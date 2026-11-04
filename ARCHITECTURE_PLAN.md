@@ -133,15 +133,26 @@ shell when a user clicks one in an email or a notebook.
 ### 4.5 Local service mode
 
 ```text
-launch ──> initdb once ──> postgres 127.0.0.1:<free> ──> laicpmsdb serve 127.0.0.1:8000
-                                                         (migrate, then waitress)
-                                   health GET /v1/health ok ──> Sessions tab = http://127.0.0.1:8000
-quit ───> stop service ──> pg_ctl stop -m fast
+launch ──> initdb once ──> postgres 127.0.0.1:55432 (or next free) ──> migrate ──> serve 127.0.0.1:8000 (or next free)
+           (UTF-8, C locale)  direct child, no Unix socket                         health GET /v1/health ok
+                                                                                     ──> Sessions tab = http://127.0.0.1:<port>/app/
+quit ───> stop service (SIGTERM, then SIGKILL) ──> pg_ctl stop -m fast
+killed ─> watchdog (macOS) or job object (Windows) does the same; next start
+          stops leftovers found through postmaster.pid and service.pid
 ```
 
-Data directory under the app data folder, data root `~/laicpmsdb` by default,
-first staff account created by the first-run wizard, demo data optional.
-Details, sizes and failure handling: ADR-0003.
+PostgreSQL 17.11.0 is embedded at build time (`postgresql_embedded`,
+`bundled`; version pinned in `src-tauri/.cargo/config.toml`) and unpacked
+once into the app's local data folder, next to the data directory
+`laicpmsdb/pg/`; `PG_BIN` replaces it in development. The service is the
+pinned bundle in `src-tauri/resources/laicpmsdb-service/`, run as
+`python -m laicpmsdb_service serve`; until laicpmsdb publishes it, a
+laicpmsdb checkout runs through `manage.py` (development fallback). Data
+root `~/laicpmsdb` by default, first staff account created by the first-run
+wizard, demo data optional. Interface with laicpmsdb:
+[docs/service-bundle-contract.md](docs/service-bundle-contract.md); files and
+logs: [docs/installing.md](docs/installing.md); sizes and rejected
+alternatives: ADR-0003.
 
 ### 4.6 Home tab
 
@@ -157,7 +168,7 @@ over samples, sessions, spots and projects; recent items; module status
 | 0 | repository, plan, ADRs, CI matrix skeleton | this document committed; a Tauri "hello" window builds on macOS and Windows in CI |
 | 1 | shell UI and tabs | tab bar, Home placeholder, Settings (server URL, Studio path, theme); Sessions tab shows a configured laicpmsdb; Images tab shows a bundled grainatlas build fetched by `modules.lock.json` |
 | 2 | bridge and links | `@lab/bridge` published and adopted by grainatlas and laicpmsdb; scheme registration on both OS; a spot click in Images opens the acquisition in Sessions |
-| 2b | local service (double-click release) | laicpmsdb publishes the per-OS service bundle with `laicpmsdb serve`, `bootstrap` and `/v1/health`; the shell bundles PostgreSQL 17 and the service, first-run wizard, start and stop with the app, no orphan processes after a forced kill; a clean macOS and a clean Windows machine show demo data in the Sessions tab within 30 s of a double-click |
+| 2b | local service (double-click release); shell side done 2026-11-03, waits for the laicpmsdb bundle | laicpmsdb publishes the per-OS service bundle with `laicpmsdb serve`, `bootstrap` and `/v1/health`; the shell bundles PostgreSQL 17 and the service, first-run wizard, start and stop with the app, no orphan processes after a forced kill; a clean macOS and a clean Windows machine show demo data in the Sessions tab within 30 s of a double-click |
 | 3 | identity | single sign-in, token in keychain, token handed to module webviews; web delivery at `/desk/` using the laicpmsdb session |
 | 4 | Studio hand-off | launch UPbRPy Studio with a session export; receive the reduction bundle through laicpmsdb; status shown on Home |
 | 5 | Home | cross-module timeline, search, recents, module status |

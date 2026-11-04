@@ -117,3 +117,18 @@ is not part of this decision.
   double-click, and see the Sessions tab with demo data in under 30 s; quit
   and relaunch keeps the data; after a forced kill of the shell no
   `postgres` process survives and the next launch succeeds.
+
+## Implementation notes (2026-11-03)
+
+The shell side is in `src-tauri/src/local_service/`; the interface laicpmsdb
+implements is [docs/service-bundle-contract.md](../service-bundle-contract.md).
+Where it differs from the text above: the bundle is unpacked into
+`src-tauri/resources/laicpmsdb-service/` and pinned per platform; the
+postmaster runs as a direct child of the shell (not daemonised by
+`pg_ctl start`) so the process group and job object cover it, with
+`pg_ctl stop -m fast` to stop it; PostgreSQL prefers port 55432 so a
+developer's own cluster on 5432 is never touched; the database lives in the
+*local* app data folder (`%LOCALAPPDATA%` on Windows, not the roaming one);
+on macOS a watchdog copy of the shell binary stops the children after a
+forced kill, since macOS has no equivalent of a job object.
+

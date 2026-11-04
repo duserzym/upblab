@@ -57,17 +57,49 @@ The installers bundle the WebView2 bootstrapper, so machines without the
 WebView2 runtime get it installed (this needs internet access once). They
 also register the three link schemes.
 
-## After installing
+## After installing: the first run
 
-- First run (planned, roadmap phase 2b): choose **This computer** to let
-  UPb Studio run its own laicpmsdb and PostgreSQL on this machine, or **Lab
-  server** to use a URL. Until that phase ships, the Sessions tab needs a
-  running laicpmsdb (`make dev` in its checkout, or the lab server URL).
-- Settings (gear icon or Ctrl/⌘ ,): set the laicpmsdb server URL (default
-  `http://localhost:8000`) and, if UPbRPy Studio is not in its usual place,
-  its path.
-- Logs: macOS `~/Library/Logs/edu.umn.upbstudio/upbstudio.log`, Windows
-  `%LOCALAPPDATA%\edu.umn.upbstudio\logs\upbstudio.log`.
+The first launch asks where laicpmsdb, the Sessions tab, should live. Settings
+(gear icon or Ctrl/⌘ ,) changes it later.
+
+- **This computer**: UPb Studio runs its own laicpmsdb and PostgreSQL 17 on
+  this machine. Choose the data root (default `~/laicpmsdb`, the same layout
+  as the lab NAS), create your account (user name, email and a password of
+  your choice; it is the first administrator of this laicpmsdb), and
+  optionally load the demo sessions. Both programs start when UPb Studio
+  opens (a few seconds) and stop when it quits; they listen on 127.0.0.1
+  only. If the start fails, the screen shows the end of the log with
+  **Retry** and **Use a lab server instead**.
+- **Lab server**: the URL of the lab's laicpmsdb (e.g.
+  `https://laicpmsdb.example.edu`); you sign in inside the Sessions tab.
+
+Release builds include "This computer" only once laicpmsdb publishes its
+service bundle (`docs/service-bundle-contract.md`); until then the option is
+greyed out and the log says so at start-up.
+
+On Windows, run UPb Studio as your normal user, not with *Run as
+administrator*: PostgreSQL refuses to start under an administrator token.
+
+## Where things are
+
+| What | macOS | Windows |
+| --- | --- | --- |
+| Settings (`settings.json`: mode, server URL, data root, paths) | `~/Library/Application Support/edu.umn.upbstudio/` | `%APPDATA%\edu.umn.upbstudio\` |
+| Generated database passwords and secret key (`local-service.json`) | same folder as settings | same folder as settings |
+| PostgreSQL data directory (This computer) | `~/Library/Application Support/edu.umn.upbstudio/laicpmsdb/pg/` | `%LOCALAPPDATA%\edu.umn.upbstudio\laicpmsdb\pg\` |
+| Unpacked PostgreSQL binaries | `…/laicpmsdb/postgresql/<version>/` next to `pg/` | same, under `%LOCALAPPDATA%` |
+| laicpmsdb data root (raw files, attachments, exports) | `~/laicpmsdb` unless changed in the wizard or Settings | `%USERPROFILE%\laicpmsdb` unless changed |
+| Logs | `~/Library/Logs/edu.umn.upbstudio/` | `%LOCALAPPDATA%\edu.umn.upbstudio\logs\` |
+
+The log folder holds `upbstudio.log` (the shell), `postgres.log` and
+`laicpmsdb.log` (This computer mode); Settings → **Logs** shows their ends and
+opens the folder. A log over 10 MB is rotated to `.1` when the program starts.
+
+Back up the PostgreSQL data directory and the data root together (with UPb
+Studio closed). Deleting `local-service.json` makes the database unreachable,
+because its password is lost: move `laicpmsdb/pg` aside to start over.
+
+UPbRPy Studio: if it is not in its usual place, set its path in Settings.
 
 ## Building it yourself
 
