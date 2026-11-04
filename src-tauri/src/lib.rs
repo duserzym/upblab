@@ -10,6 +10,7 @@
 
 mod auth;
 mod bridge;
+mod files;
 pub mod local_service;
 mod menu;
 mod modules;
@@ -37,11 +38,13 @@ pub fn run() {
     // links that way) hands its URL to this instance and exits.
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(window) = app.get_window(MAIN_WINDOW) {
                 let _ = window.unminimize();
                 let _ = window.set_focus();
             }
+            // Windows: a file association or the folder verb launched us again with a path.
+            files::push_opened(app, files::paths_in_args(argv.into_iter().skip(1).map(Into::into)));
         }));
     }
 
@@ -60,7 +63,9 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
         .manage(modules::ModuleState::default())
+        .manage(files::Files::default())
         .manage(auth::Identity::default())
         .manage(local_service::LocalService::default())
         .invoke_handler(tauri::generate_handler![
@@ -80,6 +85,11 @@ pub fn run() {
             bridge::bridge_open,
             bridge::bridge_token,
             bridge::bridge_notify,
+            files::bridge_open_files,
+            files::bridge_read_file,
+            files::files_scan,
+            files::files_offer,
+            files::files_take_opened,
             local_service::local_service_status,
             local_service::local_service_start,
             local_service::local_service_stop,
@@ -87,6 +97,7 @@ pub fn run() {
             local_service::local_service_logs,
             local_service::local_service_open_logs,
         ])
+        .on_webview_event(files::on_webview_event)
         .setup(|app| {
             // macOS registers schemes from the bundle's Info.plist; Windows and
             // Linux installers write the registry / .desktop entries. In a dev
@@ -116,6 +127,9 @@ pub fn run() {
                 size,
             )?;
             log::info!("UPb Studio {} started", app.package_info().version);
+            // Windows: launched by a file association or the folder verb with a path.
+            // (macOS hands opened files over as file:// URLs through the deep-link plugin.)
+            files::push_opened(app.handle(), files::paths_in_args(std::env::args_os().skip(1)));
             local_service::init(app.handle());
             Ok(())
         })

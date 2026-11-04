@@ -8,7 +8,9 @@ import {
   PROTOCOL_VERSION,
   isBridgeRequest,
   type BridgeEvent,
+  type BridgePush,
   type BridgeResponse,
+  type OpenFilesTransfer,
 } from './protocol';
 
 export interface FrameHostHandlers {
@@ -16,6 +18,11 @@ export interface FrameHostHandlers {
   open(url: string, module: string): boolean | Promise<boolean>;
   token(module: string): string | null | Promise<string | null>;
   notify(event: BridgeEvent, module: string): void;
+  /**
+   * v2: the files waiting for `module`, or null. `take` false: look without
+   * taking. Leave it out and modules get null.
+   */
+  openFiles?(module: string, take: boolean): OpenFilesTransfer | null | Promise<OpenFilesTransfer | null>;
 }
 
 export interface FrameHostOptions {
@@ -30,6 +37,12 @@ export interface FrameHostOptions {
 /** iframe `name` for a module, read by `detectTransport` inside the iframe. */
 export function frameName(module: string): string {
   return FRAME_NAME_PREFIX + module;
+}
+
+/** v2: tell a module iframe that files are waiting for it; it answers with an `open-files` request. */
+export function pushOpenFiles(frame: Pick<Window, 'postMessage'>, targetOrigin: string): void {
+  const msg: BridgePush = { tag: MESSAGE_TAG, v: PROTOCOL_VERSION, push: 'open-files' };
+  frame.postMessage(msg, targetOrigin);
 }
 
 export function createFrameHost(handlers: FrameHostHandlers, opts: FrameHostOptions): () => void {
@@ -59,6 +72,9 @@ export function createFrameHost(handlers: FrameHostHandlers, opts: FrameHostOpti
           break;
         case 'notify':
           if (req.event && typeof req.event.type === 'string') handlers.notify(req.event, module);
+          break;
+        case 'open-files':
+          reply({ result: handlers.openFiles ? await handlers.openFiles(module, req.take !== false) : null });
           break;
       }
     } catch (err) {

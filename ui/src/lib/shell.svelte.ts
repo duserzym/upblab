@@ -157,6 +157,18 @@ class Shell {
     this.links = [{ at: new Date(), url: redact(url), from, outcome, refused }, ...this.links].slice(0, 50);
   }
 
+  /** A line in Home's Links list for something that is not a link (opened files). */
+  note(what: string, from: string, outcome: string, refused = false) {
+    this.record(what, from, outcome, refused);
+  }
+
+  /** Load a route in a module tab and show it. */
+  go(tab: ModuleTab, route: string) {
+    this.seq += 1;
+    this.targets[tab] = { url: moduleUrl(tab, route, this.bases), seq: this.seq };
+    this.show(tab);
+  }
+
   /**
    * upbr://session/<id> and upbr://run/<id>: find Studio, mint a handoff code
    * when the link has none, and launch Studio with the link
@@ -225,9 +237,7 @@ class Shell {
         await openExternal(r.url);
         return true;
       case 'tab': {
-        this.seq += 1;
-        this.targets[r.tab] = { url: moduleUrl(r.tab, r.route, this.bases), seq: this.seq };
-        this.show(r.tab);
+        this.go(r.tab, r.route);
         this.record(url, from, `${r.tab === 'sessions' ? 'Sessions' : 'Images'} ${r.route}`);
         await logInfo(`[links] ${url} -> ${r.tab} ${r.route}`);
         return true;

@@ -88,7 +88,7 @@ fn is_local(url: &Url) -> bool {
         || (cfg!(debug_assertions) && url.host_str() == Some("localhost") && url.port() == Some(1420))
 }
 
-/// Remote module pages (the configured laicpmsdb server) get the three bridge
+/// Remote module pages (the configured laicpmsdb server) get the bridge
 /// commands for their origin only, in their own webview only.
 fn grant_bridge<R: Runtime>(app: &AppHandle<R>, state: &ModuleState, label: &str, url: &Url) -> Result<(), String> {
     if is_local(url) {
@@ -107,7 +107,9 @@ fn grant_bridge<R: Runtime>(app: &AppHandle<R>, state: &ModuleState, label: &str
             .webview(label)
             .permission("allow-bridge-open")
             .permission("allow-bridge-token")
-            .permission("allow-bridge-notify"),
+            .permission("allow-bridge-notify")
+            .permission("allow-bridge-open-files")
+            .permission("allow-bridge-read-file"),
     )
     .map_err(|e| format!("could not grant the bridge to {origin}: {e}"))?;
     log::info!("granted @lab/bridge to {origin} in {label}");
@@ -118,7 +120,7 @@ fn grant_bridge<R: Runtime>(app: &AppHandle<R>, state: &ModuleState, label: &str
 /// Set before any page script: tells @lab/bridge it runs inside the shell.
 fn marker_script(module: &str) -> String {
     format!(
-        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 1 }}), configurable: false }});",
+        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 2 }}), configurable: false }});",
         module_name(&format!("module-{module}"))
     )
 }
@@ -130,6 +132,7 @@ fn build_webview<R: Runtime>(app: &AppHandle<R>, label: &str, module: &str, url:
     let win_label = label.to_string();
     WebviewBuilder::new(label, WebviewUrl::External(url))
         .initialization_script(marker_script(module))
+        .initialization_script(crate::files::probe_script())
         // A plain <a href="laicpmsdb://…"> in a module goes to the shell's resolver.
         .on_navigation(move |url| {
             let scheme = url.scheme();

@@ -35,6 +35,11 @@ The resolver is `ui/src/lib/links.ts`; its tests are the specification.
   `<a href="laicpmsdb://…">`: in the desktop shell the host cancels the
   navigation and forwards the URL.
 - **You.** The link box on the Home tab, handy for testing.
+- **Opened files.** A Qtegra export dropped on the window, opened from the
+  Finder or Explorer, or picked with Home's Open buttons becomes
+  `laicpmsdb://ingest?path=<folder>` (desktop); image folders go to the
+  Images tab. The files themselves reach the module through `@lab/bridge`
+  `open-files` (bridge/README.md); `ui/src/lib/drop.ts` decides where.
 - **The web delivery.** `/desk/open?url=<encoded link>`.
 
 ## Trying a link

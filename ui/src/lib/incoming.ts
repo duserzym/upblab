@@ -1,13 +1,18 @@
-// Every way a URL reaches the shell:
+// Every way a URL or a file reaches the shell:
 //   desktop  OS deep links (tauri-plugin-deep-link, plus single-instance on
 //            Windows) and module calls through @lab/bridge (Rust re-emits them
-//            as EVENTS.open / EVENTS.notify)
-//   web      /desk/open?url=… and module iframes posting through @lab/bridge
+//            as EVENTS.open / EVENTS.notify); files dropped on any webview
+//            (shell://drop), opened by Finder (file:// URLs from the deep-link
+//            plugin) or by a Windows file association (argv, shell://opened)
+//   web      /desk/open?url=… and module iframes posting through @lab/bridge;
+//            files dropped on the shell page (App.svelte)
 
 import { EVENTS, type BridgeEvent } from '@lab/bridge';
-import { createFrameHost } from '@lab/bridge/host';
+import { createFrameHost, pushOpenFiles } from '@lab/bridge/host';
+import { fileUrlToPath } from './drop';
 import { identity, SIGN_OUT_EVENTS } from './identity.svelte';
-import { isDesktop, logInfo } from './platform';
+import { opener } from './opener.svelte';
+import { desktopFiles, isDesktop, logInfo } from './platform';
 import { shell } from './shell.svelte';
 import { settings } from './settings.svelte';
 
@@ -19,11 +24,51 @@ interface BridgeNotifyPayload {
   event: BridgeEvent;
   source: string;
 }
+/** src-tauri/src/files.rs `DropPayload`. */
+interface DropPayload {
+  paths: string[];
+  over: string;
+}
+/** src-tauri/src/files.rs `TakenPayload`. */
+interface TakenPayload {
+  id: string;
+  source: string;
+  files: number;
+  bytes: number;
+}
+
+/** Shell events from the host (names in src-tauri/src/files.rs). */
+export const FILE_EVENTS = {
+  drop: 'shell://drop',
+  drag: 'shell://drag',
+  opened: 'shell://opened',
+  taken: 'lab-bridge://files-taken',
+} as const;
 
 /** A module event: logged; a sign-out signs the shell out (clears the token for every module). */
 export function onModuleEvent(event: BridgeEvent, source: string) {
   void logInfo(`[bridge] ${source}: ${JSON.stringify(event)}`);
   if (SIGN_OUT_EVENTS.includes(event.type) && identity.signedIn) void identity.logout(`${source} signed out`);
+  if (event.type === 'lab.open-files.seen') opener.seen(source, event);
+}
+
+/**
+ * URLs from the OS: lab links go to the resolver; file:// URLs (macOS hands
+ * files opened with the app over this way) are opened as files.
+ */
+export function routeOsUrls(urls: string[]) {
+  const paths: string[] = [];
+  for (const u of urls) {
+    const path = fileUrlToPath(u);
+    if (path) paths.push(path);
+    else void shell.handleLink(u, 'os');
+  }
+  if (paths.length) void opener.openPaths(paths, 'os');
+}
+
+async function takeOpened() {
+  const paths = await desktopFiles.takeOpened().catch(() => [] as string[]);
+  if (paths.length) await opener.openPaths(paths, 'os');
 }
 
 /** Module iframes register here so the frame host can tell which module posted. */
@@ -33,19 +78,34 @@ export async function listenForLinks(): Promise<void> {
   if (isDesktop) {
     const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
     const { listen } = await import('@tauri-apps/api/event');
-    await onOpenUrl((urls) => urls.forEach((u) => void shell.handleLink(u, 'os')));
+    await onOpenUrl((urls) => routeOsUrls(urls));
     await listen<BridgeOpenPayload>(EVENTS.open, (e) => void shell.handleLink(e.payload.url, e.payload.source));
     await listen<BridgeNotifyPayload>(EVENTS.notify, (e) => onModuleEvent(e.payload.event, e.payload.source));
+    await listen<DropPayload>(FILE_EVENTS.drop, (e) => {
+      opener.dragging = false;
+      void opener.openPaths(e.payload.paths, e.payload.over === 'shell' ? 'drop' : `drop on ${e.payload.over}`);
+    });
+    await listen<boolean>(FILE_EVENTS.drag, (e) => (opener.dragging = e.payload));
+    await listen(FILE_EVENTS.opened, () => void takeOpened());
+    await listen<TakenPayload>(FILE_EVENTS.taken, (e) => opener.taken(e.payload.id, e.payload.source, e.payload.files, e.payload.bytes));
     const initial = await getCurrent().catch(() => null);
-    initial?.forEach((u) => void shell.handleLink(u, 'os'));
+    if (initial?.length) routeOsUrls(initial);
+    await takeOpened();
     return;
   }
+
+  opener.pushFrame = (tab) => {
+    const frame = frames.get(tab);
+    // A nudge carries nothing; the files go only to a trusted origin's request.
+    if (frame) pushOpenFiles(frame, '*');
+  };
 
   createFrameHost(
     {
       open: (url, module) => shell.handleLink(url, module),
       token: () => identity.frameToken(),
       notify: (event, module) => onModuleEvent(event, module),
+      openFiles: (module, take) => opener.takeWeb(module, take),
     },
     {
       allowedOrigins: () => {

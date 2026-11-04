@@ -97,3 +97,18 @@ body { min-height: 0; overflow: hidden; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* Files dragged over the window (lib/opener.svelte.ts). Lives in the tab bar:
+   native module webviews paint over everything below it. */
+.drop-hint {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  border: 1px dashed var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 0.85rem;
+}

@@ -2,7 +2,9 @@
   import { identity } from '../lib/identity.svelte';
   import { localService } from '../lib/localService.svelte';
   import { overview, type RunOut } from '../lib/overview.svelte';
-  import { isDesktop, probe, studioStatus, type StudioStatus } from '../lib/platform';
+  import { isDesktop, pickPaths, probe, studioStatus, type StudioStatus } from '../lib/platform';
+  import { fromFileList } from '../lib/drop';
+  import { opener } from '../lib/opener.svelte';
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
 
@@ -10,6 +12,23 @@
   let server = $state<boolean | null>(null);
   let studio = $state<StudioStatus | null>(null);
   let linkInput = $state('');
+  let folderInput = $state<HTMLInputElement>();
+  let filesInput = $state<HTMLInputElement>();
+
+  // Open anything (ux-conventions rule 4): one folder or any files; the shell
+  // decides which tab reads them. Two buttons only because OS dialogs pick
+  // either folders or files, never both.
+  async function openDialog(folder: boolean) {
+    if (!isDesktop) return (folder ? folderInput : filesInput)?.click();
+    const paths = await pickPaths(folder).catch(() => [] as string[]);
+    if (paths.length) void opener.openPaths(paths, 'open dialog');
+  }
+  function chosen(input: HTMLInputElement | undefined) {
+    if (!input?.files?.length) return;
+    opener.openWebFiles(fromFileList(input.files), 'open dialog');
+    input.value = '';
+  }
+  const openColor = (s: string) => (s === 'refused' || s === 'failed' ? 'var(--danger)' : s === 'taken' ? 'var(--ok)' : 'var(--text-faint)');
 
   // "This computer": state comes from the host's status events.
   const local = $derived(shell.local ? localService.status : null);
@@ -59,6 +78,29 @@
         <strong>Sessions</strong>, reduction in <strong>Reduce</strong>. Below: your recent sessions with their reductions,
         and the images of your mounts. The cross-module timeline and search arrive in a later phase.
       </p>
+    </div>
+
+    <div class="glass panel stack" data-testid="open-panel">
+      <div class="row wrap">
+        <h2>Open</h2>
+        <span class="spacer"></span>
+        <button class="btn primary" onclick={() => void openDialog(true)}>Open folder…</button>
+        <button class="btn" onclick={() => void openDialog(false)}>Open files…</button>
+      </div>
+      <p class="muted small">
+        A TM4000 package, an area folder or images open in <strong>Images</strong>; a Qtegra export folder, its zip or its
+        CSVs open the ingest page in <strong>Sessions</strong>. Or drop them anywhere on this window{isDesktop ? ', or open them with UPb Studio from the Finder or Explorer' : ''}.
+      </p>
+      {#if opener.status}
+        <p class="small open-status" role="status">
+          <span class="dot" style="background: {openColor(opener.status.state)}"></span>
+          <span class="mono">{opener.status.what}</span>: {opener.status.outcome}
+        </p>
+      {/if}
+      {#if !isDesktop}
+        <input bind:this={folderInput} type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
+        <input bind:this={filesInput} type="file" multiple hidden onchange={() => chosen(filesInput)} />
+      {/if}
     </div>
 
     <div class="cards">
@@ -233,6 +275,9 @@
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
   .linkish:hover { text-decoration: underline; }
   h2 { margin: 0; }
+  .wrap { flex-wrap: wrap; }
+  .open-status { margin: 0; display: flex; gap: var(--space-2); align-items: baseline; min-width: 0; overflow-wrap: anywhere; }
+  .open-status .dot { flex: none; transform: translateY(-1px); }
   .badge { margin-left: var(--space-2); }
   .card-btn .grid-kv { margin: 0; }
   table.data tbody tr { cursor: default; }

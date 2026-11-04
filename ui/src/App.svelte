@@ -10,6 +10,8 @@
   import { identity } from './lib/identity.svelte';
   import { localService } from './lib/localService.svelte';
   import { listenForLinks } from './lib/incoming';
+  import { fromDataTransfer } from './lib/drop';
+  import { opener } from './lib/opener.svelte';
   import { settings } from './lib/settings.svelte';
   import { shell, type View } from './lib/shell.svelte';
   import { desktopModules, isDesktop } from './lib/platform';
@@ -81,9 +83,28 @@
       shell.show('settings');
     }
   }
+
+  // Web delivery: files dropped on the shell page (tab bar, Home, Settings).
+  // A drop on a module iframe stays with that module's own drop target.
+  // Desktop drops arrive from the host with paths (lib/incoming.ts).
+  const hasFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');
+  function onDragOver(e: DragEvent) {
+    if (isDesktop || firstRun || !hasFiles(e)) return;
+    e.preventDefault();
+    opener.dragging = true;
+  }
+  function onDragLeave(e: DragEvent) {
+    if (!isDesktop && e.relatedTarget === null) opener.dragging = false;
+  }
+  async function onDrop(e: DragEvent) {
+    if (isDesktop || firstRun || !hasFiles(e)) return;
+    e.preventDefault();
+    opener.dragging = false;
+    opener.openWebFiles(await fromDataTransfer(e.dataTransfer!), 'drop');
+  }
 </script>
 
-<svelte:window onkeydown={onKey} />
+<svelte:window onkeydown={onKey} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop} />
 
 <div class="shell">
   <header class="bar glass">
@@ -101,6 +122,9 @@
       {/each}
     </div>
     <span class="spacer"></span>
+    {#if opener.dragging}
+      <span class="drop-hint" role="status">Drop to open: images go to Images, Qtegra exports to Sessions</span>
+    {/if}
     {#if identity.target}
       <button
         class="tab account"

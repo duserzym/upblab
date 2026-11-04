@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "modules-local",
-  "description": "Bundled module builds (grainatlas, served from the app's own origin) may call the @lab/bridge commands and nothing else. The remote laicpmsdb origin gets the same three permissions at runtime (src/modules.rs), scoped to the configured server.",
+  "description": "Bundled module builds (grainatlas, served from the app's own origin) may call the @lab/bridge commands and nothing else. The remote laicpmsdb origin gets the same permissions at runtime (src/modules.rs), scoped to the configured server.",
   "webviews": ["module-images", "module-sessions"],
-  "permissions": ["allow-bridge-open", "allow-bridge-token", "allow-bridge-notify"]
+  "permissions": [
+    "allow-bridge-open",
+    "allow-bridge-token",
+    "allow-bridge-notify",
+    "allow-bridge-open-files",
+    "allow-bridge-read-file"
+  ]
 }

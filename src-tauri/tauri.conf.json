@@ -23,6 +23,23 @@
     "shortDescription": "One window for the lab's LA-ICP-MS workflow",
     "longDescription": "UPb Studio hosts grainatlas (Images), laicpmsdb (Sessions) and launches UPbRPy Studio (Reduce), with links between them.",
     "copyright": "MIT License",
+    "fileAssociations": [
+      {
+        "ext": ["zag"],
+        "name": "TM4000 package",
+        "description": "Hitachi TM4000 navigation file: opens its package in Images",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": ["grainatlas"],
+        "name": "Folder",
+        "description": "grainatlas project, or any folder: opened in the tab that reads it",
+        "role": "Viewer",
+        "rank": "Alternate",
+        "contentTypes": ["public.folder"]
+      }
+    ],
     "resources": {
       "resources/laicpmsdb-service/": "laicpmsdb-service/"
     },
@@ -39,7 +56,7 @@
     },
     "windows": {
       "webviewInstallMode": { "type": "embedBootstrapper" },
-      "nsis": { "installMode": "currentUser" }
+      "nsis": { "installMode": "currentUser", "installerHooks": "windows/hooks.nsh" }
     }
   },
   "plugins": {

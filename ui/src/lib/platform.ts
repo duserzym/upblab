@@ -204,3 +204,49 @@ export const desktopAuth = {
   handoff: (target: AuthTarget) => invoke<string>('auth_handoff', { target }),
   get: <T>(target: AuthTarget, path: string) => invoke<ApiReply<T>>('api_get', { target, path }),
 };
+
+// ------------------------------------------------ open anything (ux-conventions rule 4)
+
+/** Mirrors `ScanOut` in src-tauri/src/files.rs. */
+export interface FileScan {
+  scan: string;
+  roots: { path: string; name: string; dir: boolean }[];
+  entries: { root: number; rel: string; size: number }[];
+  truncated: boolean;
+  missing: string[];
+}
+
+/** Mirrors `OfferOut` in src-tauri/src/files.rs. */
+export interface FileOffer {
+  id: string;
+  files: number;
+  bytes: number;
+  nudged: boolean;
+}
+
+/** Desktop: the host lists dropped or opened paths and hands files to module webviews (src-tauri/src/files.rs). */
+export const desktopFiles = {
+  scan: (paths: string[]) => invoke<FileScan>('files_scan', { paths }),
+  offer: (args: {
+    scan: string;
+    module: ModuleTab;
+    files: { index: number; path: string }[];
+    kind: string;
+    name: string;
+    path: string | null;
+    nudge: boolean;
+  }) => invoke<FileOffer>('files_offer', args),
+  takeOpened: () => invoke<string[]>('files_take_opened'),
+};
+
+/** Desktop: the OS dialog, for a folder or for files. Resolves with the chosen paths (none when cancelled). */
+export async function pickPaths(folder: boolean): Promise<string[]> {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const picked = await open(
+    folder
+      ? { directory: true, multiple: true, title: 'Open a folder: a TM4000 package, an area folder or a Qtegra export' }
+      : { directory: false, multiple: true, title: 'Open files: images, Qtegra CSVs or a zip' },
+  );
+  if (!picked) return [];
+  return Array.isArray(picked) ? picked : [picked];
+}

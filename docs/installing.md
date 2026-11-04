@@ -57,6 +57,29 @@ The installers bundle the WebView2 bootstrapper, so machines without the
 WebView2 runtime get it installed (this needs internet access once). They
 also register the three link schemes.
 
+## Opening files and folders with UPb Studio
+
+UPb Studio opens anything the lab's modules read and decides where it goes
+by content, without asking (grainatlas `docs/ux-conventions.md` rule 4): a
+TM4000 package, an area folder, image files or a `.grainatlas` project go to
+**Images**; a Qtegra export folder, its zip or its CSVs open the ingest page in
+**Sessions**. Inside the app, drop them anywhere on the window or use **Open
+folder…** / **Open files…** on Home. From the system:
+
+| | macOS | Windows |
+| --- | --- | --- |
+| A TM4000 `.zag` file (opens its package folder) | Finder → right-click → **Open With → UPb Studio**, or drag it onto the Dock icon | Explorer → right-click → **Open with → UPb Studio** (both installers register `.zag`) |
+| A folder (package, area, export, `.grainatlas`) | drag it onto UPb Studio in the Dock (the app declares folders as a document type) | Explorer → right-click the folder → **Open in UPb Studio** (NSIS installer only; `src-tauri/windows/hooks.nsh`) |
+| Image files, CSVs, zips | **Open With → Other… → UPb Studio**, or the Dock icon | **Open with → Choose another app → UPb Studio** |
+
+Windows cannot associate a folder by its extension, which is why folders get
+the Explorer verb instead; the per-machine MSI does not add it (use the NSIS
+installer, or drop the folder on the window). The associations are declared
+in `bundle.fileAssociations` in `src-tauri/tauri.conf.json` with the
+*Alternate* rank, so UPb Studio never takes over a type another app already
+opens by default. macOS learns them on the first launch from Applications,
+like the link schemes.
+
 ## After installing: the first run
 
 The first launch asks where laicpmsdb, the Sessions tab, should live. Settings
