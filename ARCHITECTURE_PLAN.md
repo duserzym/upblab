@@ -65,6 +65,17 @@ graph between module objects.
    server" mode is the URL as before. The same service bundle runs headless
    on the lab server. ADR-0003 has the details, the first-run wizard and the
    rejected alternatives (Docker, a separate server app, PyInstaller, SQLite).
+10. **The workflow is a chain of bundles, and the shell only routes.**
+    `docs/WORKFLOW.md` (v1, 2026-11-03) is the cross-repository contract:
+    register samples and mounts in laicpmsdb; image and place spots in
+    grainatlas, which publishes an *atlas bundle* to the mount; run the laser
+    with spot names as labels; upload the session; open it in UPbRPy Studio
+    in *database mode* through `upbr://session/<id>?server=&code=`; reduce
+    locally; submit the *reduction bundle* back; results become attributes
+    on acquisitions and spots and show up on the images, the timeline and
+    Home. Files are the boundary at every step and standalone use of
+    grainatlas and Studio stays first class. The shell's parts are the
+    handoff code in its identity phase, the `upbr://` launch, and Home.
 
 ## 3. Cross-platform contract (applies to the shell and both modules)
 
@@ -123,7 +134,10 @@ module --bridge.open(url)--> shell resolver
   laicpmsdb://acquisition/<id>     -> Sessions tab, route /app/acquisitions/<id>
   laicpmsdb://session/<id>         -> Sessions tab, route /app/sessions/<id>
   grainatlas://project/<id>/spot/<id> -> Images tab, route /atlas/?project=<id>&spot=<id>
-  upbr://session/<id>              -> launch Studio with the export of that session
+  laicpmsdb://mount/<id>           -> Sessions tab, the mount page with its atlas view
+  laicpmsdb://ingest?path=...      -> Sessions tab, the ingest dialog (desktop only)
+  upbr://session/<id>?server=&code= -> launch Studio in database mode (docs/WORKFLOW.md section 4)
+  upbr://run/<id>?server=          -> launch Studio on the project of that run
   https://... (external)           -> system browser
 ```
 
@@ -169,8 +183,8 @@ over samples, sessions, spots and projects; recent items; module status
 | 1 | shell UI and tabs | tab bar, Home placeholder, Settings (server URL, Studio path, theme); Sessions tab shows a configured laicpmsdb; Images tab shows a bundled grainatlas build fetched by `modules.lock.json` |
 | 2 | bridge and links | `@lab/bridge` published and adopted by grainatlas and laicpmsdb; scheme registration on both OS; a spot click in Images opens the acquisition in Sessions |
 | 2b | local service (double-click release); shell side done 2026-11-03, waits for the laicpmsdb bundle | laicpmsdb publishes the per-OS service bundle with `laicpmsdb serve`, `bootstrap` and `/v1/health`; the shell bundles PostgreSQL 17 and the service, first-run wizard, start and stop with the app, no orphan processes after a forced kill; a clean macOS and a clean Windows machine show demo data in the Sessions tab within 30 s of a double-click |
-| 3 | identity | single sign-in, token in keychain, token handed to module webviews; web delivery at `/desk/` using the laicpmsdb session |
-| 4 | Studio hand-off | launch UPbRPy Studio with a session export; receive the reduction bundle through laicpmsdb; status shown on Home |
+| 3 | identity | single sign-in, token in keychain, token handed to module webviews; the Studio handoff code (`POST /v1/auth/handoff`) minted on demand; web delivery at `/desk/` using the laicpmsdb session |
+| 4 | Studio hand-off | `upbr://session/<id>?server=&code=` resolved to the installed Studio (`upbrpy-gui --open <url>`), Studio found by auto-detection or Settings; `upbr://run/<id>`; a session's reduction status (runs, preferred) and the latest published atlas on Home; end-to-end test on the fixture session per `docs/WORKFLOW.md` |
 | 5 | Home | cross-module timeline, search, recents, module status |
 | 6 | release | signed or documented installers for macOS and Windows, auto-update from GitHub Releases, Playwright smoke test on both OS |
 

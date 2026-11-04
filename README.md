@@ -22,6 +22,8 @@ lab server. Until laicpmsdb publishes its service bundle
 and release builds offer only "Lab server". Plan and roadmap:
 [ARCHITECTURE_PLAN.md](ARCHITECTURE_PLAN.md).
 
+The lab workflow and the hand-offs between the apps are in [docs/WORKFLOW.md](docs/WORKFLOW.md).
+
 ## Quick start
 
 Needs Node 20+, pnpm (`corepack enable`), Rust stable and the Tauri CLI
