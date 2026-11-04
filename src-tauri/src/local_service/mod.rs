@@ -7,6 +7,7 @@
 //! - `<app local data>/laicpmsdb/pg/`          PostgreSQL data directory
 //! - `<app local data>/laicpmsdb/postgresql/`  unpacked bundled binaries
 //! - `<app local data>/laicpmsdb/shell.pid`    which UPb Studio owns them
+//! - `<app local data>/laicpmsdb/service.pid`  the running service, for clean-up after a crash
 //! - `<app log dir>/postgres.log`, `laicpmsdb.log`
 //! - store `local-service.json`                 generated passwords and secret key
 
@@ -30,7 +31,7 @@ use tauri::{AppHandle, Emitter, EventTarget, Manager, Runtime};
 use tauri_plugin_store::StoreExt;
 
 use crate::SHELL_WEBVIEW;
-use pidfile::{assess_owner, OwnerState};
+use pidfile::{assess_owner, assess_service, OwnerState};
 use process::OsProbe;
 
 pub const EVENT_STATUS: &str = "local-service://status";
@@ -119,6 +120,7 @@ struct Paths {
     data: PathBuf,
     install: PathBuf,
     owner: PathBuf,
+    service_pid: PathBuf,
     logs: PathBuf,
     pg_log: PathBuf,
     svc_log: PathBuf,
@@ -134,6 +136,7 @@ fn paths<R: Runtime>(app: &AppHandle<R>) -> Result<Paths, String> {
         data: base.join("pg"),
         install: base.join("postgresql"),
         owner: base.join("shell.pid"),
+        service_pid: base.join("service.pid"),
         pg_log: logs.join("postgres.log"),
         svc_log: logs.join("laicpmsdb.log"),
         logs,
@@ -286,6 +289,13 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
     }
     std::fs::write(&p.owner, std::process::id().to_string()).map_err(|e| pg_err(e.to_string()))?;
 
+    // A service left by a shell that was killed together with its watchdog.
+    if let Some(pid) = assess_service(std::fs::read_to_string(&p.service_pid).ok().as_deref(), &OsProbe) {
+        log::warn!("[local-service] stopping laicpmsdb pid {pid} left running by a previous UPb Studio");
+        process::kill_tree(pid, SERVICE_GRACE);
+    }
+    let _ = std::fs::remove_file(&p.service_pid);
+
     // Locate the service before starting anything, so a missing one fails fast.
     let resource = app.path().resource_dir().ok();
     let dev = non_empty(cfg.dev_path.clone()).map(|d| service::expand_home(&d, home().as_deref()));
@@ -357,6 +367,7 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
     process::log_to(&mut cmd, &p.svc_log).map_err(|e| svc_err(e.to_string()))?;
     let svc = process::spawn(&mut cmd).map_err(|e| svc_err(format!("could not start laicpmsdb: {e}")))?;
     let svc_pid = svc.id();
+    let _ = std::fs::write(&p.service_pid, svc_pid.to_string());
     if let Some(g) = state.guard.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
         g.watch_service(svc_pid);
     }
@@ -424,6 +435,9 @@ fn stop_blocking<R: Runtime>(app: &AppHandle<R>) {
         process::terminate(&mut svc, SERVICE_GRACE);
         if let Some(g) = state.guard.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
             g.forget_service();
+        }
+        if let Some(p) = p.as_ref() {
+            let _ = std::fs::remove_file(&p.service_pid);
         }
     }
     if let (Some(mut pg), Some(p)) = (r.pg.take(), p.as_ref()) {

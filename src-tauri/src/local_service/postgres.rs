@@ -55,6 +55,12 @@ fn pg_command(bin_dir: &Path, name: &str) -> Command {
     cmd
 }
 
+/// Does `postgres --version` output name major version 17? Builds append
+/// their own suffix: "postgres (PostgreSQL) 17.11 (Homebrew)".
+fn is_major(version_output: &str) -> bool {
+    version_output.split_whitespace().any(|w| w == MAJOR || w.starts_with(&format!("{MAJOR}.")))
+}
+
 /// Find or install the binaries. `override_dir` (PG_BIN) wins.
 pub async fn ensure_binaries(install_root: &Path, override_dir: Option<&Path>) -> Result<Binaries, String> {
     if let Some(dir) = override_dir {
@@ -64,7 +70,7 @@ pub async fn ensure_binaries(install_root: &Path, override_dir: Option<&Path>) -
         }
         let out = Command::new(&postgres).arg("--version").output().map_err(|e| e.to_string())?;
         let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !v.split_whitespace().last().is_some_and(|x| x.starts_with(&format!("{MAJOR}."))) {
+        if !is_major(&v) {
             return Err(format!("PG_BIN must be PostgreSQL {MAJOR}, {} says {v:?}", postgres.display()));
         }
         return Ok(Binaries { bin_dir: dir.to_path_buf(), source: format!("PG_BIN {}", dir.display()) });
@@ -294,6 +300,15 @@ mod tests {
     fn executables_get_the_platform_suffix() {
         let p = exe(Path::new("bin"), "pg_ctl");
         assert_eq!(p.file_name().unwrap().to_string_lossy(), if cfg!(windows) { "pg_ctl.exe" } else { "pg_ctl" });
+    }
+
+    #[test]
+    fn version_check_accepts_vendor_suffixes() {
+        assert!(is_major("postgres (PostgreSQL) 17.11"));
+        assert!(is_major("postgres (PostgreSQL) 17.11 (Homebrew)"));
+        assert!(is_major("postgres (PostgreSQL) 17.2 (Postgres.app)"));
+        assert!(!is_major("postgres (PostgreSQL) 16.4"));
+        assert!(!is_major("postgres (PostgreSQL) 170.1"));
     }
 
     #[test]

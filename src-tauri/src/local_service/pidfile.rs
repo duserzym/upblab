@@ -9,6 +9,10 @@
 //!   UPb Studio holding it (a release app and a development build share the
 //!   app-data folder) must not have its PostgreSQL stopped by a second one.
 //!
+//! - `service.pid`, the laicpmsdb service (leader of its own process group
+//!   on macOS). Normally the watchdog or job object stops the service with
+//!   the shell; if both were killed, the next start stops the leftover.
+//!
 //! The decisions are pure functions over the file contents and a process
 //! probe, so they are tested without real processes.
 
@@ -109,6 +113,16 @@ pub fn assess_owner(text: Option<&str>, me: u32, probe: &dyn ProcessProbe) -> Ow
     } else {
         OwnerState::Free
     }
+}
+
+/// A service left running by a previous shell: alive and a Python process.
+pub fn assess_service(text: Option<&str>, probe: &dyn ProcessProbe) -> Option<u32> {
+    let pid = text?.trim().parse::<u32>().ok().filter(|p| *p > 1)?;
+    let python = probe.name(pid).is_some_and(|n| {
+        let n = n.rsplit(['/', '\\']).next().unwrap_or(&n).to_string();
+        n.starts_with("python")
+    });
+    (probe.alive(pid) && python).then_some(pid)
 }
 
 #[cfg(test)]
@@ -223,5 +237,18 @@ mod tests {
             OwnerState::Held { pid: 11 }
         );
         assert_eq!(assess_owner(Some("11"), 10, &probe(&[(11, "upbstudio.exe")])), OwnerState::Held { pid: 11 });
+    }
+
+    #[test]
+    fn leftover_service() {
+        assert_eq!(assess_service(None, &probe(&[])), None);
+        assert_eq!(assess_service(Some("42"), &probe(&[])), None, "gone");
+        assert_eq!(assess_service(Some("42"), &probe(&[(42, "zsh")])), None, "PID reused");
+        assert_eq!(
+            assess_service(Some("42"), &probe(&[(42, "/opt/homebrew/cellar/python@3.14/3.14.6/frameworks/python.framework/versions/3.14/resources/python.app/contents/macos/python")])),
+            Some(42)
+        );
+        assert_eq!(assess_service(Some("42\n"), &probe(&[(42, "c:\\app\\laicpmsdb-service\\python\\python.exe")])), Some(42));
+        assert_eq!(assess_service(Some("1"), &probe(&[(1, "python")])), None, "never init");
     }
 }

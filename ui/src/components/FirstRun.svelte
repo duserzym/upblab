@@ -242,7 +242,9 @@
   .choice:hover:not([disabled]) { border-color: var(--accent); }
   .choice[disabled] { opacity: 0.55; cursor: not-allowed; }
   .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-3); }
-  .check { align-items: flex-start; }
+  .check { align-items: flex-start; flex-wrap: nowrap; }
+  form h3 { margin: var(--space-2) 0 0; }
+  form h3 + p { margin: 0; }
   .check input { margin-top: 0.2rem; }
   .progress { margin: 0; padding-left: 1.2rem; color: var(--text-muted); }
   .progress li.done { color: var(--ok); }

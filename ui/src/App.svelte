@@ -20,7 +20,8 @@
   ];
 
   // Desktop with no mode stored yet: the first-run wizard (ADR-0003).
-  const firstRun = $derived(isDesktop && settings.loaded && settings.mode === '');
+  // Waits for the host's status, which says whether "This computer" can run.
+  const firstRun = $derived(isDesktop && settings.loaded && localService.initialised && settings.mode === '');
 
   onMount(async () => {
     await settings.load();
@@ -106,7 +107,7 @@
   <main class="content">
     {#if firstRun}
       <FirstRun />
-    {:else if settings.loaded}
+    {:else if settings.loaded && (settings.mode !== '' || !isDesktop)}
       <Home active={shell.view === 'home'} />
       <Images active={shell.view === 'images'} />
       <Sessions active={shell.view === 'sessions'} />

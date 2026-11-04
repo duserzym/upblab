@@ -181,6 +181,26 @@ pub fn process_name(pid: u32) -> Option<String> {
     }
 }
 
+/// Stop a process that is not our child, with its process group on macOS
+/// (a service left by a previous shell): SIGTERM, then SIGKILL after `grace`.
+pub fn kill_tree(pid: u32, grace: Duration) {
+    #[cfg(unix)]
+    {
+        let pg = -(pid as libc::pid_t);
+        unsafe { libc::kill(pg, libc::SIGTERM) };
+        let until = Instant::now() + grace;
+        while Instant::now() < until && unsafe { libc::kill(pg, 0) } == 0 {
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        unsafe { libc::kill(pg, libc::SIGKILL) };
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = grace;
+        kill_pid(pid);
+    }
+}
+
 /// Signal a process that is not our child (an orphaned postmaster).
 pub fn kill_pid(pid: u32) {
     #[cfg(unix)]

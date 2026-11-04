@@ -9,6 +9,8 @@ const SETTLED: LocalStatus['phase'][] = ['ready', 'failed', 'stopped'];
 
 class LocalService {
   status = $state<LocalStatus | null>(null);
+  /** The first status has been asked for (or the web delivery has none). */
+  initialised = $state(!isDesktop);
   private listening = false;
   private waiters: ((s: LocalStatus) => void)[] = [];
 
@@ -28,6 +30,8 @@ class LocalService {
       this.status = await localServiceApi.status();
     } catch (err) {
       console.warn('[local-service] status unavailable', err);
+    } finally {
+      this.initialised = true;
     }
   }
 
