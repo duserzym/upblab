@@ -1,4 +1,6 @@
-# Build and test UPb Studio on macOS (arm64) and Windows (x86-64) on every push
+# Pre-release: runs on v* tags and by hand only; push triggers return at the first release (see README).
+#
+# Build and test UPb Studio on macOS (arm64) and Windows (x86-64)
 # (cross-platform contract, docs/cross-platform-contract.md). Installers are
 # unsigned and uploaded as workflow artifacts; docs/installing.md explains the
 # Gatekeeper and SmartScreen steps. No release is created here.
@@ -6,8 +8,7 @@ name: build
 
 on:
   push:
-    branches: [main]
-  pull_request:
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:

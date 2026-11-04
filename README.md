@@ -70,6 +70,11 @@ builds the release app and installers into `src-tauri/target/release/bundle/`
 unsigned; [docs/installing.md](docs/installing.md) covers the Gatekeeper and
 SmartScreen steps.
 
+CI (`.github/workflows/build.yml`, macOS and Windows): until the first
+release it runs only on `v*` tags and by hand, not on push or pull requests.
+Run it with `gh workflow run build`; the installers are kept as workflow
+artifacts for 14 days.
+
 Without `make` (Windows PowerShell): `pnpm install`, `pnpm --filter @lab/bridge build`,
 `node scripts/fetch-modules.mjs`, then `cargo tauri dev` or `cargo tauri build`.
 
