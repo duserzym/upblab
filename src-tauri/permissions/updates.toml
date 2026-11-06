@@ -1,0 +1,6 @@
+# The app has an explicit command ACL (build.rs), so its updater wrappers need
+# an app permission even though the page never invokes updater plugin commands.
+[[permission]]
+identifier = "allow-updates"
+description = "Check, download and install UPb Studio updates from the shell."
+commands.allow = ["update_check", "update_download", "update_install", "update_status", "update_supported"]

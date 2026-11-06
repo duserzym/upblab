@@ -26,6 +26,9 @@ export interface SettingsData {
   lastTab: string;
   reviewScope: string;
   reviewSplit: boolean;
+  updateChannel: 'stable' | 'beta';
+  updateAuto: boolean;
+  updateLastCheck: number;
 }
 
 export const DEFAULT_DATA_ROOT = '~/laicpmsdb';
@@ -42,6 +45,9 @@ export const DEFAULTS: SettingsData = {
   lastTab: 'home',
   reviewScope: '',
   reviewSplit: false,
+  updateChannel: 'stable',
+  updateAuto: true,
+  updateLastCheck: 0,
 };
 
 const FILE = 'settings.json';
@@ -118,6 +124,9 @@ class Settings {
   lastTab = $state(DEFAULTS.lastTab);
   reviewScope = $state(DEFAULTS.reviewScope);
   reviewSplit = $state(DEFAULTS.reviewSplit);
+  updateChannel = $state<SettingsData['updateChannel']>(DEFAULTS.updateChannel);
+  updateAuto = $state(DEFAULTS.updateAuto);
+  updateLastCheck = $state(DEFAULTS.updateLastCheck);
   loaded = $state(false);
   /** The OS asks for dark (only matters for the System choice). */
   systemDark = $state(prefersDark());
@@ -148,6 +157,9 @@ class Settings {
       this.lastTab = data.lastTab;
       this.reviewScope = typeof data.reviewScope === 'string' ? data.reviewScope : '';
       this.reviewSplit = data.reviewSplit === true;
+      this.updateChannel = data.updateChannel === 'beta' ? 'beta' : 'stable';
+      this.updateAuto = typeof data.updateAuto === 'boolean' ? data.updateAuto : true;
+      this.updateLastCheck = Number.isFinite(data.updateLastCheck) && data.updateLastCheck > 0 ? data.updateLastCheck : 0;
     } catch (err) {
       console.warn('[settings] could not load, using defaults', err);
     }
@@ -174,6 +186,9 @@ class Settings {
       lastTab: this.lastTab,
       reviewScope: this.reviewScope,
       reviewSplit: this.reviewSplit,
+      updateChannel: this.updateChannel,
+      updateAuto: this.updateAuto,
+      updateLastCheck: this.updateLastCheck,
     };
   }
 }

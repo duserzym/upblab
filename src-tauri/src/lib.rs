@@ -17,6 +17,7 @@ mod menu;
 mod modules;
 mod probe;
 mod studio;
+mod updater;
 
 use tauri::webview::WebviewBuilder;
 use tauri::window::{Color, WindowBuilder};
@@ -65,12 +66,19 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::UpdateState::default())
         .manage(modules::ModuleState::default())
         .manage(files::Files::default())
         .manage(bridge::Commands::default())
         .manage(auth::Identity::default())
         .manage(local_service::LocalService::default())
         .invoke_handler(tauri::generate_handler![
+            updater::update_check,
+            updater::update_download,
+            updater::update_install,
+            updater::update_status,
+            updater::update_supported,
             modules::module_open,
             modules::module_bounds,
             modules::module_hide,

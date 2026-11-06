@@ -138,10 +138,10 @@ builds the release app and installers into `src-tauri/target/release/bundle/`
 unsigned; [docs/installing.md](docs/installing.md) covers the Gatekeeper and
 SmartScreen steps.
 
-CI (`.github/workflows/build.yml`, macOS and Windows): until the first
-release it runs only on `v*` tags and by hand, not on push or pull requests.
-Run it with `gh workflow run build`; the installers are kept as workflow
-artifacts for 14 days.
+CI (`.github/workflows/build.yml`, macOS and Windows) runs only on `v*` tags
+and by hand. Tag builds create a draft release with installers and signed
+updates; publish the draft to make it available in the app. Manual runs
+(`gh workflow run build`) keep installers as workflow artifacts for 14 days.
 
 Without `make` (Windows PowerShell): `pnpm install`, `pnpm --filter @lab/bridge build`,
 `node scripts/fetch-modules.mjs`, then `cargo tauri dev` or `cargo tauri build`.
@@ -161,6 +161,24 @@ build has no bundled service.
 no release yet, so the lock points at its local development build
 (`../grainatlas/ui/dist`); build that in the grainatlas repository, run
 `make fetch-modules` here and restart `make dev`.
+
+## Updates
+
+The header chip shows the version and whether an update is available or ready.
+Click it for **Settings > Updates**, including this build's module versions,
+**Check now**, automatic downloads and the **Stable / Beta** channel choice.
+When a download is ready, **Restart to update** installs it.
+
+The owner configures signing once (generates the key, writes the public key
+and sets the GitHub secret), then checks the version copies:
+
+```bash
+pnpm updater:setup
+make check-version
+```
+
+Back up `~/.tauri/upbstudio-updater.key`. See
+[docs/in-app-updates.md](docs/in-app-updates.md) for setup and releases.
 
 ## Layout
 

@@ -10,6 +10,7 @@
   "scripts": {
     "build:bridge": "pnpm --filter @lab/bridge build",
     "test": "pnpm -r test && node --test \"scripts/*.test.mjs\"",
+    "updater:setup": "node scripts/setup-updater.mjs",
     "fetch-modules": "node scripts/fetch-modules.mjs"
   }
 }

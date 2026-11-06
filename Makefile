@@ -59,3 +59,11 @@ e2e: ## Walk every shell screen at 1440x900 and 1280x800 in Chromium and WebKit 
 clean: ## Remove build outputs (keeps node_modules)
 	rm -rf ui/dist bridge/dist ui/public/modules
 	cargo clean --manifest-path src-tauri/Cargo.toml
+
+.PHONY: updater-setup
+updater-setup: ## Generate the updater signing key and configure the repository (owner only)
+	$(PNPM) updater:setup
+
+.PHONY: check-version
+check-version: ## Check that all four shell version copies agree
+	@node scripts/check-version.mjs

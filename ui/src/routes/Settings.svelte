@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UpdatesPanel from '../components/UpdatesPanel.svelte';
   import { normaliseServerUrl } from '../lib/links';
   import { localService } from '../lib/localService.svelte';
   import { isDesktop, localServiceApi, resetWindowLayout, studioStatus, type LocalLogs, type StudioStatus } from '../lib/platform';
@@ -271,6 +272,10 @@
       {/if}
       <p class="faint small">Delivery: {isDesktop ? 'desktop (Tauri)' : 'web'}.</p>
     </div>
+    <section class="glass panel stack" id="updates" data-testid="updates-panel">
+      <h3>Updates</h3>
+      <UpdatesPanel />
+    </section>
   </div>
 </section>
 

@@ -7,6 +7,8 @@
   import Review from './routes/Review.svelte';
   import Settings from './routes/Settings.svelte';
   import FirstRun from './components/FirstRun.svelte';
+  import VersionChip from './components/VersionChip.svelte';
+  import { startScheduler } from './lib/updater.svelte';
   import AccountDialog from './components/AccountDialog.svelte';
   import { identity } from './lib/identity.svelte';
   import { localService } from './lib/localService.svelte';
@@ -47,6 +49,7 @@
 
   onMount(async () => {
     await settings.load();
+    startScheduler();
     const last = settings.lastTab as View;
     if (tabs.some((t) => t.id === last)) shell.view = last;
     if (isDesktop) {
@@ -127,6 +130,7 @@
       {/each}
     </div>
     <span class="spacer"></span>
+    <VersionChip />
     {#if opener.dragging}
       <span class="drop-hint" role="status">Drop to open: images go to Images, Qtegra exports to Sessions</span>
     {/if}

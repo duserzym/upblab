@@ -1,12 +1,17 @@
 # Installing UPb Studio
 
+Releases are on the [Releases page](https://github.com/duserzym/upbstudio/releases).
+Download the macOS `.dmg` or Windows `.msi` / `-setup.exe` there. Later versions
+install from inside UPb Studio: click the version chip in the header, or open
+Settings > Updates, then Check now and Restart to update when ready.
+
 Until the lab has an Apple Developer ID and a Windows code-signing certificate,
 UPb Studio installers are **unsigned** (macOS builds are ad-hoc signed only).
 Both operating systems warn before the first launch. The steps below are the
 expected, one-time way past those warnings; they do not lower security for
 other apps.
 
-Download the installer for your system from the latest successful run of the
+Manual test builds are also available from the latest successful run of the
 [build workflow](../.github/workflows/build.yml) (Actions tab → build → the
 run → *Artifacts*): `upbstudio-macos-arm64` holds the `.dmg`,
 `upbstudio-windows-x64` holds the `.msi` and the NSIS `-setup.exe`. Each
