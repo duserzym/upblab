@@ -209,3 +209,58 @@ Playwright for `focus-spot` and `lab.spot.selected` through the web shell.
 Then the Tauri app against the scratch laicpmsdb with Run1 and the demo
 or second project: concordia point to the spot in the CL image, and back.
 Screenshots in `docs/screenshots/`.
+
+## 4. Walkthrough with the lab-visit data, 2026-11-06
+
+Desktop app (`cargo tauri dev`, macOS) against a scratch copy of the local
+laicpmsdb: the VISIT-2026 database and data root copied, served on
+`127.0.0.1:8001`; Yiming's own database on `:8000` was not touched.
+Zircon_demoA_Run1 and Run2 were reduced headlessly with
+`laicpmsdb/scripts/reduce_session_bundle.py` (UPbRPy defaults and automatic
+windows, not the reviewed reductions still open in UPbRPy Studio) and
+imported; Run1's run was marked preferred, Run2's left as the newest
+non-preferred run. The Demo_S_150X atlas was built from the TM4000
+package and the saved `Demo_S_150X.grainatlas/project.json` with
+grainatlas's own wasm core (as its Publish button does) and published to the
+Demo_S_150X mount: all 234 spots matched the existing physical spots
+unchanged.
+
+1. Review opened on the last scope; Run2 showed "Newest run, not
+   preferred". Scope Demo_S_150X (mount): 9 samples, Concordia around
+   1000 to 1200 Ma.
+2. Click on the discordant SampleA_S_157 ellipse (side by side, 1480 px):
+   grainatlas opened the published atlas read-only from the server, switched
+   to area SampleA, selected and centred SampleA_S_157 and flashed it; it reported
+   `lab.spot.selected` with `via: shell` and Review did not answer
+   ([review_concordia_to_image_1480x920.png](screenshots/review_concordia_to_image_1480x920.png)).
+3. A spot picked in grainatlas's spot list (SampleA_S_145, later SampleB_S_120) was
+   selected in Review: tree scrolled to it, details and plot ring updated; the
+   values agree with grainatlas's spot panel
+   ([review_image_to_review_1480x920.png](screenshots/review_image_to_review_1480x920.png),
+   [review_split_1480x920.png](screenshots/review_split_1480x920.png)).
+4. Depth profile of SampleA_S_145: stored 206Pb/238U and 207Pb/206Pb dates per
+   sweep with 2se bands
+   ([review_depth_profile_1480x920.png](screenshots/review_depth_profile_1480x920.png)).
+   Geochemistry U against Th/U, and the CI-normalised REE patterns
+   ([review_ree_1280x800.png](screenshots/review_ree_1280x800.png)).
+5. Window at 1280 × 800: three columns, no side-by-side toggle
+   ([review_concordia_1280x800.png](screenshots/review_concordia_1280x800.png)).
+   Double-click on SampleB_S_123 switched to Images centred on that spot
+   ([review_show_in_images_1280x800.png](screenshots/review_show_in_images_1280x800.png));
+   SampleB_S_122 clicked on the canvas there was selected in Review when its tab
+   was shown again.
+
+Fixed during the walkthrough: axes followed the whole Concordia curve and
+every ellipse (one poorly measured spot squashed the rest); the axis label
+formatter threw on uPlot's null ticks; log axes drew every minor gridline;
+unmeasured spots added an empty "No sample" legend entry; a hover box stayed
+when the pointer left for the native Images webview; detail values printed
+six significant figures and no space before ±; the selected point was lost
+inside dense clusters.
+
+Not covered: the web delivery against a real server (Playwright covers it
+with fixtures), Windows, a session whose spots are on a mount with no
+published atlas (grainatlas then waits on its Open screen for the package,
+which was exercised only by grainatlas's Playwright spec), and grainatlas's
+own layout in a 740 px half window (its top bar and right panel are clipped;
+grainatlas's to fix).

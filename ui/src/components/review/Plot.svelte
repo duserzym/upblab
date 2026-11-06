@@ -21,7 +21,8 @@
   let width = $state(400), height = $state(300);
   let hovered = $state<ReviewSpot | null>(null);
   let tooltip = $state({ x: 0, y: 0 });
-  const samples = $derived([...new Set(marks.map(m => m.spot.sampleName))]);
+  $effect(() => { void selected; hovered = null; });
+  const samples = $derived([...new Set(marks.filter(m => m.point || m.polygon?.length || m.path?.some(Boolean)).map(m => m.spot.sampleName))]);
   $effect(() => {
     if (!host)
       return;
@@ -152,14 +153,22 @@
             ctx.beginPath();
             ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI);
             ctx.stroke();
+            // A dark outer ring keeps the selection visible inside a dense cluster.
+            ctx.beginPath();
+            ctx.arc(x, y, 10 * dpr, 0, 2 * Math.PI);
+            ctx.strokeStyle = axis;
+            ctx.lineWidth = 2 * dpr;
+            ctx.stroke();
           }
         }
       }
       ctx.restore();
     };
+    // Log axes: label and grid only whole decades (uPlot's default draws every minor line).
+    const decades = (_u: uPlot, splits: number[]) => splits.map(v => v != null && v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9 ? v : null);
     const plot = new uPlot({ width, height, series: [{}, { show: false }], scales: { x: { time: false, distr: logX ? 3 : 1, range: () => xr }, y: { distr: logY ? 3 : 1, range: () => yr } },
-      axes: [{ label: xLabel, labelSize: 20, size: 42, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(xTicks.length ? { splits: () => xTicks.map((_, i) => i), values: (_u: uPlot, vals: number[]) => vals.map(v => xTicks[v] ?? '') } : {}) },
-        { label: yLabel, labelSize: 18, size: 64, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', values: (_u, vals) => vals.map(v => v == null || !Number.isFinite(v) ? '' : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 0.001) ? v.toExponential(1) : Number(v.toPrecision(4)).toString()) }],
+      axes: [{ label: xLabel, labelSize: 20, size: 42, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logX && !xTicks.length ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), ...(xTicks.length ? { splits: () => xTicks.map((_, i) => i), values: (_u: uPlot, vals: number[]) => vals.map(v => xTicks[v] ?? '') } : {}) },
+        { label: yLabel, labelSize: 18, size: 64, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logY ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), values: (_u, vals) => vals.map(v => v == null || !Number.isFinite(v) ? '' : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 0.001) ? v.toExponential(1) : Number(v.toPrecision(4)).toString()) }],
       legend: { show: false }, cursor: { show: false }, select: { show: false, left: 0, top: 0, width: 0, height: 0 }, hooks: { draw: [draw] },
     }, [[xr[0], xr[1]], [yr[0], yr[1]]], host);
     function hit(event: MouseEvent): ReviewSpot | null {
@@ -191,10 +200,12 @@
       onselect(spot); };
     const move = (e: MouseEvent) => { hovered = hit(e); const r = host!.getBoundingClientRect(); tooltip = { x: Math.max(0, Math.min(width - 190, e.clientX - r.left + 8)), y: Math.max(0, e.clientY - r.top - 45) }; };
     const leave = () => { hovered = null; };
+    window.addEventListener('blur', leave);
+    document.addEventListener('mouseleave', leave);
     plot.over.addEventListener('click', click);
     plot.over.addEventListener('mousemove', move);
     plot.over.addEventListener('mouseleave', leave);
-    return () => { plot.destroy(); };
+    return () => { window.removeEventListener('blur', leave); document.removeEventListener('mouseleave', leave); plot.destroy(); };
   });
 </script>
 <div class="chart">

@@ -6,7 +6,15 @@
   const run = $derived(spot?.runId ? review.runInfo[spot.runId] : null);
   const metrics = ['206Pb/238U_age', '207Pb/206Pb_age', '206Pb/238U', '207Pb/206Pb', '207Pb/235U', '238U/206Pb', 'U', 'Th', 'Pb', 'Th/U', 'disc%'];
   const names: Record<string, string> = { '206Pb/238U_age': '206Pb/238U date (Ma)', '207Pb/206Pb_age': '207Pb/206Pb date (Ma)', 'disc%': 'Discordance (%)', 'U': 'U (ppm)', 'Th': 'Th (ppm)', 'Pb': 'Pb (ppm)' };
-  const fmt = (v: unknown) => { const n = number(v); return n === null ? '—' : Number(n.toPrecision(6)).toString(); };
+  const fmt = (v: unknown) => { const n = number(v); return n === null ? '—' : Number(n.toPrecision(4)).toString(); };
+  /** A value with its 2se, both rounded to two significant figures of the uncertainty. */
+  const pair = (v: unknown, e: unknown) => {
+    const n = number(v), u = number(e);
+    if (n === null) return '—';
+    if (u === null || u <= 0) return fmt(n);
+    const d = Math.min(8, Math.max(0, 1 - Math.floor(Math.log10(u))));
+    return `${n.toFixed(d)} ± ${u.toFixed(d)} (2se)`;
+  };
 </script>
 {#if spot}
   <h2>{spot.label}</h2>
@@ -23,7 +31,7 @@
     <p class="small muted">{spot.date?.method??'No stored method'} · 2σ (2se) · {spot.date?.passes===true?'pass':spot.date?.passes===false?'does not pass':'pass not recorded'}</p>
     <dl class="grid-kv small">
       {#each metrics as metric}
-        <dt>{names[metric]??metric}</dt><dd>{fmt(spot.values[metric])}{#if number(spot.values[metric+'_2e'])!==null} ± {fmt(spot.values[metric+'_2e'])} (2se){/if}</dd>
+        <dt>{names[metric]??metric}</dt><dd>{pair(spot.values[metric], spot.values[metric+'_2e'])}</dd>
       {/each}
     </dl>
     <h3>Flags</h3>

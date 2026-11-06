@@ -12,8 +12,10 @@
   const columns = $derived(numericColumns(rows));
   const elements = Object.keys(CI) as (keyof typeof CI)[];
   const marks = $derived(rows.flatMap<Mark>(spot => {
-    if (ree)
-      return [{ spot, path: elements.map((e, i) => { const v = number(spot.values[e]); return v !== null && v > 0 ? [i, v / CI[e]] as Point : null; }) }];
+    if (ree) {
+      const path = elements.map((e, i) => { const v = number(spot.values[e]); return v !== null && v > 0 ? [i, v / CI[e]] as Point : null; });
+      return path.some(Boolean) ? [{ spot, path }] : [];
+    }
     const a = number(spot.values[x]), b = number(spot.values[y]);
     return a === null || b === null ? [] : [{ spot, point: [a, b] as Point }];
   }));
