@@ -44,6 +44,13 @@ describe('shell.handleLink', () => {
     expect(shell.view).toBe('home');
   });
 
+  it('loads an Images target without switching away from Review', () => {
+    shell.show('review');
+    shell.load('images', '/atlas/?project=p&spot=s');
+    expect(shell.view).toBe('review');
+    expect(shell.targets.images?.url).toContain('project=p&spot=s');
+  });
+
   it('switches to Sessions with the hash route of an acquisition', async () => {
     expect(await shell.handleLink(`laicpmsdb://acquisition/${A}`, 'os')).toBe(true);
     expect(shell.view).toBe('sessions');

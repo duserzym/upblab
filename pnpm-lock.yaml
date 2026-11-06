@@ -43,6 +43,9 @@ importers:
       '@tauri-apps/plugin-store':
         specifier: ^2.5.0
         version: 2.5.0
+      uplot:
+        specifier: ^1.6.32
+        version: 1.6.32
     devDependencies:
       '@playwright/test':
         specifier: 1.64.1
@@ -951,6 +954,9 @@ packages:
   ufo@1.6.4:
     resolution: {integrity: sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA==}
 
+  uplot@1.6.32:
+    resolution: {integrity: sha512-KIMVnG68zvu5XXUbC4LQEPnhwOxBuLyW1AHtpm6IKTXImkbLgkMy+jabjLgSLMasNuGGzQm/ep3tOkyTxpiQIw==}
+
   vite@8.3.5:
     resolution: {integrity: sha512-z1YpjieJ9g0ebTmQpLBv/oq9E3F9EIlOe+7LahW8SrE3LTiG3udBRUXQOlYXP9b+IC2q2phHeVxj9xGlw34OEQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1728,6 +1734,8 @@ snapshots:
   typescript@6.0.3: {}
 
   ufo@1.6.4: {}
+
+  uplot@1.6.32: {}
 
   vite@8.3.5(esbuild@0.28.2):
     dependencies:

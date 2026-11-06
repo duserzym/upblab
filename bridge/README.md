@@ -139,8 +139,8 @@ are ignored.
 import { onCommand, notify, SHELL_EVENTS, type BridgeCommand } from '@lab/bridge';
 
 const stop = onCommand(async (command: BridgeCommand) => {
-  // focus-spot:  { type, project, spot, flash?: boolean, via?: string }
-  // focus-grain: { type, project, grain, spot?: string, flash?: boolean, via?: string }
+  // focus-spot:  { type, project, spot, flash?: boolean, via?: string, server?: string }
+  // focus-grain: { type, project, grain, spot?: string, flash?: boolean, via?: string, server?: string }
   await focus(command);
 });
 await notify({
@@ -154,7 +154,9 @@ await notify({
 or the grain label stored by laicpmsdb (`<area_id>/<grain_number>`). Each id
 matches `^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`; a grain label permits one `/`
 between two such parts. `flash` requests a visual flash; `via` names the
-sender, for example `'review'`.
+sender, for example `'review'`. Both commands optionally carry `server`, an
+HTTP or HTTPS URL of at most 2048 characters, so grainatlas can open a
+published atlas by id. Older callers may omit it; older modules can ignore it.
 
 For grainatlas, `focus-spot` opens the project if needed (from the recent list
 or the published atlas, as a deep link does), selects the spot, centres the

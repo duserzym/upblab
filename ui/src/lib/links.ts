@@ -18,7 +18,7 @@
 //
 // Anything else is refused; the caller logs the refusal.
 
-export type TabId = 'home' | 'images' | 'sessions' | 'reduce';
+export type TabId = 'home' | 'images' | 'sessions' | 'review' | 'reduce';
 export type ModuleTab = 'images' | 'sessions';
 
 export const SCHEMES = ['laicpmsdb', 'grainatlas', 'upbr'] as const;

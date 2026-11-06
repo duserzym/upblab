@@ -5,7 +5,9 @@
 
 export interface FakeOptions {
   /** Stored settings (plugin-store); mode '' shows the first-run wizard. */
-  store: Record<string, string>;
+  store: Record<string, unknown>;
+  fixtures?: Record<string, unknown>;
+  signedIn?: boolean;
   /** `files_scan` answers, by the joined paths. */
   scans?: Record<string, unknown>;
 }
@@ -66,8 +68,11 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'studio_status':
           return { found: false, path: null, error: 'UPbRPy Studio is not installed' };
         case 'auth_restore':
-          return { signedIn: false, account: null, offline: false };
+          return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { username: 'demo', display_name: 'Demo analyst' } : null, offline: false };
+        case 'module_command':
+          return false; // exercises loading the target without leaving Review
         case 'api_get':
+          if (opts.fixtures && Object.prototype.hasOwnProperty.call(opts.fixtures, args!.path as string)) return { status: 200, body: opts.fixtures[args!.path as string] };
           return args!.path === '/v1/auth/providers' ? { status: 200, body: { orcid: true, google: true } } : { status: 401, body: {} };
         case 'files_take_opened':
           return [];

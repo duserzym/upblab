@@ -6,6 +6,7 @@
   import { fromFileList } from '../lib/drop';
   import { opener } from '../lib/opener.svelte';
   import { settings } from '../lib/settings.svelte';
+  import { review } from '../lib/review.svelte';
   import { shell } from '../lib/shell.svelte';
 
   let { active }: { active: boolean } = $props();
@@ -75,7 +76,7 @@
       <h1>UPb Studio</h1>
       <p class="muted">
         One window for the LA-ICP-MS workflow: grain images in <strong>Images</strong>, sessions and data in
-        <strong>Sessions</strong>, reduction in <strong>Reduce</strong>. Below: your recent sessions with their reductions,
+        <strong>Sessions</strong>, stored results in <strong>Review</strong>, reduction in <strong>Reduce</strong>. Below: your recent sessions with their reductions,
         and the images of your mounts. The cross-module timeline and search arrive in a later phase.
       </p>
     </div>
@@ -173,7 +174,12 @@
                     {:else}<span class="faint"> · none preferred</span>{/if}
                   {/if}
                 </td>
-                <td class="actions"><button class="btn" title="Open this session in UPbRPy Studio" onclick={() => go(`upbr://session/${row.session.id}`)}>Reduce</button></td>
+                <td class="actions">
+                  {#if row.runs && row.runs > 0}
+                    <button class="btn" onclick={() => { shell.show('review'); void review.open({ kind: 'session', id: row.session.id }); }}>Review</button>
+                  {/if}
+                  <button class="btn" title="Open this session in UPbRPy Studio" onclick={() => go(`upbr://session/${row.session.id}`)}>Reduce</button>
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -205,6 +211,7 @@
                     {:else}{row.atlas.name ?? row.atlas.projectId}{row.atlas.version != null ? ` · v${row.atlas.version}` : ''}{row.atlas.publishedAt ? ` · ${day(row.atlas.publishedAt)}` : ''}{/if}
                   </td>
                   <td class="actions">
+                    <button class="btn" onclick={() => { shell.show('review'); void review.open({ kind: 'mount', id: row.mount.id }); }}>Review</button>
                     {#if row.atlas && row.atlas !== 'error'}
                       <button class="btn" onclick={() => go(`grainatlas://project/${(row.atlas as { projectId: string }).projectId}`)}>Open images</button>
                     {/if}
@@ -274,7 +281,8 @@
   .card-btn:hover { border-color: var(--accent); }
   .grow { flex: 1; min-width: 12rem; margin: 0; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .actions { text-align: right; white-space: nowrap; }
+  .actions { text-align: right; white-space: normal; }
+  .actions .btn { margin: 2px 0; white-space: nowrap; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
   .linkish:hover { text-decoration: underline; }
   h2 { margin: 0; }

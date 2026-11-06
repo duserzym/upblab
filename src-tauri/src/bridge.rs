@@ -131,8 +131,18 @@ fn valid_grain(value: Option<&Value>) -> bool {
     })
 }
 
+fn valid_server(value: &Value) -> bool {
+    value.as_str().is_some_and(|server| {
+        server.chars().count() <= 2048
+            && !server.chars().any(|c| c <= ' ')
+            && url::Url::parse(server)
+                .is_ok_and(|u| matches!(u.scheme(), "http" | "https") && u.host_str().is_some())
+    })
+}
+
 fn valid_command(command: &Value) -> bool {
-    if !valid_id(command.get("project"))
+    if command.get("server").is_some_and(|v| !valid_server(v))
+        || !valid_id(command.get("project"))
         || command.get("flash").is_some_and(|v| !v.is_boolean())
         || command.get("via").is_some_and(|v| !v.is_string())
     {
@@ -244,6 +254,33 @@ mod tests {
             assert!(!valid_command(&command));
         }
         assert!(!valid_command(&Value::Null));
+    }
+
+    #[test]
+    fn commands_validate_optional_published_atlas_server() {
+        for kind in ["focus-spot", "focus-grain"] {
+            let mut command = json!({"type": kind, "project": "p", "spot": "s", "grain": "g"});
+            for server in ["http://localhost:8000", "https://lab.example/atlas"] {
+                command["server"] = json!(server);
+                assert!(valid_command(&command));
+            }
+            command["server"] = json!(format!("https://h/{}", "x".repeat(2038)));
+            assert!(valid_command(&command));
+            command["server"] = json!(format!("https://h/{}", "x".repeat(2040)));
+            assert!(!valid_command(&command));
+            for server in [
+                "",
+                "file:///tmp/a",
+                "https://",
+                "https://h/ a",
+                "https://h/\n",
+            ] {
+                command["server"] = json!(server);
+                assert!(!valid_command(&command));
+            }
+            command["server"] = Value::Null;
+            assert!(!valid_command(&command));
+        }
     }
 
     #[test]

@@ -11,6 +11,7 @@ sweep and reduced result.
 | Home | the shell | Open folder… / Open files… (anything dropped on the window goes to the right tab by itself), module status, your sessions with their reductions (Reduce opens Studio), mounts with their current atlas, link box and log (timeline and search later) |
 | Images | grainatlas | pinned static build bundled into the app (`modules.lock.json`) |
 | Sessions | laicpmsdb | `/app/` in a native webview, from a lab server or from the laicpmsdb the app runs on this computer |
+| Review | the shell | stored results by session or mount, plots and spot details linked to Images |
 | Reduce | UPbRPy Studio | launched as its own application with a `upbr://` link and a one-time sign-in code |
 
 Status: roadmap phases 0 and 1 done, phase 2b (ADR-0003, "This computer"
@@ -34,6 +35,19 @@ where it was left, fitted to the screen. Plan and roadmap:
 [ARCHITECTURE_PLAN.md](ARCHITECTURE_PLAN.md).
 
 The lab workflow and the hand-offs between the apps are in [docs/WORKFLOW.md](docs/WORKFLOW.md).
+
+## Review
+
+Review reads laicpmsdb's stored results by session and run, or by mount,
+including spots not measured yet. It shows a sample and grain tree, Concordia
+ellipses, geochemistry and CI-normalised REE patterns, stored depth profiles
+and spot details. Selecting a result focuses its image spot; selecting a spot
+in Images selects its result. Review stays open while browsing; **Show in
+Images**, Enter or a double-click opens Images. At widths of 1440 CSS px or
+more, **Side by side** shows the existing Images surface beside Review.
+Scope and split choices are remembered. These are read-only displays; the
+shell does no data reduction. Home links each reduced session and mount to
+Review. Tabs use Ctrl/⌘ 1–5, with Review fourth and Reduce fifth.
 
 ## Quick start
 

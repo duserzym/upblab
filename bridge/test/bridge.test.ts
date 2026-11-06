@@ -340,6 +340,13 @@ describe('commands (protocol v3)', () => {
     expect(isBridgePush({ tag: MESSAGE_TAG, v: 3, push: 'future' })).toBe(false);
   });
 
+  it('validates optional published atlas servers on both focus commands', () => {
+    for (const command of [first, latest]) {
+      for (const server of ['http://localhost:8000', 'https://lab.example/atlas', 'https://h/' + 'x'.repeat(2038)]) expect(isBridgeCommand({ ...command, server })).toBe(true);
+      for (const server of [null, true, '', 'file:///tmp/a', 'javascript:alert(1)', 'https://', 'https://h/ a', 'https://h/\n', 'https://h/' + 'x'.repeat(2040)]) expect(isBridgeCommand({ ...command, server })).toBe(false);
+    }
+  });
+
   it('tauri: takes the newest waiting command once on registration and nudges', async () => {
     const target = new EventTarget();
     let waiting: unknown = first;

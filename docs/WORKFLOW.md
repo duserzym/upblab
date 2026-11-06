@@ -1,12 +1,14 @@
 # The lab workflow and the hand-offs between the apps
 
-**Status:** v1, 2026-11-03. This is the cross-repository contract for how a
+**Status:** v1.1, 2026-11-06. This is the cross-repository contract for how a
 sample travels through the four applications. Each repository's own plan
 points here for the hand-offs and keeps its internal design to itself:
 `laicpmsdb/docs/DATABASE_ARCHITECTURE_PLAN.md` section 8,
 `grainatlas/ARCHITECTURE_PLAN.md` section 7, `UPbRPy/docs/lab_workflow_integration.md`,
 and `ARCHITECTURE_PLAN.md` here (decision 10, phases 3 and 4). Change this
 page first, bump the version line, then the app plans.
+
+Changed in v1.1: results appear in the Review tab with plots linked both ways to Images.
 
 ## 1. The workflow
 
@@ -17,7 +19,7 @@ page first, bump the version line, then the app plans.
        results ◀── submit ◀── reduce locally ◀── open from database ◀── upload session
       laicpmsdb      UPbRPy Studio   UPbRPy Studio     UPbRPy Studio       laicpmsdb
          │
-         └─ shown on the images (grainatlas), the timeline (laicpmsdb) and Home (UPb Studio)
+         └─ shown on the images (grainatlas), the timeline (laicpmsdb) and Home / Review (UPb Studio)
 ```
 
 | Stage | Where | Record created | Hand-off out |
@@ -31,7 +33,7 @@ page first, bump the version line, then the app plans.
 | 6. Open from database | UPbRPy Studio in **database mode**: fetches the *session bundle* over HTTP and opens it as a project | local project cache with `.upbr` carrying its `origin` | |
 | 7. Reduce | UPbRPy Studio, locally, exactly as standalone | `.upbr`, reduction bundle on disk | "Submit to database" |
 | 8. Submit | Studio posts the *reduction bundle* | `reduction_run`, `selection_window`, `scalar_result` (+ uncertainties), derived sweep Parquet, attachments | run id back to Studio |
-| 9. Results | laicpmsdb: results per acquisition, spot, grain, sample, session; preferred run per session; Table S1 | | shown in grainatlas's spot panel and UPb Studio's Home |
+| 9. Results | laicpmsdb: results per acquisition, spot, grain, sample, session; preferred run per session; Table S1 | | shown in grainatlas's spot panel, UPb Studio's Home and Review tab (plots with clicks both ways to the images) |
 
 Two guarantees shape every hand-off:
 

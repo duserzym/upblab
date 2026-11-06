@@ -24,6 +24,8 @@ export interface SettingsData {
   studioCheckout: string;
   theme: ThemePref;
   lastTab: string;
+  reviewScope: string;
+  reviewSplit: boolean;
 }
 
 export const DEFAULT_DATA_ROOT = '~/laicpmsdb';
@@ -38,6 +40,8 @@ export const DEFAULTS: SettingsData = {
   studioCheckout: '',
   theme: 'light',
   lastTab: 'home',
+  reviewScope: '',
+  reviewSplit: false,
 };
 
 const FILE = 'settings.json';
@@ -54,8 +58,8 @@ const storeBackend: Backend = {
     const store = await load(FILE, { defaults: {}, autoSave: 100 });
     const out: Partial<SettingsData> = {};
     for (const key of Object.keys(DEFAULTS) as (keyof SettingsData)[]) {
-      const v = await store.get<string>(key);
-      if (typeof v === 'string') (out as Record<string, string>)[key] = v;
+      const v = await store.get<unknown>(key);
+      if (typeof v === typeof DEFAULTS[key]) (out as Record<string, unknown>)[key] = v;
     }
     return out;
   },
@@ -112,6 +116,8 @@ class Settings {
   studioCheckout = $state(DEFAULTS.studioCheckout);
   theme = $state<ThemePref>(DEFAULTS.theme);
   lastTab = $state(DEFAULTS.lastTab);
+  reviewScope = $state(DEFAULTS.reviewScope);
+  reviewSplit = $state(DEFAULTS.reviewSplit);
   loaded = $state(false);
   /** The OS asks for dark (only matters for the System choice). */
   systemDark = $state(prefersDark());
@@ -140,6 +146,8 @@ class Settings {
       this.studioCheckout = data.studioCheckout;
       this.theme = (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'light';
       this.lastTab = data.lastTab;
+      this.reviewScope = typeof data.reviewScope === 'string' ? data.reviewScope : '';
+      this.reviewSplit = data.reviewSplit === true;
     } catch (err) {
       console.warn('[settings] could not load, using defaults', err);
     }
@@ -164,6 +172,8 @@ class Settings {
       studioCheckout: this.studioCheckout,
       theme: this.theme,
       lastTab: this.lastTab,
+      reviewScope: this.reviewScope,
+      reviewSplit: this.reviewSplit,
     };
   }
 }

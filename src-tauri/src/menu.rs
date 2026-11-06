@@ -22,14 +22,24 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             &MenuItem::with_id(app, "tab:home", "Home", true, Some("CmdOrCtrl+1"))?,
             &MenuItem::with_id(app, "tab:images", "Images", true, Some("CmdOrCtrl+2"))?,
             &MenuItem::with_id(app, "tab:sessions", "Sessions", true, Some("CmdOrCtrl+3"))?,
-            &MenuItem::with_id(app, "tab:reduce", "Reduce", true, Some("CmdOrCtrl+4"))?,
+            &MenuItem::with_id(app, "tab:review", "Review", true, Some("CmdOrCtrl+4"))?,
+            &MenuItem::with_id(app, "tab:reduce", "Reduce", true, Some("CmdOrCtrl+5"))?,
             &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "module:reload", "Reload Module", true, Some("CmdOrCtrl+R"))?,
+            &MenuItem::with_id(
+                app,
+                "module:reload",
+                "Reload Module",
+                true,
+                Some("CmdOrCtrl+R"),
+            )?,
             &MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?,
         ],
     )?;
     // Before the Window menu on macOS, at the end elsewhere.
-    let at = menu.items()?.len().saturating_sub(if cfg!(target_os = "macos") { 2 } else { 0 });
+    let at = menu
+        .items()?
+        .len()
+        .saturating_sub(if cfg!(target_os = "macos") { 2 } else { 0 });
     menu.insert(&tabs, at)?;
     app.set_menu(menu)?;
     app.on_menu_event(|app, event| {

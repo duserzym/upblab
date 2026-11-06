@@ -118,3 +118,7 @@ body { min-height: 0; overflow: hidden; }
 .view table.data { width: 100%; }
 .view table.data td, .view table.data th { overflow-wrap: anywhere; }
 .view table.data td.actions, .view table.data td.num { overflow-wrap: normal; }
+
+/* One Images surface survives tab changes and the Review split. */
+.content.review-split > .review { order: 0; flex: 1 1 0; }
+.content.review-split > .images-view { order: 1; flex: 1 1 0; border-left: 1px solid var(--hairline); }

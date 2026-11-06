@@ -75,6 +75,8 @@ export interface FocusSpotCommand {
   project: string;
   /** grainatlas spot id (laicpmsdb atlas_spot_id). */
   spot: string;
+  /** Published atlas server, an http(s) URL of at most 2048 characters. */
+  server?: string;
   flash?: boolean;
   /** Sender, e.g. 'review'. */
   via?: string;
@@ -86,6 +88,8 @@ export interface FocusGrainCommand {
   /** laicpmsdb grain label (<area_id>/<grain_number>) or grainatlas grain id. */
   grain: string;
   spot?: string;
+  /** Published atlas server, an http(s) URL of at most 2048 characters. */
+  server?: string;
   flash?: boolean;
   via?: string;
 }
@@ -108,11 +112,21 @@ const isId = (x: unknown): x is string => typeof x === 'string' && ID.test(x);
 const isGrain = (x: unknown): x is string =>
   typeof x === 'string' && x.split('/').length <= 2 && x.split('/').every(isId);
 
+function isServer(x: unknown): boolean {
+  if (typeof x !== 'string' || x.length > 2048 || /[\u0000-\u0020]/.test(x)) return false;
+  try {
+    const u = new URL(x);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname;
+  } catch {
+    return false;
+  }
+}
+
 /** Unknown command types are ignored so newer modules and shells can coexist. */
 export function isBridgeCommand(x: unknown): x is BridgeCommand {
   if (!x || typeof x !== 'object') return false;
   const c = x as Record<string, unknown>;
-  if (!isId(c.project) || (c.flash !== undefined && typeof c.flash !== 'boolean') ||
+  if ((c.server !== undefined && !isServer(c.server)) || !isId(c.project) || (c.flash !== undefined && typeof c.flash !== 'boolean') ||
       (c.via !== undefined && typeof c.via !== 'string')) return false;
   if (c.type === 'focus-spot') return isId(c.spot);
   if (c.type === 'focus-grain') return isGrain(c.grain) && (c.spot === undefined || isId(c.spot));

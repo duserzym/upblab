@@ -4,6 +4,7 @@
   import Images from './routes/Images.svelte';
   import Sessions from './routes/Sessions.svelte';
   import Reduce from './routes/Reduce.svelte';
+  import Review from './routes/Review.svelte';
   import Settings from './routes/Settings.svelte';
   import FirstRun from './components/FirstRun.svelte';
   import AccountDialog from './components/AccountDialog.svelte';
@@ -20,8 +21,12 @@
     { id: 'home', label: 'Home', hint: 'Overview and links' },
     { id: 'images', label: 'Images', hint: 'grainatlas' },
     { id: 'sessions', label: 'Sessions', hint: 'laicpmsdb' },
+    { id: 'review', label: 'Review', hint: 'Results with their images' },
     { id: 'reduce', label: 'Reduce', hint: 'UPbRPy Studio' },
   ];
+
+  let windowWidth = $state(window.innerWidth);
+  const reviewSplit = $derived(shell.view === 'review' && settings.reviewSplit && windowWidth >= 1440);
 
   // Desktop with no mode stored yet: the first-run wizard (ADR-0003).
   // Waits for the host's status, which says whether "This computer" can run.
@@ -104,7 +109,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onKey} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop} />
+<svelte:window bind:innerWidth={windowWidth} onkeydown={onKey} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop} />
 
 <div class="shell">
   <header class="bar glass">
@@ -153,13 +158,14 @@
     {/if}
   </header>
 
-  <main class="content">
+  <main class="content" class:review-split={reviewSplit}>
     {#if firstRun}
       <FirstRun />
     {:else if settings.loaded && (settings.mode !== '' || !isDesktop)}
       <Home active={shell.view === 'home'} />
-      <Images active={shell.view === 'images'} />
+      <Images active={shell.view === 'images' || reviewSplit} split={reviewSplit} />
       <Sessions active={shell.view === 'sessions'} />
+      <Review active={shell.view === 'review'} split={reviewSplit} wide={windowWidth >= 1440} />
       <Reduce active={shell.view === 'reduce'} />
       <Settings active={shell.view === 'settings'} />
     {/if}

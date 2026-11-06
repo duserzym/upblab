@@ -162,10 +162,15 @@ class Shell {
     this.record(what, from, outcome, refused);
   }
 
-  /** Load a route in a module tab and show it. */
-  go(tab: ModuleTab, route: string) {
+  /** Set a module target without leaving the current view. */
+  load(tab: ModuleTab, route: string) {
     this.seq += 1;
     this.targets[tab] = { url: moduleUrl(tab, route, this.bases), seq: this.seq };
+  }
+
+  /** Load a module route and show its tab. */
+  go(tab: ModuleTab, route: string) {
+    this.load(tab, route);
     this.show(tab);
   }
 

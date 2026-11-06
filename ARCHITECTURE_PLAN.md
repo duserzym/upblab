@@ -14,10 +14,11 @@ in one module into the right view in another:
 | --- | --- | --- | --- |
 | Images | grainatlas | static web build (Svelte + wasm) and Tauri app | bundled static assets in a webview |
 | Sessions | laicpmsdb | Django service with a Svelte web build at `/app/` | webview pointed at the configured laicpmsdb server, or at the instance the shell starts on this computer (ADR-0003) |
+| Review | the shell itself | Svelte + uPlot | stored session or mount results, plots and image selection; optional split with Images |
 | Reduce | UPbRPy Studio | native PySide6 + pyqtgraph desktop app | launched as an external application with a hand-off file and `upbr://` link; not embedded |
 | Home | the shell itself | Svelte | timeline across modules, search, recent items, settings |
 
-The shell owns no scientific data and no algorithms. Everything it shows is
+The shell owns no scientific data and performs no data reduction. Everything it shows is
 produced by a module; everything it stores is configuration and the link
 graph between module objects.
 
@@ -66,7 +67,7 @@ graph between module objects.
    on the lab server. ADR-0003 has the details, the first-run wizard and the
    rejected alternatives (Docker, a separate server app, PyInstaller, SQLite).
 10. **The workflow is a chain of bundles, and the shell only routes.**
-    `docs/WORKFLOW.md` (v1, 2026-11-03) is the cross-repository contract:
+    `docs/WORKFLOW.md` (v1.1, 2026-11-06) is the cross-repository contract:
     register samples and mounts in laicpmsdb; image and place spots in
     grainatlas, which publishes an *atlas bundle* to the mount; run the laser
     with spot names as labels; upload the session; open it in UPbRPy Studio
@@ -75,7 +76,7 @@ graph between module objects.
     on acquisitions and spots and show up on the images, the timeline and
     Home. Files are the boundary at every step and standalone use of
     grainatlas and Studio stays first class. The shell's parts are the
-    handoff code in its identity phase, the `upbr://` launch, and Home.
+    handoff code in its identity phase, the `upbr://` launch, Home and the Review tab.
 
 ## 3. Cross-platform contract (applies to the shell and both modules)
 
@@ -126,6 +127,16 @@ Desktop: one window, a tab bar in the shell webview, and one child webview
 per module tab (Tauri 2 multi-webview), so a slow module never blocks the
 shell. Web: the shell page with one `iframe` per module tab, same bridge over
 `postMessage`. Tab state (open project, current route) is saved per user.
+
+Review is the fourth tab, between Sessions and Reduce (Ctrl/⌘ 1–5). It
+reads stored laicpmsdb results, draws display geometry and links selections
+both ways through protocol v3 commands and spot notifications. It has no
+reduction or editing controls. At 1440 CSS px or more the remembered **Side
+by side** choice places Review and Images in equal halves. Review uses a
+compact tree with plots above details. The existing Images component and
+ModuleSurface remain mounted; native bounds follow ResizeObserver, and the
+web iframe resizes. Below 1440 CSS px Review returns to three columns and
+Images hides. Dialogs hide the module surface as on the other tabs.
 
 ### 4.4 Link resolution
 
@@ -186,6 +197,7 @@ over samples, sessions, spots and projects; recent items; module status
 | 3 | identity; shell side done 2026-11-03 | single sign-in, token in keychain, token handed to module webviews; the Studio handoff code (`POST /v1/auth/handoff`) minted on demand; web delivery at `/desk/` using the laicpmsdb session. Done: password sign-in, ORCID/Google through the system browser and `laicpmsdb://auth/callback`, keychain per server, `bridge_token` to the bundled build and the server's pages, `lab.auth.signed-out`, the wizard's account signed in, handoff minting; the web delivery signs in itself and keeps the token in `sessionStorage`. laicpmsdb accepts `next=laicpmsdb://auth/callback` since ff8c070 (code or `?error=` in the query). Waits for: a run with a configured ORCID or Google client; grainatlas calling `token()` beyond its publish dialog; a Windows run |
 | 4 | Studio hand-off; shell side done 2026-11-03 | `upbr://session/<id>?server=&code=` resolved to the installed Studio (`upbrpy-gui --open <url>`), Studio found by auto-detection or Settings; `upbr://run/<id>`; a session's reduction status (runs, preferred) and the latest published atlas on Home; end-to-end test on the fixture session per `docs/WORKFLOW.md`. Done: detection (Settings, `/Applications`, LaunchServices, the Windows registry, a development checkout), launch per OS (docs/installing.md), install instructions when missing, `laicpmsdb://mount/` and `ingest?path=` routes, Home's sessions, runs and atlases. Waits for: Studio's database mode redeeming the code (its `[database]` extra), a published atlas to show, then the end-to-end test |
 | 5 | Home | cross-module timeline, search, recents, module status |
+| 5b Review | stored results by session/run or mount; sample/grain tree, Concordia, geochemistry, REE, depth profiles, details; bidirectional image selection and optional split | invented fixtures cover loading and selection; Chromium and WebKit fit 1440 × 900 and 1280 × 800, split only at 1440 CSS px or more; a result focuses its published atlas spot and an image selection returns to its result without an echo; real app round trip verified by the supervisor |
 | 6 | release | signed or documented installers for macOS and Windows, auto-update from GitHub Releases, Playwright smoke test on both OS |
 
 Phases 1 and 2 need grainatlas phase 3 (its web build) and laicpmsdb's
