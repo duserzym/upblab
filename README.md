@@ -8,10 +8,10 @@ sweep and reduced result.
 
 | Tab | Module | Hosted as |
 | --- | --- | --- |
-| Home | the shell | Upload LA-ICP-MS session… / Upload image set… with progress and Review links; Open folder… / Open files… (anything dropped on the window goes to the right tab by itself), module status, your sessions with their reductions (Reduce opens Studio), mounts with their current atlas, link box and log (timeline and search later) |
+| Home | the shell | a tiled board: action tiles (Open folder, Open files, Upload LA-ICP-MS session, Upload image set; anything dropped on the window goes to the right tab by itself), module status, then Sessions, Mounts and Atlases as searchable, sortable card grids (spot-count bar by acquisition kind and run status dot per session; grain and spot counts, atlas badge and thumbnail per mount), link box and log |
 | Images | grainatlas | pinned static build bundled into the app (`modules.lock.json`) |
 | Sessions | laicpmsdb | `/app/` in a native webview, from a lab server or from the laicpmsdb the app runs on this computer |
-| Review | the shell | stored results by session or mount, plots and spot details linked to Images |
+| Review | the shell | stored results by session or mount with sample chips; Concordia, a multi-panel geochemistry board with mineral presets, depth profiles and spot details linked to Images |
 | Reduce | UPbRPy Studio | launched as its own application with a `upbr://` link and a one-time sign-in code |
 
 Status: roadmap phases 0 and 1 done, phase 2b (ADR-0003, "This computer"
@@ -61,15 +61,34 @@ set intended for the other module with a line saying what it accepts.
 ## Review
 
 Review reads laicpmsdb's stored results by session and run, or by mount,
-including spots not measured yet. It shows a sample and grain tree, Concordia
-ellipses, geochemistry and CI-normalised REE patterns, stored depth profiles
-and spot details. Selecting a result focuses its image spot; selecting a spot
-in Images selects its result. Review stays open while browsing; **Show in
-Images**, Enter or a double-click opens Images. At widths of 1440 CSS px or
-more, **Side by side** shows the existing Images surface beside Review.
-Scope and split choices are remembered. These are read-only displays; the
-shell does no data reduction. Home links each reduced session and mount to
-Review. Tabs use Ctrl/⌘ 1–5, with Review fourth and Reduce fifth.
+including spots not measured yet. A compact scope bar picks the session or
+mount and run; sample chips (one per sample, with its plot colour and spot
+count) show one sample on click and toggle with Cmd/Ctrl-click, with All and
+Clear. Below it are three columns: the sample and grain list, the plots and the
+spot details; both side columns collapse.
+
+The plots are Concordia ellipses, stored depth profiles and a geochemistry
+board: biplot panels in a 2 x 2 grid, 3 x 2 when the board is 880 px wide or
+more (1440 px windows). Each axis opens a chip picker grouped as dates,
+concentrations, ratios, REE anomalies, thermometers and other, with a log
+toggle. **Presets** fills the board for zircon (Th/U, U and Th, Ce/Ce* vs
+Eu/Eu*, Ti-in-zircon T, Yb/Gd and Hf vs date, U/Yb vs Nb/Yb and vs Y after
+Grimes et al. 2015, (Sm/La)N vs La after Hoskin 2005, REE pattern), apatite,
+rutile, titanite or monazite; panels can be added (up to 12), removed and
+maximized. Hovering a spot marks it in every panel, the Concordia and the list.
+
+Plots read stored values. For geochemistry the shell may also normalise stored
+concentrations to CI chondrite, divide two stored values (U/Yb, (Sm/La)N) and
+form Eu/Eu*, Ce/Ce* and the sum of REE + Y; such axes say "from stored ppm", a
+stored column of the same name wins, and thermometers are shown only when
+stored. Selecting a result focuses its image spot; selecting a spot in Images
+selects its result. **Show in Images**, Enter or a double-click opens Images.
+At widths of 1440 CSS px or more, **Side by side** shows the existing Images
+surface beside Review. Scope, split choice and each mineral's board are
+remembered. Home links each reduced session and mount to Review. Tabs use
+Ctrl/⌘ 1–5, with Review fourth and Reduce fifth.
+
+![Review geochemistry board, 1440 x 900](docs/screenshots/after_review_geochemistry_light_1440x900.png)
 
 ## Quick start
 

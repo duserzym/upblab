@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function openPreview(page: Page, theme: 'light' | 'dark', state: string) {
   await page.addInitScript((theme) => {
-    localStorage.setItem('upbstudio.settings', JSON.stringify({ theme, mode: 'server', lastTab: 'home' }));
+    localStorage.setItem('upbstudio.settings', JSON.stringify({ theme, themeChosen: true, mode: 'server', lastTab: 'home' }));
   }, theme);
   await page.route('**/modules/manifest.json', (route) => route.fulfill({ json: { modules: [
     { name: 'grainatlas', version: '0.11.0-test', source: 'local', sha256: 'invented', entry: 'modules/grainatlas/index.html' },

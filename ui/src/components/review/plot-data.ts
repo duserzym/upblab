@@ -17,7 +17,7 @@ export interface Band {
   color: string;
 }
 // Twelve colours that stay apart on white and dark plot surfaces (Tol muted and bright based).
-const palette = ['#4477aa', '#cc6677', '#228833', '#aa4499', '#bb7700', '#009988', '#7777bb', '#aa6633', '#332288', '#882255', '#117733', '#5aa0c8'];
+const palette = ['#4477aa', '#cc6677', '#228833', '#aa4499', '#bb7700', '#009988', '#7777bb', '#aa6633', '#d55e00', '#999933', '#117733', '#5aa0c8'];
 let assigned = new Map<string, string>();
 /**
  * Give the samples of the current scope distinct colours, in name order (a

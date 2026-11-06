@@ -18,7 +18,7 @@
   import { opener } from './lib/opener.svelte';
   import { settings } from './lib/settings.svelte';
   import { shell, type View } from './lib/shell.svelte';
-  import { desktopModules, isDesktop } from './lib/platform';
+  import { desktopModules, isDesktop, logWarn } from './lib/platform';
 
   const tabs: { id: View; label: string; hint: string }[] = [
     { id: 'home', label: 'Home', hint: 'Overview and links' },
@@ -52,7 +52,7 @@
   let themeUpdates: Promise<unknown> = Promise.resolve();
   function publishTheme(theme: 'light' | 'dark') {
     themeUpdates = themeUpdates.then(() => invoke('module_theme', { theme }))
-      .catch((err) => console.warn('[theme]', err));
+      .catch((err) => void logWarn(`[theme] could not publish the theme to the host: ${String(err)}`));
     return themeUpdates;
   }
   $effect(() => {
