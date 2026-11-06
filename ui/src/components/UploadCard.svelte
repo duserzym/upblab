@@ -5,11 +5,12 @@
   import { shell } from '../lib/shell.svelte';
   import type { Upload } from '../lib/upload.svelte';
 
-  let { card }: { card: Upload } = $props();
+  let { card, showChoose = true }: { card: Upload; showChoose?: boolean } = $props();
   let folderInput = $state<HTMLInputElement>();
   let filesInput = $state<HTMLInputElement>();
   const sessions = $derived(card.target === 'sessions');
-  async function choose() {
+  /** Start the upload (Home's action tiles call this directly, one click). */
+  export async function choose() {
     if (!isDesktop) { folderInput?.click(); return; }
     try {
       const paths = await (sessions ? pickSessionPaths() : pickPaths(true));
@@ -31,7 +32,8 @@
 
 <section class="stack upload-card" data-testid="upload-{card.target}">
   <div class="row">
-    <button class="btn primary" onclick={() => void choose()}>{sessions ? 'Upload LA-ICP-MS session…' : 'Upload image set…'}</button>
+    {#if showChoose}<button class="btn primary" onclick={() => void choose()}>{sessions ? 'Upload LA-ICP-MS session…' : 'Upload image set…'}</button>
+    {:else}<button class="btn" onclick={() => void choose()}>{sessions ? 'Choose another session…' : 'Choose another image set…'}</button>{/if}
     {#if !isDesktop && sessions}<button class="btn" onclick={() => filesInput?.click()}>Choose session files…</button>{/if}
     {#if card.open || card.error}<button class="btn" aria-label="Dismiss {sessions ? 'session' : 'image'} upload" onclick={() => { card.close(); card.error = ''; }}>Dismiss</button>{/if}
   </div>

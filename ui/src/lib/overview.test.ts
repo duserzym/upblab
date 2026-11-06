@@ -66,6 +66,8 @@ describe('parseAtlas', () => {
 describe('overview.load', () => {
   beforeEach(() => {
     get.mockReset();
+    overview.clear();
+    vi.unstubAllGlobals();
     (identity as { signedIn: boolean }).signedIn = true;
   });
 
@@ -106,5 +108,73 @@ describe('overview.load', () => {
     await overview.load();
     expect(overview.state).toBe('ready');
     expect(overview.sessions[0].runs).toBeNull();
+  });
+});
+
+
+describe('Home inventory details', () => {
+  beforeEach(() => {
+    overview.clear();
+    get.mockReset();
+    vi.unstubAllGlobals();
+    (identity as { signedIn: boolean }).signedIn = true;
+  });
+
+  it('limits detail requests to 12, then Show all loads the full inventory', async () => {
+    const sessions = Array.from({ length: 15 }, (_, i) => ({ id: `s${i}`, session_key: `Session ${i}`, material: 'zircon', started_at: null, acquisition_count: 4 }));
+    const mounts = Array.from({ length: 14 }, (_, i) => ({ id: `m${i}`, label: `Mount ${i}`, grain_count: 1, spot_count: 4 }));
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    get.mockImplementation(async (path: string) => {
+      if (path === '/v1/sessions') return { status: 200, body: sessions };
+      if (path === '/v1/mounts') return { status: 200, body: mounts };
+      if (path.endsWith('/reductions')) return { status: 200, body: [] };
+      if (path.endsWith('/atlas')) return { status: 200, body: { current: null } };
+      return { status: 200, body: { kind_counts: { sample: 3, primary_standard: 1 } } };
+    });
+    await overview.load();
+    expect(overview.sessions).toHaveLength(12);
+    expect(overview.mounts).toHaveLength(12);
+    expect(overview.totalSessions).toBe(15);
+    expect(overview.totalMounts).toBe(14);
+    expect(get).toHaveBeenCalledTimes(2 + 12 * 2 + 12);
+    expect(overview.sessions[0].kindCounts).toEqual({ sample: 3, primary_standard: 1 });
+    expect(fetch).not.toHaveBeenCalled();
+    await overview.load(true);
+    expect(overview.sessions).toHaveLength(15);
+    expect(overview.mounts).toHaveLength(14);
+    expect(overview.allLoaded).toBe(true);
+    expect(overview.refreshing).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
+  it('loads a token-scoped thumbnail only for a published atlas and tolerates failure', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ files: { 'pyramid/area1/0/0_0.webp': 'invented' } }) });
+    vi.stubGlobal('fetch', fetch);
+    get.mockImplementation(async (path: string) => {
+      if (path === '/v1/sessions') return { status: 200, body: [] };
+      if (path === '/v1/mounts') return { status: 200, body: [{ id: 'm', label: 'Demo', grain_count: 1, spot_count: 1 }] };
+      return { status: 200, body: { current: { project_id: 'p' }, access: 'read-token' } };
+    });
+    await overview.load();
+    expect(fetch).toHaveBeenCalledWith('http://h/atlas/projects/p/atlas.json?access=read-token', expect.anything());
+    expect(overview.mounts[0].thumbnail).toBe('http://h/atlas/projects/p/pyramid/area1/0/0_0.webp?access=read-token');
+    fetch.mockRejectedValue(new Error('missing image manifest'));
+    await overview.load();
+    expect(overview.mounts[0].atlas).toMatchObject({ projectId: 'p' });
+    expect(overview.mounts[0].thumbnail).toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it('ignores superseded inventory responses', async () => {
+    let finish!: (reply: { status: number; body: unknown[] }) => void;
+    get.mockImplementation((path: string) => path === '/v1/sessions' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ status: 200, body: [] }));
+    const loading = overview.load();
+    overview.clear();
+    finish({ status: 200, body: [] });
+    await loading;
+    expect(overview.state).toBe('idle');
+    expect(overview.sessions).toEqual([]);
+    expect(overview.refreshing).toBe(false);
   });
 });

@@ -1,9 +1,15 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import UploadCard from '../components/UploadCard.svelte';
   import { upload } from '../lib/upload.svelte';
   import { identity } from '../lib/identity.svelte';
   import { localService } from '../lib/localService.svelte';
-  import { overview, type RunOut } from '../lib/overview.svelte';
+  import Toolbar from '../components/home/Toolbar.svelte';
+  import Icon from '../components/home/Icon.svelte';
+  import SessionCard from '../components/home/SessionCard.svelte';
+  import MountCard from '../components/home/MountCard.svelte';
+  import { sessionsShown, mountsShown, type Sort } from '../lib/home';
+  import { overview } from '../lib/overview.svelte';
   import { isDesktop, pickPaths, probe, studioStatus, type StudioStatus } from '../lib/platform';
   import { fromFileList } from '../lib/drop';
   import { opener } from '../lib/opener.svelte';
@@ -17,6 +23,22 @@
   let linkInput = $state('');
   let folderInput = $state<HTMLInputElement>();
   let filesInput = $state<HTMLInputElement>();
+  let expandedUpload = $state<'sessions' | 'images' | null>(null);
+  const uploadCards = $state<Record<'sessions' | 'images', UploadCard | undefined>>({ sessions: undefined, images: undefined });
+  // One click: the tile starts the upload itself (picker or web file input) and its card shows the progress.
+  function startUpload(which: 'sessions' | 'images') {
+    expandedUpload = which;
+    void uploadCards[which]?.choose();
+  }
+  let sessionQuery = $state(''), mountQuery = $state(''), atlasQuery = $state('');
+  let sessionSort = $state<Sort>('newest'), mountSort = $state<Sort>('newest'), atlasSort = $state<Sort>('newest');
+  const sessions = $derived(sessionsShown(overview.sessions, sessionQuery, sessionSort));
+  const mounts = $derived(mountsShown(overview.mounts, mountQuery, mountSort));
+  const atlases = $derived(mountsShown(overview.mounts, atlasQuery, atlasSort, true));
+  const atlasCount = $derived(overview.mounts.filter(r => r.atlas && r.atlas !== 'error').length);
+  const maximum = $derived(Math.max(0, ...sessions.map(r => r.session.acquisition_count)));
+  const showAll = () => void overview.load(true);
+  const refresh = () => void overview.load();
 
   // Open anything (ux-conventions rule 4): one folder or any files; the shell
   // decides which tab reads them. Two buttons only because OS dialogs pick
@@ -57,7 +79,7 @@
     void identity.revision;
     void identity.target?.server;
     if (identity.checking) return;
-    void overview.load();
+    untrack(() => void overview.load());
   });
 
   $effect(() => {
@@ -68,10 +90,6 @@
     if (active) void upload.sessions.refreshReview();
   });
 
-  const go = (url: string) => void shell.handleLink(url, 'home');
-  const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
-  const runLabel = (r: RunOut) => `${r.pipeline_name} ${r.pipeline_version}`.trim() + (r.completed_at ? ` · ${day(r.completed_at)}` : ` · ${r.status}`);
-
   function openLink(e: SubmitEvent) {
     e.preventDefault();
     if (linkInput.trim()) void shell.handleLink(linkInput.trim(), 'you');
@@ -81,46 +99,36 @@
 </script>
 
 <section class="view scroll" class:hidden={!active}>
-  <div class="page stack">
-    <div class="glass panel stack">
+  <div class="page stack board">
+    <header class="row intro">
       <h1>UPb Studio</h1>
-      <p class="muted">
-        One window for the LA-ICP-MS workflow: grain images in <strong>Images</strong>, sessions and data in
-        <strong>Sessions</strong>, stored results in <strong>Review</strong>, reduction in <strong>Reduce</strong>. Below: your recent sessions with their reductions,
-        and the images of your mounts. The cross-module timeline and search arrive in a later phase.
-      </p>
-    </div>
+      <p class="muted small">Images, sessions, stored results and reduction in one window.</p>
+    </header>
 
-    <div class="glass panel stack" data-testid="upload-panel">
-      <h2>Upload</h2>
-      <div class="uploads">
-        <UploadCard card={upload.sessions} />
-        <UploadCard card={upload.images} />
-      </div>
+    <div class="action-tiles" data-testid="open-panel">
+      <button class="glass panel action-tile" aria-label="Open folder…" onclick={() => void openDialog(true)}><Icon kind="folder" /><span><strong>Open folder</strong><small>Open a package or export folder</small></span></button>
+      <button class="glass panel action-tile" aria-label="Open files…" onclick={() => void openDialog(false)}><Icon kind="files" /><span><strong>Open files</strong><small>Open images or session CSVs</small></span></button>
+      <button class="glass panel action-tile" aria-label="Upload LA-ICP-MS session…" aria-controls="home-upload-sessions" onclick={() => startUpload('sessions')}><Icon kind="session" /><span><strong>Upload LA-ICP-MS session</strong><small>Import a session, then Review</small></span></button>
+      <button class="glass panel action-tile" aria-label="Upload image set…" aria-controls="home-upload-images" onclick={() => startUpload('images')}><Icon kind="images" /><span><strong>Upload image set</strong><small>Publish mount images, then Review</small></span></button>
     </div>
-
-    <div class="glass panel stack" data-testid="open-panel">
-      <div class="row wrap">
-        <h2>Open</h2>
-        <span class="spacer"></span>
-        <button class="btn primary" onclick={() => void openDialog(true)}>Open folder…</button>
-        <button class="btn" onclick={() => void openDialog(false)}>Open files…</button>
+    <!-- Both cards stay mounted (their web file inputs must exist for the tile's click); a card shows while it is in use. -->
+    {#each ['sessions', 'images'] as const as which (which)}
+      {@const card = which === 'sessions' ? upload.sessions : upload.images}
+      <div id="home-upload-{which}" class="glass panel stack upload-expansion" data-testid="upload-panel-{which}" hidden={!(expandedUpload === which || card.open || card.error)}>
+        <div class="row"><h2>{which === 'sessions' ? 'Session upload' : 'Image set upload'}</h2><span class="spacer"></span><button class="btn small" aria-label="Close {which === 'sessions' ? 'session' : 'image set'} upload panel" onclick={() => { expandedUpload = null; card.close(); card.error = ''; }}>Close</button></div>
+        <UploadCard {card} showChoose={false} bind:this={uploadCards[which]} />
       </div>
-      <p class="muted small">
-        A TM4000 package, an area folder or images open in <strong>Images</strong>; a Qtegra export folder, its zip or its
-        CSVs open the ingest page in <strong>Sessions</strong>. Or drop them anywhere on this window{isDesktop ? ', or open them with UPb Studio from the Finder or Explorer' : ''}.
+    {/each}
+    {#if opener.status}
+      <p class="small open-status" role="status">
+        <span class="dot" style="background: {openColor(opener.status.state)}"></span>
+        <span class="mono">{opener.status.what}</span>: {opener.status.outcome}
       </p>
-      {#if opener.status}
-        <p class="small open-status" role="status">
-          <span class="dot" style="background: {openColor(opener.status.state)}"></span>
-          <span class="mono">{opener.status.what}</span>: {opener.status.outcome}
-        </p>
-      {/if}
-      {#if !isDesktop}
-        <input bind:this={folderInput} type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
-        <input bind:this={filesInput} type="file" multiple hidden onchange={() => chosen(filesInput)} />
-      {/if}
-    </div>
+    {/if}
+    {#if !isDesktop}
+      <input bind:this={folderInput} aria-label="Open folder" type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
+      <input bind:this={filesInput} aria-label="Open files" type="file" multiple hidden onchange={() => chosen(filesInput)} />
+    {/if}
 
     <div class="cards">
       {#if shell.local}
@@ -152,13 +160,8 @@
       </button>
     </div>
 
-    <div class="glass panel stack">
-      <div class="row">
-        <h2>Sessions</h2>
-        <span class="spacer"></span>
-        {#if overview.state === 'ready'}<span class="faint small">{overview.totalSessions > overview.sessions.length ? `latest ${overview.sessions.length} of ${overview.totalSessions}` : `${overview.totalSessions} session${overview.totalSessions === 1 ? '' : 's'}`}</span>{/if}
-        {#if identity.signedIn}<button class="btn" onclick={() => void overview.load()} disabled={overview.state === 'loading'}>Refresh</button>{/if}
-      </div>
+    <section class="board-section stack" aria-label="Sessions">
+      <Toolbar section="Sessions" bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} loaded={overview.sessions.length} refresh={identity.signedIn ? refresh : undefined} showAll={overview.sessions.length < overview.totalSessions ? showAll : undefined} busy={overview.refreshing} />
       {#if overview.state === 'idle' || (overview.state === 'loading' && overview.sessions.length === 0)}
         <p class="faint small">{identity.target ? 'Loading sessions…' : shell.local ? 'Waiting for the local laicpmsdb to start…' : 'No laicpmsdb server configured.'}</p>
       {:else if overview.state === 'signed-out'}
@@ -174,73 +177,34 @@
       {:else if overview.sessions.length === 0}
         <p class="muted small">No sessions yet. Upload a laser session in the <button class="linkish" onclick={() => shell.show('sessions')}>Sessions</button> tab.</p>
       {:else}
-        <table class="data">
-          <thead><tr><th>Session</th><th>Material</th><th>Started</th><th class="num">Spots</th><th>Reductions</th><th></th></tr></thead>
-          <tbody>
-            {#each overview.sessions as row (row.session.id)}
-              <tr>
-                <td><button class="linkish mono" onclick={() => go(`laicpmsdb://session/${row.session.id}`)}>{row.session.session_key}</button></td>
-                <td class="small">{row.session.material}</td>
-                <td class="small">{day(row.session.started_at)}</td>
-                <td class="num small">{row.session.acquisition_count}</td>
-                <td class="small">
-                  {#if row.runs === null}<span class="faint">unknown</span>
-                  {:else if row.runs === 0}<span class="faint">not reduced</span>
-                  {:else}
-                    {row.runs} run{row.runs === 1 ? '' : 's'}
-                    {#if row.preferred}<span class="badge" title="Preferred run: {runLabel(row.preferred)}">preferred {runLabel(row.preferred)}</span>
-                    {:else}<span class="faint"> · none preferred</span>{/if}
-                  {/if}
-                </td>
-                <td class="actions">
-                  {#if row.runs && row.runs > 0}
-                    <button class="btn" onclick={() => { shell.show('review'); void review.open({ kind: 'session', id: row.session.id }); }}>Review</button>
-                  {/if}
-                  <button class="btn" title="Open this session in UPbRPy Studio" onclick={() => go(`upbr://session/${row.session.id}`)}>Reduce</button>
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <div class="tile-grid" data-testid="session-grid">
+          {#each sessions as row (row.session.id)}<SessionCard {row} {maximum} />{/each}
+        </div>
+        {#if sessions.length === 0}<p class="muted small">No sessions match this search.</p>{/if}
       {/if}
-    </div>
+    </section>
 
     {#if overview.state === 'ready'}
-      <div class="glass panel stack">
-        <div class="row">
-          <h2>Mounts and images</h2>
-          <span class="spacer"></span>
-          {#if overview.totalMounts > overview.mounts.length}<span class="faint small">first {overview.mounts.length} of {overview.totalMounts}</span>{/if}
-        </div>
+      <section class="board-section stack" aria-label="Mounts">
+        <Toolbar section="Mounts" bind:query={mountQuery} bind:sort={mountSort} count={mounts.length} total={overview.totalMounts} loaded={overview.mounts.length} refresh={refresh} showAll={overview.mounts.length < overview.totalMounts ? showAll : undefined} busy={overview.refreshing} />
         {#if overview.mounts.length === 0}
-          <p class="muted small">No mounts yet. Mounts are registered in the Sessions tab; grainatlas publishes each mount's images there.</p>
+          <p class="muted small">No mounts yet. Register mounts in Sessions; publish their images from grainatlas.</p>
         {:else}
-          <table class="data">
-            <thead><tr><th>Mount</th><th class="num">Grains</th><th class="num">Spots</th><th>Current atlas</th><th></th></tr></thead>
-            <tbody>
-              {#each overview.mounts as row (row.mount.id)}
-                <tr>
-                  <td><button class="linkish" onclick={() => go(`laicpmsdb://mount/${row.mount.id}`)}>{row.mount.label}</button></td>
-                  <td class="num small">{row.mount.grain_count}</td>
-                  <td class="num small">{row.mount.spot_count}</td>
-                  <td class="small">
-                    {#if row.atlas === 'error'}<span class="faint">could not be read</span>
-                    {:else if row.atlas === null}<span class="faint">none published</span>
-                    {:else}{row.atlas.name ?? row.atlas.projectId}{row.atlas.version != null ? ` · v${row.atlas.version}` : ''}{row.atlas.publishedAt ? ` · ${day(row.atlas.publishedAt)}` : ''}{/if}
-                  </td>
-                  <td class="actions">
-                    <button class="btn" onclick={() => { shell.show('review'); void review.open({ kind: 'mount', id: row.mount.id }); }}>Review</button>
-                    {#if row.atlas && row.atlas !== 'error'}
-                      <button class="btn" onclick={() => go(`grainatlas://project/${(row.atlas as { projectId: string }).projectId}`)}>Open images</button>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+          <div class="tile-grid" data-testid="mount-grid" role="group" aria-label="Mount cards">
+            {#each mounts as row (row.mount.id)}<MountCard {row} />{/each}
+          </div>
+          {#if mounts.length === 0}<p class="muted small">No mounts match this search.</p>{/if}
         {/if}
         {#if overview.error}<p class="faint small">{overview.error}</p>{/if}
-      </div>
+      </section>
+      <section class="board-section stack" aria-label="Atlases">
+        <Toolbar section="Atlases" bind:query={atlasQuery} bind:sort={atlasSort} count={atlases.length} total={atlasCount} loaded={overview.mounts.length} refresh={refresh} showAll={overview.mounts.length < overview.totalMounts ? showAll : undefined} busy={overview.refreshing} />
+        {#if overview.mounts.length < overview.totalMounts}<p class="faint small">Atlases of the latest {overview.mounts.length} loaded mounts; Show all to search all {overview.totalMounts} mounts.</p>{/if}
+        <div class="tile-grid" data-testid="atlas-grid">
+          {#each atlases as row (row.mount.id)}<MountCard {row} atlasOnly />{/each}
+        </div>
+        {#if atlases.length === 0}<p class="muted small">{atlasCount ? 'No atlases match this search.' : 'No published atlases in the loaded mounts.'}</p>{/if}
+      </section>
     {/if}
 
     <div class="glass panel stack">
@@ -277,39 +241,40 @@
 </section>
 
 <style>
-  .uploads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-  @media (max-width: 700px) { .uploads { grid-template-columns: 1fr; } }
-  .cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
-    gap: var(--space-4);
-  }
-  /* tokens.css spaces stacked panels with `.panel + .panel`; not in a grid. */
-  .cards > :global(.panel) { margin-top: 0; }
-  .card-btn {
-    justify-content: flex-start;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-2);
-    text-align: left;
-    cursor: pointer;
-    min-width: 0;
-  }
-  /* Long server URLs, build sources and paths wrap instead of widening the card. */
+  .board { width: 100%; max-width: none; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-6); }
+  .intro { gap: var(--space-3); }
+  h1 { font-size: 1.25rem; }
+  p { margin: 0; }
+  .action-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+  .action-tile { display: flex; gap: var(--space-3); align-items: center; text-align: left; padding: var(--space-3); min-width: 0; cursor: pointer; color: var(--text); }
+  .action-tile:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .action-tile span { min-width: 0; }
+  .action-tile strong { display: block; font-size: 0.88rem; }
+  .action-tile small { display: block; font-size: 0.74rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .action-tiles > :global(.panel), .cards > :global(.panel) { margin-top: 0; }
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
+  .card-btn { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); text-align: left; cursor: pointer; min-width: 0; }
   .card-btn > :global(*) { max-width: 100%; overflow-wrap: anywhere; }
+  .card-btn .row { gap: var(--space-2); }
   .card-btn:hover { border-color: var(--accent); }
-  .grow { flex: 1; min-width: 12rem; margin: 0; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .actions { text-align: right; white-space: normal; }
-  .actions .btn { margin: 2px 0; white-space: nowrap; }
+  .card-btn .grid-kv { margin: 0; }
+  .board-section { min-width: 0; gap: var(--space-2); }
+  /* The 22.3rem minimum fits four cards in Home's real 1440px content box,
+     three at 1280px and two at 1024px, including the tab's scrollbar. */
+  .upload-expansion[hidden] { display: none; }
+  .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(22.3rem, 100%), 1fr)); gap: var(--space-2); min-width: 0; }
+  .tile-grid > :global(.panel) { margin-top: 0; }
+  .grow { flex: 1; min-width: 0; margin: 0; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
   .linkish:hover { text-decoration: underline; }
-  h2 { margin: 0; }
-  .wrap { flex-wrap: wrap; }
-  .open-status { margin: 0; display: flex; gap: var(--space-2); align-items: baseline; min-width: 0; overflow-wrap: anywhere; }
-  .open-status .dot { flex: none; transform: translateY(-1px); }
-  .badge { margin-left: var(--space-2); }
-  .card-btn .grid-kv { margin: 0; }
+  .open-status { display: flex; gap: var(--space-2); align-items: baseline; min-width: 0; overflow-wrap: anywhere; }
+  .open-status .dot { transform: translateY(-1px); }
+  table.data { table-layout: fixed; }
   table.data tbody tr { cursor: default; }
+  .board > .panel { margin-top: 0; padding: var(--space-3); gap: var(--space-2); }
+  @media (min-width: 1400px) {
+    /* Keep every section's first row on the board. Longer inventories scroll
+       within the mount grid; the tab itself still scrolls to Links. */
+    [data-testid='mount-grid'] { max-height: 7.5rem; overflow-y: auto; padding: 2px; }
+  }
 </style>

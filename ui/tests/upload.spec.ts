@@ -21,7 +21,7 @@ async function home(page: Page) {
   });
   await page.goto('./');
   await page.waitForFunction(() => (window as unknown as FakeWindow).__fake.listeners.has('lab-bridge://files-taken'));
-  await expect(page.getByTestId('upload-panel')).toBeVisible();
+  await expect(page.getByTestId('open-panel')).toBeVisible();
 }
 
 for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
