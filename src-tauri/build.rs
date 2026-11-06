@@ -20,6 +20,8 @@ fn main() {
             "bridge_open",
             "bridge_token",
             "bridge_notify",
+            "module_command",
+            "bridge_take_command",
             "bridge_open_files",
             "bridge_read_file",
             "files_scan",

@@ -109,6 +109,7 @@ fn grant_bridge<R: Runtime>(app: &AppHandle<R>, state: &ModuleState, label: &str
             .permission("allow-bridge-token")
             .permission("allow-bridge-notify")
             .permission("allow-bridge-open-files")
+            .permission("allow-bridge-take-command")
             .permission("allow-bridge-read-file"),
     )
     .map_err(|e| format!("could not grant the bridge to {origin}: {e}"))?;
@@ -120,7 +121,7 @@ fn grant_bridge<R: Runtime>(app: &AppHandle<R>, state: &ModuleState, label: &str
 /// Set before any page script: tells @lab/bridge it runs inside the shell.
 fn marker_script(module: &str) -> String {
     format!(
-        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 2 }}), configurable: false }});",
+        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 3 }}), configurable: false }});",
         module_name(&format!("module-{module}"))
     )
 }

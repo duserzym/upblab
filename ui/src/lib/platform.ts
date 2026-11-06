@@ -2,6 +2,7 @@
 // desktop, and as a plain page served by laicpmsdb at /desk/. Everything that
 // differs between them goes through this file.
 
+import type { BridgeCommand } from '@lab/bridge';
 import type { ModuleTab } from './links';
 
 export const isDesktop: boolean =
@@ -28,6 +29,7 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 
 /** Desktop: native child webviews laid over the shell page (ADR-0002). */
 export const desktopModules = {
+  command: (module: ModuleTab, command: BridgeCommand) => invoke<boolean>('module_command', { module, command }),
   open(module: ModuleTab, url: string, bounds: Bounds, navigate: boolean): Promise<void> {
     return invoke('module_open', { module, url, bounds, navigate });
   },

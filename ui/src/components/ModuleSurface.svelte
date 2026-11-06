@@ -10,7 +10,7 @@
   import type { ModuleTab } from '../lib/links';
   import { desktopModules, isDesktop, type Bounds } from '../lib/platform';
   import { shell, type ModuleTarget } from '../lib/shell.svelte';
-  import { frames } from '../lib/incoming';
+  import { registerFrame, unregisterFrame } from '../lib/incoming';
   import { identity } from '../lib/identity.svelte';
 
   interface Props {
@@ -78,7 +78,7 @@
 
   onDestroy(() => {
     if (isDesktop && shown) void desktopModules.hide(module);
-    frames.delete(module);
+    unregisterFrame(module);
   });
 
   // Signed in or out in the shell: reload, so the module asks token() again.
@@ -100,7 +100,7 @@
   // Web: the iframe follows the latest target, else home.
   const src = $derived(target?.url ?? home);
   $effect(() => {
-    if (iframe?.contentWindow) frames.set(module, iframe.contentWindow);
+    if (iframe?.contentWindow) registerFrame(module, iframe.contentWindow, false);
   });
 </script>
 
@@ -117,7 +117,7 @@
     {src}
     {title}
     referrerpolicy="same-origin"
-    onload={() => iframe?.contentWindow && frames.set(module, iframe.contentWindow)}
+    onload={() => iframe?.contentWindow && registerFrame(module, iframe.contentWindow)}
   ></iframe>
 {/if}
 

@@ -67,6 +67,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(modules::ModuleState::default())
         .manage(files::Files::default())
+        .manage(bridge::Commands::default())
         .manage(auth::Identity::default())
         .manage(local_service::LocalService::default())
         .invoke_handler(tauri::generate_handler![
@@ -86,6 +87,8 @@ pub fn run() {
             bridge::bridge_open,
             bridge::bridge_token,
             bridge::bridge_notify,
+            bridge::module_command,
+            bridge::bridge_take_command,
             files::bridge_open_files,
             files::bridge_read_file,
             files::files_scan,

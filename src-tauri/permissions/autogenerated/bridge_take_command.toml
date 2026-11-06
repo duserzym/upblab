@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bridge-take-command"
+description = "Enables the bridge_take_command command without any pre-configured scope."
+commands.allow = ["bridge_take_command"]
+
+[[permission]]
+identifier = "deny-bridge-take-command"
+description = "Denies the bridge_take_command command without any pre-configured scope."
+commands.deny = ["bridge_take_command"]

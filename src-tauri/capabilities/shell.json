@@ -15,6 +15,7 @@
     "allow-files-take-opened",
     "allow-window-reset",
     "allow-module-open",
+    "allow-module-command",
     "allow-module-bounds",
     "allow-module-hide",
     "allow-module-reload",

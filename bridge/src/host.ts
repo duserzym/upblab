@@ -8,6 +8,7 @@ import {
   PROTOCOL_VERSION,
   isBridgeRequest,
   type BridgeEvent,
+  type BridgeCommand,
   type BridgePush,
   type BridgeResponse,
   type OpenFilesTransfer,
@@ -42,6 +43,12 @@ export function frameName(module: string): string {
 /** v2: tell a module iframe that files are waiting for it; it answers with an `open-files` request. */
 export function pushOpenFiles(frame: Pick<Window, 'postMessage'>, targetOrigin: string): void {
   const msg: BridgePush = { tag: MESSAGE_TAG, v: PROTOCOL_VERSION, push: 'open-files' };
+  frame.postMessage(msg, targetOrigin);
+}
+
+/** v3: send a command directly to a module iframe; no reply is expected. */
+export function pushCommand(frame: Pick<Window, 'postMessage'>, command: BridgeCommand, targetOrigin: string): void {
+  const msg: BridgePush = { tag: MESSAGE_TAG, v: PROTOCOL_VERSION, push: 'command', command };
   frame.postMessage(msg, targetOrigin);
 }
 

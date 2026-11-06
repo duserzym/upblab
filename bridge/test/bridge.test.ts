@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   COMMANDS,
+  COMMAND_EVENT,
+  isBridgeCommand,
+  isBridgePush,
+  spotSelection,
+  type BridgeCommand,
   MESSAGE_TAG,
   OPEN_FILES_EVENT,
   PROTOCOL_VERSION,
@@ -10,7 +15,7 @@ import {
   detectTransport,
   type BridgeEnv,
 } from '../src/index';
-import { createFrameHost, frameName, pushOpenFiles } from '../src/host';
+import { createFrameHost, frameName, pushOpenFiles, pushCommand } from '../src/host';
 
 describe('detectTransport', () => {
   it('is none without a window', () => {
@@ -198,7 +203,7 @@ describe('open-files (protocol v2)', () => {
   };
 
   it('still accepts v1 requests and knows the new op', () => {
-    expect(PROTOCOL_VERSION).toBe(2);
+    expect(PROTOCOL_VERSION).toBe(3);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 1, id: 'a', op: 'token' })).toBe(true);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 2, id: 'a', op: 'open-files' })).toBe(true);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 2, id: 'a', op: 'delete' })).toBe(false);
@@ -307,5 +312,168 @@ describe('open-files (protocol v2)', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(handler).not.toHaveBeenCalled();
     stop();
+  });
+});
+
+
+describe('commands (protocol v3)', () => {
+  const first: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 'first' };
+  const latest: BridgeCommand = { type: 'focus-grain', project: 'p', grain: 'area/2', spot: 'latest', flash: true, via: 'review' };
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it('validates ids, command types and optional fields', () => {
+    expect(isBridgeCommand(first)).toBe(true);
+    expect(isBridgeCommand(latest)).toBe(true);
+    expect(isBridgeCommand({ ...latest, grain: 'grain-id' })).toBe(true);
+    expect(isBridgeCommand({ ...first, project: 'a'.repeat(128) })).toBe(true);
+    for (const id of ['', '-bad', 'a/b', 'a b', 'é', 'a?b', 'a\n', 'a'.repeat(129)]) {
+      expect(isBridgeCommand({ ...first, project: id })).toBe(false);
+      expect(isBridgeCommand({ ...first, spot: id })).toBe(false);
+    }
+    for (const grain of ['', '/g', 'g/', 'a/b/c', 'a//b']) {
+      expect(isBridgeCommand({ ...latest, grain })).toBe(false);
+    }
+    for (const command of [null, {}, { ...first, type: 'future' }, { ...first, flash: 'yes' },
+      { ...first, via: true }, { ...latest, spot: null }]) expect(isBridgeCommand(command)).toBe(false);
+    expect(isBridgePush({ tag: MESSAGE_TAG, v: 3, push: 'command', command: first })).toBe(true);
+    expect(isBridgePush({ tag: MESSAGE_TAG, v: 1, push: 'open-files' })).toBe(true);
+    expect(isBridgePush({ tag: MESSAGE_TAG, v: 3, push: 'future' })).toBe(false);
+  });
+
+  it('tauri: takes the newest waiting command once on registration and nudges', async () => {
+    const target = new EventTarget();
+    let waiting: unknown = first;
+    const invoke = vi.fn(async () => {
+      const command = waiting;
+      waiting = null;
+      return command;
+    });
+    const b = createBridge({
+      __LAB_SHELL__: { module: 'grainatlas', v: 3 }, __TAURI_INTERNALS__: { invoke },
+      addEventListener: (t, l) => target.addEventListener(t, l as EventListener),
+      removeEventListener: (t, l) => target.removeEventListener(t, l as EventListener),
+    });
+    waiting = latest; // replaces an untaken command
+    const handler = vi.fn();
+    const stop = b.onCommand(handler);
+    await tick();
+    expect(invoke).toHaveBeenCalledWith(COMMANDS.takeCommand);
+    expect(handler).toHaveBeenCalledExactlyOnceWith(latest);
+    target.dispatchEvent(new Event(COMMAND_EVENT));
+    await tick();
+    expect(handler).toHaveBeenCalledTimes(1);
+    waiting = { ...first, spot: 'invalid/id' };
+    target.dispatchEvent(new Event(COMMAND_EVENT));
+    await tick();
+    expect(handler).toHaveBeenCalledTimes(1);
+    waiting = first;
+    target.dispatchEvent(new Event(COMMAND_EVENT));
+    await tick();
+    expect(handler).toHaveBeenLastCalledWith(first);
+    stop();
+    waiting = latest;
+    target.dispatchEvent(new Event(COMMAND_EVENT));
+    await tick();
+    expect(handler).toHaveBeenCalledTimes(2);
+    b.onCommand(handler);
+    await tick();
+    expect(handler).toHaveBeenCalledTimes(3);
+  });
+
+  it('tauri: a v2 host missing takeCommand silently delivers nothing', async () => {
+    const warn = vi.spyOn(console, 'warn');
+    const invoke = vi.fn(async () => { throw new Error('command bridge_take_command not found'); });
+    const handler = vi.fn();
+    createBridge({ __LAB_SHELL__: { module: 'grainatlas', v: 2 }, __TAURI_INTERNALS__: { invoke } }).onCommand(handler);
+    await tick();
+    expect(handler).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('web: queues before registration, keeps newest, validates and checks the source', async () => {
+    const { env, childTarget, origin } = framePair();
+    const b = createBridge(env);
+    const postMessage = vi.fn();
+    env.parent!.postMessage = postMessage;
+    const push = (command: unknown, source: unknown = env.parent) => childTarget.dispatchEvent(msgEvent({
+      data: { tag: MESSAGE_TAG, v: 3, push: 'command', command }, origin, source,
+    }));
+    push(first);
+    push(latest);
+    push({ ...first, project: '../bad' });
+    push(first, {});
+    const handler = vi.fn();
+    const stop = b.onCommand(handler);
+    await tick();
+    expect(handler).toHaveBeenCalledExactlyOnceWith(latest);
+    expect(postMessage).not.toHaveBeenCalled(); // no request or acknowledgement
+    push({ ...first, type: 'future' });
+    push({ ...first, spot: 12 });
+    childTarget.dispatchEvent(msgEvent({ data: { tag: MESSAGE_TAG, v: 3, push: 'open-files' }, origin, source: env.parent }));
+    await tick();
+    expect(handler).toHaveBeenCalledTimes(1);
+    push(first);
+    await tick();
+    expect(handler).toHaveBeenCalledTimes(2);
+    stop();
+    push(first);
+    push(latest);
+    await tick();
+    expect(handler).toHaveBeenCalledTimes(2);
+    b.onCommand(handler);
+    await tick();
+    expect(handler).toHaveBeenCalledTimes(3);
+    expect(handler).toHaveBeenLastCalledWith(latest);
+  });
+
+  it('web: on a v2 shell registration sends nothing and delivers nothing', async () => {
+    const { env } = framePair();
+    const postMessage = vi.fn();
+    env.parent!.postMessage = postMessage;
+    const handler = vi.fn();
+    createBridge(env).onCommand(handler);
+    await tick();
+    expect(handler).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it('noop: never fires', async () => {
+    const handler = vi.fn();
+    const stop = createBridge({}).onCommand(handler);
+    await tick();
+    stop();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('host pushCommand posts the v3 envelope to the requested origin', () => {
+    const frame = { postMessage: vi.fn() };
+    pushCommand(frame, latest, 'https://lab.example');
+    expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith({
+      tag: MESSAGE_TAG, v: 3, push: 'command', command: latest,
+    }, 'https://lab.example');
+  });
+});
+
+describe('spotSelection', () => {
+  it('normalises current and legacy selections and preserves shell provenance', () => {
+    const base = { project: 'p', spot: 's', name: 'spot 1' };
+    expect(spotSelection({ type: 'grainatlas.spot.selected', ...base })).toEqual({
+      type: 'lab.spot.selected', ...base, via: 'user',
+    });
+    expect(spotSelection({ type: 'grainatlas.spot.selected', ...base, via: 'shell' })?.via).toBe('user');
+    expect(spotSelection({ type: 'lab.spot.selected', ...base })?.via).toBe('user');
+    const shell = { type: 'lab.spot.selected' as const, ...base, grain: 'area/2', area: 'area', via: 'shell' as const };
+    expect(spotSelection(shell)).toEqual(shell);
+    expect(spotSelection({ ...shell, grain: null })?.grain).toBeNull();
+  });
+
+  it('ignores other events, malformed fields and invalid ids', () => {
+    const base = { type: 'lab.spot.selected', project: 'p', spot: 's' };
+    for (const event of [{ ...base, type: 'other' }, { ...base, project: '' }, { ...base, spot: 'a/b' },
+      { ...base, grain: 'a/b/c' }, { ...base, area: '../bad' }, { ...base, via: 'other' },
+      { ...base, name: 5 }, { type: 'grainatlas.spot.selected', project: 'p', spot: 'bad/id' }]) {
+      expect(spotSelection(event)).toBeNull();
+    }
   });
 });

@@ -15,14 +15,17 @@
 
 import {
   COMMANDS,
+  COMMAND_EVENT,
   FRAME_NAME_PREFIX,
   MESSAGE_TAG,
   OPEN_FILES_EVENT,
   PROTOCOL_VERSION,
   SHELL_GLOBAL,
   isBridgePush,
+  isBridgeCommand,
   isBridgeResponse,
   type BridgeEvent,
+  type BridgeCommand,
   type BridgeOp,
   type BridgeRequest,
   type OpenFilesManifest,
@@ -38,6 +41,8 @@ export type Transport = 'tauri' | 'postMessage' | 'none';
 export type OpenedFiles = OpenFilesTransfer;
 
 export type OpenFilesHandler = (files: OpenedFiles) => void | Promise<void>;
+
+export type CommandHandler = (command: BridgeCommand) => void | Promise<void>;
 
 export interface Bridge {
   readonly transport: Transport;
@@ -58,6 +63,8 @@ export interface Bridge {
    * delivered at once. Returns a function that removes the handler.
    */
   onOpenFiles(handler: OpenFilesHandler): () => void;
+  /** v3: receive the newest waiting command once; register at start-up. */
+  onCommand(handler: CommandHandler): () => void;
 }
 
 interface TauriInternals {
@@ -90,6 +97,7 @@ function noopBridge(): Bridge {
     notify: async () => {},
     isHosted: () => false,
     onOpenFiles: () => () => {},
+    onCommand: () => () => {},
   };
 }
 
@@ -116,20 +124,20 @@ function makeFile(bytes: BlobPart, path: string, type: string, lastModified: num
  * Run `pull` for every handler registration and every shell nudge, one at a
  * time, and pass what it returns to the handlers.
  */
-function openFilesHub(pull: () => Promise<OpenedFiles | null>, subscribe: (nudge: () => void) => () => void) {
-  const handlers = new Set<OpenFilesHandler>();
+function deliveryHub<T>(pull: () => Promise<T | null>, subscribe: (nudge: () => void) => () => void, topic: string) {
+  const handlers = new Set<(value: T) => void | Promise<void>>();
   let chain: Promise<unknown> = Promise.resolve();
   let unsubscribe: (() => void) | null = null;
   const run = () => {
     chain = chain
       .then(async () => {
         if (!handlers.size) return;
-        const files = await pull();
-        if (files) for (const h of [...handlers]) await h(files);
+        const value = await pull();
+        if (value) for (const h of [...handlers]) await h(value);
       })
-      .catch((err) => console.warn('[lab-bridge] open-files:', err));
+      .catch((err) => console.warn(`[lab-bridge] ${topic}:`, err));
   };
-  return (handler: OpenFilesHandler) => {
+  return (handler: (value: T) => void | Promise<void>) => {
     handlers.add(handler);
     unsubscribe ??= subscribe(run);
     run();
@@ -166,11 +174,23 @@ function tauriBridge(marker: ShellMarker, internals: TauriInternals, env: Bridge
     await Promise.all([worker(), worker(), worker(), worker()]);
     return { ...manifest, files };
   }
-  const onOpenFiles = openFilesHub(pull, (nudge) => {
+  const onOpenFiles = deliveryHub(pull, (nudge) => {
     const listener = () => nudge();
     env.addEventListener?.(OPEN_FILES_EVENT, listener);
     return () => env.removeEventListener?.(OPEN_FILES_EVENT, listener);
-  });
+  }, 'open-files');
+  const onCommand = deliveryHub(async () => {
+    try {
+      const command = await internals.invoke(COMMANDS.takeCommand);
+      return isBridgeCommand(command) ? command : null;
+    } catch {
+      return null; // v1/v2 hosts have no commands
+    }
+  }, (nudge) => {
+    const listener = () => nudge();
+    env.addEventListener?.(COMMAND_EVENT, listener);
+    return () => env.removeEventListener?.(COMMAND_EVENT, listener);
+  }, 'command');
   return {
     transport: 'tauri',
     module: marker.module,
@@ -198,6 +218,7 @@ function tauriBridge(marker: ShellMarker, internals: TauriInternals, env: Bridge
     },
     isHosted: () => true,
     onOpenFiles,
+    onCommand,
   };
 }
 
@@ -234,7 +255,7 @@ function frameBridge(env: BridgeEnv, module: string, opts: BridgeOptions): Bridg
     });
   }
 
-  const onOpenFiles = openFilesHub(
+  const onOpenFiles = deliveryHub(
     async () => {
       try {
         const r = (await request('open-files', { take: true })) as OpenFilesTransfer | null;
@@ -246,12 +267,31 @@ function frameBridge(env: BridgeEnv, module: string, opts: BridgeOptions): Bridg
     },
     (nudge) => {
       const listener = (ev: MessageEvent) => {
-        if (ev.source === parent && isBridgePush(ev.data)) nudge();
+        if (ev.source === parent && isBridgePush(ev.data) && ev.data.push === 'open-files') nudge();
       };
       env.addEventListener?.('message', listener);
       return () => env.removeEventListener?.('message', listener);
     },
+    'open-files',
   );
+
+  // Listen immediately, including before onCommand is registered. No reply is needed.
+  let waiting: BridgeCommand | null = null;
+  let nudgeCommand: (() => void) | null = null;
+  env.addEventListener?.('message', (ev) => {
+    if (ev.source !== parent || !isBridgePush(ev.data) || ev.data.push !== 'command' ||
+        !isBridgeCommand(ev.data.command)) return;
+    waiting = ev.data.command;
+    nudgeCommand?.();
+  });
+  const onCommand = deliveryHub(async () => {
+    const command = waiting;
+    waiting = null;
+    return command;
+  }, (nudge) => {
+    nudgeCommand = nudge;
+    return () => { nudgeCommand = null; };
+  }, 'command');
 
   return {
     transport: 'postMessage',
@@ -277,6 +317,7 @@ function frameBridge(env: BridgeEnv, module: string, opts: BridgeOptions): Bridg
     },
     isHosted: () => true,
     onOpenFiles,
+    onCommand,
   };
 }
 
@@ -322,3 +363,4 @@ export const token = (): Promise<string | null> => bridge().token();
 export const notify = (event: BridgeEvent): Promise<void> => bridge().notify(event);
 export const isHosted = (): boolean => bridge().isHosted();
 export const onOpenFiles = (handler: OpenFilesHandler): (() => void) => bridge().onOpenFiles(handler);
+export const onCommand = (handler: CommandHandler): (() => void) => bridge().onCommand(handler);

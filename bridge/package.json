@@ -1,6 +1,6 @@
 {
   "name": "@lab/bridge",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The tiny API a lab module calls to talk to the UPb Studio shell: open(url), token(), notify(event), isHosted(), onOpenFiles(handler)",
   "license": "MIT",
   "type": "module",

@@ -8,6 +8,7 @@
     "allow-bridge-token",
     "allow-bridge-notify",
     "allow-bridge-open-files",
+    "allow-bridge-take-command",
     "allow-bridge-read-file"
   ]
 }

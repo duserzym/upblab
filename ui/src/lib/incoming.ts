@@ -7,14 +7,16 @@
 //   web      /desk/open?url=… and module iframes posting through @lab/bridge;
 //            files dropped on the shell page (App.svelte)
 
-import { EVENTS, type BridgeEvent } from '@lab/bridge';
-import { createFrameHost, pushOpenFiles } from '@lab/bridge/host';
+import { EVENTS, spotSelection, isBridgeCommand, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
+import { createFrameHost, pushOpenFiles, pushCommand } from '@lab/bridge/host';
 import { fileUrlToPath } from './drop';
 import { identity, SIGN_OUT_EVENTS } from './identity.svelte';
 import { opener } from './opener.svelte';
-import { desktopFiles, isDesktop, logInfo } from './platform';
+import { desktopFiles, desktopModules, isDesktop, logInfo } from './platform';
 import { shell } from './shell.svelte';
 import { settings } from './settings.svelte';
+import { selection } from './selection.svelte';
+import type { ModuleTab } from './links';
 
 interface BridgeOpenPayload {
   url: string;
@@ -49,6 +51,8 @@ export const FILE_EVENTS = {
 export function onModuleEvent(event: BridgeEvent, source: string) {
   void logInfo(`[bridge] ${source}: ${JSON.stringify(event)}`);
   if (SIGN_OUT_EVENTS.includes(event.type) && identity.signedIn) void identity.logout(`${source} signed out`);
+  const selected = spotSelection(event);
+  if (selected) selection.fromImages = { ...selected, at: Date.now() };
   if (event.type === 'lab.open-files.seen') opener.seen(source, event);
 }
 
@@ -73,6 +77,42 @@ async function takeOpened() {
 
 /** Module iframes register here so the frame host can tell which module posted. */
 export const frames = new Map<string, Window>();
+const loadingFrames = new Set<ModuleTab>();
+const waitingCommands = new Map<ModuleTab, BridgeCommand>();
+
+/** Register early for bridge requests, then on load to deliver any waiting command. */
+export function registerFrame(tab: ModuleTab, frame: Window, loaded = true): void {
+  frames.set(tab, frame);
+  if (!loaded) {
+    loadingFrames.add(tab);
+    return;
+  }
+  loadingFrames.delete(tab);
+  const command = waitingCommands.get(tab);
+  if (command) {
+    waitingCommands.delete(tab);
+    pushCommand(frame, command, '*');
+  }
+}
+
+export function unregisterFrame(tab: ModuleTab): void {
+  frames.delete(tab);
+  loadingFrames.delete(tab);
+}
+
+/** Ask a module to focus an object without navigating away from its open project. */
+export async function sendCommand(tab: ModuleTab, command: BridgeCommand): Promise<boolean> {
+  if (!isBridgeCommand(command)) return false;
+  if (isDesktop) return desktopModules.command(tab, command);
+  const frame = frames.get(tab);
+  if (!frame || loadingFrames.has(tab)) {
+    waitingCommands.set(tab, command);
+    return false;
+  }
+  waitingCommands.delete(tab);
+  pushCommand(frame, command, '*');
+  return true;
+}
 
 export async function listenForLinks(): Promise<void> {
   if (isDesktop) {

@@ -6,8 +6,10 @@
 //   2  open-files: the shell hands the module files the user dropped on the
 //      window or opened through the OS (ux-conventions rule 4). A v1 module
 //      never asks for them; a v2 module on a v1 shell gets none.
+//   3  command: the shell asks a module to show something (focus-spot,
+//      focus-grain); lab.spot.selected.
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Tag on every postMessage envelope, so unrelated messages are ignored. */
 export const MESSAGE_TAG = 'lab-bridge';
@@ -30,6 +32,8 @@ export const COMMANDS = {
   openFiles: 'bridge_open_files',
   /** v2. `{ id, index }` -> the bytes of one file of that manifest (an ArrayBuffer). */
   readFile: 'bridge_read_file',
+  /** v3. Take and clear the newest command waiting for this webview. */
+  takeCommand: 'bridge_take_command',
 } as const;
 
 /**
@@ -38,6 +42,9 @@ export const COMMANDS = {
  * { id } })`). The bridge then asks for them with `COMMANDS.openFiles`.
  */
 export const OPEN_FILES_EVENT = 'lab-bridge:open-files';
+
+/** v3: the host dispatches this DOM event on the module window, detail `{ id }`. */
+export const COMMAND_EVENT = 'lab-bridge:command';
 
 /** Events the desktop host emits to the shell webview after a module call. */
 export const EVENTS = {
@@ -52,6 +59,7 @@ export const EVENTS = {
  */
 export const SHELL_EVENTS = {
   signedOut: 'lab.auth.signed-out',
+  spotSelected: 'lab.spot.selected',
 } as const;
 
 /** A module event for the shell (timeline entries, status, title changes). */
@@ -59,6 +67,72 @@ export interface BridgeEvent {
   /** Namespaced type, e.g. `grainatlas.spot.selected`. */
   type: string;
   [key: string]: unknown;
+}
+
+export interface FocusSpotCommand {
+  type: 'focus-spot';
+  /** grainatlas project id (laicpmsdb atlas_project_id). */
+  project: string;
+  /** grainatlas spot id (laicpmsdb atlas_spot_id). */
+  spot: string;
+  flash?: boolean;
+  /** Sender, e.g. 'review'. */
+  via?: string;
+}
+
+export interface FocusGrainCommand {
+  type: 'focus-grain';
+  project: string;
+  /** laicpmsdb grain label (<area_id>/<grain_number>) or grainatlas grain id. */
+  grain: string;
+  spot?: string;
+  flash?: boolean;
+  via?: string;
+}
+
+export type BridgeCommand = FocusSpotCommand | FocusGrainCommand;
+
+/** The shell also accepts grainatlas.spot.selected ({ project, spot, name }) as via 'user'. */
+export interface SpotSelectedEvent extends BridgeEvent {
+  type: 'lab.spot.selected';
+  project: string;
+  spot: string;
+  name?: string;
+  grain?: string | null;
+  area?: string;
+  via: 'user' | 'shell';
+}
+
+const ID = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/;
+const isId = (x: unknown): x is string => typeof x === 'string' && ID.test(x);
+const isGrain = (x: unknown): x is string =>
+  typeof x === 'string' && x.split('/').length <= 2 && x.split('/').every(isId);
+
+/** Unknown command types are ignored so newer modules and shells can coexist. */
+export function isBridgeCommand(x: unknown): x is BridgeCommand {
+  if (!x || typeof x !== 'object') return false;
+  const c = x as Record<string, unknown>;
+  if (!isId(c.project) || (c.flash !== undefined && typeof c.flash !== 'boolean') ||
+      (c.via !== undefined && typeof c.via !== 'string')) return false;
+  if (c.type === 'focus-spot') return isId(c.spot);
+  if (c.type === 'focus-grain') return isGrain(c.grain) && (c.spot === undefined || isId(c.spot));
+  return false;
+}
+
+/** Normalise current and legacy spot selections; reject malformed ids and fields. */
+export function spotSelection(event: BridgeEvent): SpotSelectedEvent | null {
+  if (event.type !== SHELL_EVENTS.spotSelected && event.type !== 'grainatlas.spot.selected') return null;
+  if (!isId(event.project) || !isId(event.spot) ||
+      (event.name !== undefined && typeof event.name !== 'string')) return null;
+  if (event.type === 'grainatlas.spot.selected') {
+    return { type: SHELL_EVENTS.spotSelected, project: event.project, spot: event.spot,
+      ...(event.name === undefined ? {} : { name: event.name }), via: 'user' };
+  }
+  if ((event.grain !== undefined && event.grain !== null && !isGrain(event.grain)) ||
+      (event.area !== undefined && !isId(event.area)) ||
+      (event.via !== undefined && event.via !== 'user' && event.via !== 'shell')) return null;
+  return { ...event, type: SHELL_EVENTS.spotSelected, project: event.project, spot: event.spot,
+    via: event.via ?? 'user' } as SpotSelectedEvent;
 }
 
 export type BridgeOp = 'open' | 'token' | 'notify' | 'open-files';
@@ -111,12 +185,14 @@ export interface OpenFilesTransfer extends Omit<OpenFilesManifest, 'files'> {
 /**
  * v2, web delivery: the shell posts `{ tag, v, push: 'open-files' }` to a
  * module iframe when files are waiting; the module answers with an
- * `open-files` request.
+ * `open-files` request. v3 command pushes carry the command directly.
  */
 export interface BridgePush {
   tag: typeof MESSAGE_TAG;
   v: number;
-  push: 'open-files';
+  push: 'open-files' | 'command';
+  /** v3: a command is delivered directly, without a reply. */
+  command?: BridgeCommand;
 }
 
 export interface BridgeRequest {
@@ -164,5 +240,5 @@ export function isBridgeResponse(data: unknown): data is BridgeResponse {
 export function isBridgePush(data: unknown): data is BridgePush {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
-  return d.tag === MESSAGE_TAG && d.push === 'open-files';
+  return d.tag === MESSAGE_TAG && (d.push === 'open-files' || d.push === 'command');
 }

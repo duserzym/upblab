@@ -33,6 +33,7 @@ the user signs in or out in the shell, module tabs are reloaded, so read
 | `notify()` type the shell acts on | Effect |
 | --- | --- |
 | `lab.auth.signed-out` (`SHELL_EVENTS.signedOut`), also `laicpmsdb.auth.signed-out` | the shell signs out (revokes the token, clears the keychain entry) and reloads every module tab without a token; send it when the user signs out inside the module or the API answers 401 to the shell's token |
+| `lab.spot.selected` (`SHELL_EVENTS.spotSelected`), also `grainatlas.spot.selected` | stored as the latest selection for Review (see protocol v3 below) |
 | anything else | logged; the Home timeline uses them from roadmap phase 5 |
 
 Plain links work too: in the desktop shell a click on an `<a href="laicpmsdb://…">`
@@ -40,9 +41,8 @@ inside a module webview is intercepted and routed like `open()`.
 
 The shell side of the `postMessage` transport is `createFrameHost` from
 `@lab/bridge/host`. The wire format is in `src/protocol.ts`
-(`PROTOCOL_VERSION` 2; version 1 had `open`, `token` and `notify`, version 2
-adds `open-files`; the shell answers both, and a v2 module on a v1 shell
-simply never gets files).
+(`PROTOCOL_VERSION` 3; version 1 had `open`, `token` and `notify`, version 2
+added `open-files`, and version 3 adds commands and spot selection).
 
 ## `open-files`: files the user opened in the shell (protocol v2)
 
@@ -125,6 +125,95 @@ three seconds after they were offered gets them read from inside its webview
 by a small probe, which reports `lab.open-files.seen` to the shell; Home's
 Links list then shows how many files and bytes reached the webview. Release
 builds say after ten seconds that the module does not read `open-files` yet.
+
+## Protocol v3: commands and spot selection
+
+The shell can ask a module to show a spot or grain without reloading its page.
+A module registers `onCommand` once at start-up; it returns an unsubscribe
+function. A command already waiting is delivered on registration. Each command
+is delivered once, and a newer waiting command replaces an untaken older one.
+Standalone, `onCommand` never fires. Unknown command types and invalid payloads
+are ignored.
+
+```ts
+import { onCommand, notify, SHELL_EVENTS, type BridgeCommand } from '@lab/bridge';
+
+const stop = onCommand(async (command: BridgeCommand) => {
+  // focus-spot:  { type, project, spot, flash?: boolean, via?: string }
+  // focus-grain: { type, project, grain, spot?: string, flash?: boolean, via?: string }
+  await focus(command);
+});
+await notify({
+  type: SHELL_EVENTS.spotSelected, project, spot, name, grain, area,
+  via: 'user', // 'shell' when selected because of a command
+});
+```
+
+`project` is the grainatlas project id (`atlas_project_id` in laicpmsdb),
+`spot` is its spot id (`atlas_spot_id`), and `grain` is a grainatlas grain id
+or the grain label stored by laicpmsdb (`<area_id>/<grain_number>`). Each id
+matches `^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`; a grain label permits one `/`
+between two such parts. `flash` requests a visual flash; `via` names the
+sender, for example `'review'`.
+
+For grainatlas, `focus-spot` opens the project if needed (from the recent list
+or the published atlas, as a deep link does), selects the spot, centres the
+canvas and flashes it when requested. `focus-grain` opens the project if
+needed, selects and centres the grain (and the optional spot within it), and
+flashes the target when requested. A spot selection caused by either command
+emits `lab.spot.selected` with `via: 'shell'`, so a consumer can avoid a
+selection loop. These are the module's adoption contract; the bridge only
+delivers commands.
+
+`SpotSelectedEvent` carries `{ type: 'lab.spot.selected', project, spot,
+name?: string, grain?: string | null, area?: string, via: 'user' | 'shell' }`.
+The shell's `spotSelection(event)` helper validates and normalises it (missing
+`via` defaults to `'user'`). It also accepts the older
+`grainatlas.spot.selected` event with `{ project, spot, name? }`, always as
+`via: 'user'`. Invalid ids and unrelated events return `null`.
+
+Desktop wire format:
+
+- The shell calls `module_command { module: 'images' | 'sessions', command }`.
+  The host validates and stores the newest command per module webview label,
+  even before that webview exists. It returns whether the webview exists.
+- If the webview exists, the host evaluates
+  `window.dispatchEvent(new CustomEvent('lab-bridge:command', { detail: { id } }))`.
+- The module bridge invokes `bridge_take_command` on registration and each
+  nudge. It returns the waiting command or `null` and clears it. A module can
+  take only its own webview's command. Only the shell may call `module_command`;
+  local and configured remote module origins may call `bridge_take_command`.
+  Older hosts rejecting the invoke are silently tolerated.
+
+Web wire format:
+
+```ts
+// Shell side, from @lab/bridge/host:
+pushCommand(frame, command, targetOrigin);
+// Posts { tag: 'lab-bridge', v: 3, push: 'command', command }.
+```
+
+The module accepts command pushes only from `window.parent`, validates the
+command and delivers it without a request or reply. Before a handler exists,
+it retains only the newest valid push. The shell's `sendCommand(tab, command)`
+uses this helper on the web and `module_command` on desktop. On the web it
+returns `false` if the frame is not ready and holds the newest command until
+the frame's next load. Module events travel through the existing `notify`
+transport and origin checks.
+
+Compatibility (rows are module versions, columns are shell versions):
+
+| Module / shell | v1 shell | v2 shell | v3 shell |
+| --- | --- | --- | --- |
+| v1 module | open, token, notify | same | same; ignores commands |
+| v2 module | open, token, notify; no files | plus open-files | plus open-files; ignores commands |
+| v3 module | open, token, notify; no files or commands | plus open-files; no commands | plus open-files and commands; accepts both spot selection event names |
+
+The shell continues answering older requests without requiring version equality.
+A v3 module on an older shell receives no commands; existing operations keep
+working. Older shells can receive `lab.spot.selected` as an ordinary `notify`
+event but have no selection consumer. The v3 shell accepts both the current
+and legacy selection events from modules of any version.
 
 ## Adopting the bridge in a module
 

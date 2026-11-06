@@ -337,7 +337,7 @@ pub fn probe_script() -> &'static str {
 "#
 }
 
-fn module_label(module: &str) -> Result<&'static str, String> {
+pub(crate) fn module_label(module: &str) -> Result<&'static str, String> {
     match module {
         "images" => Ok("module-images"),
         "sessions" => Ok("module-sessions"),

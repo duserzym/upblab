@@ -1,6 +1,6 @@
 # Links between modules
 
-Every cross-module action is a URL (plan section 4.4). UPb Studio registers
+Cross-module navigation uses URLs (plan section 4.4). UPb Studio registers
 three schemes with the operating system and routes them to a tab:
 
 | Link | Opens |
@@ -69,3 +69,15 @@ registers `upbr`). When both are installed, the OS picks one handler per
 scheme; UPb Studio routes a `grainatlas://` link to its Images tab and a
 `upbr://` link to Studio (adding a handoff code), while the standalone app
 opens it itself (Studio then asks for a sign-in if the link has no code).
+
+
+## Shell to module: commands (bridge v3)
+
+The shell uses `focus-spot` and `focus-grain` commands to select and centre an
+object inside an already loaded module without reloading its page. Modules
+register `onCommand` at start-up and emit `lab.spot.selected` with `via: 'shell'`
+for spot selections caused by a command. The shell also accepts the legacy
+`grainatlas.spot.selected` event as `via: 'user'`.
+
+See [Protocol v3: commands and spot selection](../bridge/README.md#protocol-v3-commands-and-spot-selection)
+for ids, API, desktop and web wire formats, and version compatibility.
