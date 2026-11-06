@@ -1,8 +1,7 @@
 // Shell settings: how to reach laicpmsdb (ADR-0003: "This computer" or a lab
 // server URL), UPbRPy Studio path (or a development checkout), theme.
 // Desktop: Tauri store plugin (settings.json in the app config directory).
-// Web: localStorage. Light is the default theme (grainatlas docs/ux-conventions.md rule 1),
-// with Dark and System.
+// Web: localStorage. System is the default; an explicit choice is kept per viewer.
 
 import { isDesktop } from './platform';
 
@@ -23,6 +22,8 @@ export interface SettingsData {
   /** Development: a UPbRPy checkout to run as `python -m GUI` when Studio is not installed. */
   studioCheckout: string;
   theme: ThemePref;
+  /** True only after a theme is explicitly picked in Settings. */
+  themeChosen: boolean;
   lastTab: string;
   reviewScope: string;
   reviewSplit: boolean;
@@ -41,7 +42,8 @@ export const DEFAULTS: SettingsData = {
   pgBin: '',
   studioPath: '',
   studioCheckout: '',
-  theme: 'light',
+  theme: 'system',
+  themeChosen: false,
   lastTab: 'home',
   reviewScope: '',
   reviewSplit: false,
@@ -94,10 +96,8 @@ const localBackend: Backend = {
   },
 };
 
-function applyTheme(pref: ThemePref) {
-  const root = document.documentElement;
-  if (pref === 'system') root.removeAttribute('data-theme');
-  else root.setAttribute('data-theme', pref);
+function applyTheme(theme: Theme) {
+  document.documentElement.setAttribute('data-theme', theme);
 }
 
 const MODES: readonly Mode[] = ['', 'local', 'server'];
@@ -112,7 +112,7 @@ function prefersDark(): boolean {
   }
 }
 
-class Settings {
+export class Settings {
   mode = $state<Mode>(DEFAULTS.mode);
   serverUrl = $state(DEFAULTS.serverUrl);
   dataRoot = $state(DEFAULTS.dataRoot);
@@ -121,6 +121,7 @@ class Settings {
   studioPath = $state(DEFAULTS.studioPath);
   studioCheckout = $state(DEFAULTS.studioCheckout);
   theme = $state<ThemePref>(DEFAULTS.theme);
+  themeChosen = $state(DEFAULTS.themeChosen);
   lastTab = $state(DEFAULTS.lastTab);
   reviewScope = $state(DEFAULTS.reviewScope);
   reviewSplit = $state(DEFAULTS.reviewSplit);
@@ -132,15 +133,31 @@ class Settings {
   systemDark = $state(prefersDark());
   private backend: Backend = isDesktop ? storeBackend : localBackend;
 
-  /** The theme in effect: the choice, or the OS's for System. Passed to module tabs as ?theme=. */
+  /** Resolved theme for shell tokens, plots and live module delivery. */
   get effectiveTheme(): Theme {
     if (this.theme === 'system') return this.systemDark ? 'dark' : 'light';
     return this.theme;
   }
 
+  private stopMedia: (() => void) | undefined;
+
+  dispose() {
+    this.stopMedia?.();
+    this.stopMedia = undefined;
+  }
+
   async load() {
+    this.dispose();
+    this.systemDark = prefersDark();
+    applyTheme(this.effectiveTheme);
     try {
-      matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => (this.systemDark = e.matches));
+      const media = matchMedia('(prefers-color-scheme: dark)');
+      const change = (e: MediaQueryListEvent) => {
+        this.systemDark = e.matches;
+        applyTheme(this.effectiveTheme);
+      };
+      media.addEventListener('change', change);
+      this.stopMedia = () => media.removeEventListener('change', change);
     } catch {
       /* no matchMedia (tests) */
     }
@@ -153,7 +170,8 @@ class Settings {
       this.pgBin = data.pgBin;
       this.studioPath = data.studioPath;
       this.studioCheckout = data.studioCheckout;
-      this.theme = (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'light';
+      this.themeChosen = data.themeChosen === true;
+      this.theme = this.themeChosen && (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'system';
       this.lastTab = data.lastTab;
       this.reviewScope = typeof data.reviewScope === 'string' ? data.reviewScope : '';
       this.reviewSplit = data.reviewSplit === true;
@@ -163,13 +181,13 @@ class Settings {
     } catch (err) {
       console.warn('[settings] could not load, using defaults', err);
     }
-    applyTheme(this.theme);
+    applyTheme(this.effectiveTheme);
     this.loaded = true;
   }
 
   async update(patch: Partial<SettingsData>) {
     Object.assign(this, patch);
-    if (patch.theme) applyTheme(patch.theme);
+    if (patch.theme) applyTheme(this.effectiveTheme);
     await this.backend.write(this.snapshot());
   }
 
@@ -183,6 +201,7 @@ class Settings {
       studioPath: this.studioPath,
       studioCheckout: this.studioCheckout,
       theme: this.theme,
+      themeChosen: this.themeChosen,
       lastTab: this.lastTab,
       reviewScope: this.reviewScope,
       reviewSplit: this.reviewSplit,

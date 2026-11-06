@@ -103,9 +103,9 @@
   }
 
   const themes: { value: ThemePref; label: string }[] = [
-    { value: 'dark', label: 'Dark' },
-    { value: 'light', label: 'Light' },
     { value: 'system', label: 'System' },
+    { value: 'light', label: 'Light' },
+    { value: 'dark', label: 'Dark' },
   ];
 
   const localNote = $derived(
@@ -243,11 +243,11 @@
             class="chip"
             role="radio"
             aria-checked={settings.theme === t.value}
-            onclick={() => settings.update({ theme: t.value })}>{t.label}</button
+            onclick={() => settings.update({ theme: t.value, themeChosen: true })}>{t.label}</button
           >
         {/each}
       </div>
-      <p class="faint small">Light unless you choose otherwise; System follows the operating system. Module tabs get it as <code>?theme=</code> when they load, so a change reaches them the next time they open (restart UPb Studio).</p>
+      <p class="faint small">System follows the operating system by default. Your choice applies to every tab at once.</p>
       {#if isDesktop}
         <div class="row">
           <button class="btn" onclick={() => void resetWindow()}>Reset layout</button>

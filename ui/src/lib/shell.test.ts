@@ -224,9 +224,9 @@ describe('shell sign-in callback (laicpmsdb://auth/callback)', () => {
   });
 });
 
-describe('theme (light by default, passed to module tabs at load)', () => {
-  it('defaults to light and resolves System from the OS', () => {
-    expect(DEFAULTS.theme).toBe('light');
+describe('theme (System by default, passed to module tabs at load and live)', () => {
+  it('defaults to System and resolves it from the OS', () => {
+    expect(DEFAULTS.theme).toBe('system');
     settings.theme = 'system';
     settings.systemDark = true;
     expect(settings.effectiveTheme).toBe('dark');

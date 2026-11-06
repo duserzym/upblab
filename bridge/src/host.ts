@@ -7,6 +7,8 @@ import {
   MESSAGE_TAG,
   PROTOCOL_VERSION,
   isBridgeRequest,
+  isTheme,
+  type Theme,
   type BridgeEvent,
   type BridgeCommand,
   type BridgePush,
@@ -49,6 +51,13 @@ export function pushOpenFiles(frame: Pick<Window, 'postMessage'>, targetOrigin: 
 /** v3: send a command directly to a module iframe; no reply is expected. */
 export function pushCommand(frame: Pick<Window, 'postMessage'>, command: BridgeCommand, targetOrigin: string): void {
   const msg: BridgePush = { tag: MESSAGE_TAG, v: PROTOCOL_VERSION, push: 'command', command };
+  frame.postMessage(msg, targetOrigin);
+}
+
+/** v3.1: publish the resolved theme without navigating the frame. */
+export function pushTheme(frame: Pick<Window, 'postMessage'>, theme: Theme, targetOrigin: string): void {
+  if (!isTheme(theme)) return;
+  const msg: BridgePush = { tag: MESSAGE_TAG, v: PROTOCOL_VERSION, push: 'theme', theme };
   frame.postMessage(msg, targetOrigin);
 }
 

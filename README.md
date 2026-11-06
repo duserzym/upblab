@@ -26,9 +26,10 @@ token in the OS keychain and handed to the module tabs through `@lab/bridge`;
 `upbr://session/<id>` and `upbr://run/<id>` launch UPbRPy Studio with a
 handoff code minted on demand; Home lists sessions, runs and atlases
 ([docs/installing.md](docs/installing.md#signing-in)). UX conventions
-(2026-11-04, [docs/ux-conventions.md](docs/ux-conventions.md)): light by
-default; open anything: a folder or files dropped on the window, opened from
-the Finder or Explorer, or picked on Home go to Images or Sessions by content
+(2026-11-04, [docs/ux-conventions.md](docs/ux-conventions.md)): System theme by
+default, with Light and Dark choices; every tab follows live without reloading
+([theme bridge](docs/bridge-theme.md)); open anything: a folder or files dropped
+on the window, opened from the Finder or Explorer, or picked on Home go to Images or Sessions by content
 and reach the module through `@lab/bridge` `open-files` (protocol v2); every
 screen fits 1280 × 800, checked in Chromium and WebKit; the window reopens
 where it was left, fitted to the screen. Plan and roadmap:

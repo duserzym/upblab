@@ -23,6 +23,7 @@ export function installFakeTauri(opts: FakeOptions) {
   const calls: [string, Record<string, unknown> | undefined][] = [];
   const store = { ...opts.store };
   const fixtures = { ...opts.fixtures };
+  let theme: 'light' | 'dark' = 'light';
   let offerSequence = 0;
   let next = 1;
   const status = {
@@ -74,6 +75,12 @@ export function installFakeTauri(opts: FakeOptions) {
           return { found: false, path: null, error: 'UPbRPy Studio is not installed' };
         case 'auth_restore':
           return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { username: 'demo', display_name: 'Demo analyst' } : null, offline: false };
+        case 'module_theme':
+          if (args?.theme !== 'light' && args?.theme !== 'dark') throw new Error('invalid bridge theme');
+          theme = args.theme;
+          return null;
+        case 'bridge_theme':
+          return theme;
         case 'module_command':
           return false; // exercises loading the target without leaving Review
         case 'api_get':

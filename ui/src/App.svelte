@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import Home from './routes/Home.svelte';
   import Images from './routes/Images.svelte';
   import Sessions from './routes/Sessions.svelte';
@@ -47,8 +48,20 @@
     shell.overlay = identity.dialog;
   });
 
+  // Serialise updates so a rapid switch cannot leave the host on an older theme.
+  let themeUpdates: Promise<unknown> = Promise.resolve();
+  function publishTheme(theme: 'light' | 'dark') {
+    themeUpdates = themeUpdates.then(() => invoke('module_theme', { theme }))
+      .catch((err) => console.warn('[theme]', err));
+    return themeUpdates;
+  }
+  $effect(() => {
+    if (isDesktop && settings.loaded) void publishTheme(settings.effectiveTheme);
+  });
+
   onMount(async () => {
     await settings.load();
+    if (isDesktop) await publishTheme(settings.effectiveTheme);
     startScheduler();
     const last = settings.lastTab as View;
     if (tabs.some((t) => t.id === last)) shell.view = last;

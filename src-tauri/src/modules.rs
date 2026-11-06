@@ -9,10 +9,12 @@ use std::sync::Mutex;
 use serde::Deserialize;
 use tauri::ipc::CapabilityBuilder;
 use tauri::webview::{NewWindowResponse, WebviewBuilder};
-use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Rect, Runtime, State, Url, WebviewUrl};
+use tauri::{
+    AppHandle, LogicalPosition, LogicalSize, Manager, Rect, Runtime, State, Url, WebviewUrl,
+};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::bridge::{forward_open, module_name};
+use crate::bridge::{forward_open, module_name, theme_script, ThemeState};
 use crate::{MAIN_WINDOW, SCHEMES};
 
 const MODULES: [&str; 2] = ["images", "sessions"];
@@ -56,13 +58,21 @@ fn title_bar_offset<R: Runtime>(app: &AppHandle<R>, bounds: &Bounds) -> f64 {
     if !cfg!(target_os = "macos") {
         return 0.0;
     }
-    let Some(viewport) = bounds.viewport_height else { return 0.0 };
-    let Some(window) = app.get_window(MAIN_WINDOW) else { return 0.0 };
+    let Some(viewport) = bounds.viewport_height else {
+        return 0.0;
+    };
+    let Some(window) = app.get_window(MAIN_WINDOW) else {
+        return 0.0;
+    };
     let (Ok(inner), Ok(scale)) = (window.inner_size(), window.scale_factor()) else {
         return 0.0;
     };
     let inset = inner.to_logical::<f64>(scale).height - viewport;
-    if (0.0..200.0).contains(&inset) { inset } else { 0.0 }
+    if (0.0..200.0).contains(&inset) {
+        inset
+    } else {
+        0.0
+    }
 }
 
 fn label(module: &str) -> Result<String, String> {
@@ -74,7 +84,9 @@ fn label(module: &str) -> Result<String, String> {
 }
 
 fn parse_url(url: &str) -> Result<Url, String> {
-    let parsed: Url = url.parse().map_err(|e| format!("invalid module URL {url:?}: {e}"))?;
+    let parsed: Url = url
+        .parse()
+        .map_err(|e| format!("invalid module URL {url:?}: {e}"))?;
     match parsed.scheme() {
         "http" | "https" | "tauri" => Ok(parsed),
         other => Err(format!("module URL scheme {other:?} not allowed")),
@@ -85,12 +97,19 @@ fn parse_url(url: &str) -> Result<Url, String> {
 fn is_local(url: &Url) -> bool {
     url.scheme() == "tauri"
         || url.host_str() == Some("tauri.localhost")
-        || (cfg!(debug_assertions) && url.host_str() == Some("localhost") && url.port() == Some(1420))
+        || (cfg!(debug_assertions)
+            && url.host_str() == Some("localhost")
+            && url.port() == Some(1420))
 }
 
 /// Remote module pages (the configured laicpmsdb server) get the bridge
 /// commands for their origin only, in their own webview only.
-fn grant_bridge<R: Runtime>(app: &AppHandle<R>, state: &ModuleState, label: &str, url: &Url) -> Result<(), String> {
+fn grant_bridge<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &ModuleState,
+    label: &str,
+    url: &Url,
+) -> Result<(), String> {
     if is_local(url) {
         return Ok(()); // covered by capabilities/modules.json
     }
@@ -105,6 +124,7 @@ fn grant_bridge<R: Runtime>(app: &AppHandle<R>, state: &ModuleState, label: &str
         CapabilityBuilder::new(id)
             .remote(format!("{origin}/*"))
             .webview(label)
+            .permission("allow-bridge-theme")
             .permission("allow-bridge-open")
             .permission("allow-bridge-token")
             .permission("allow-bridge-notify")
@@ -119,20 +139,44 @@ fn grant_bridge<R: Runtime>(app: &AppHandle<R>, state: &ModuleState, label: &str
 }
 
 /// Set before any page script: tells @lab/bridge it runs inside the shell.
-fn marker_script(module: &str) -> String {
+fn marker_script(module: &str, theme: &str) -> String {
     format!(
-        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 3 }}), configurable: false }});",
-        module_name(&format!("module-{module}"))
+        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 3, minor: 1, theme: {:?} }}), configurable: false }});{}",
+        module_name(&format!("module-{module}")),
+        theme,
+        theme_script(theme).expect("resolved theme")
     )
 }
 
-fn build_webview<R: Runtime>(app: &AppHandle<R>, label: &str, module: &str, url: Url) -> WebviewBuilder<R> {
+fn build_webview<R: Runtime>(
+    app: &AppHandle<R>,
+    label: &str,
+    module: &str,
+    url: Url,
+) -> WebviewBuilder<R> {
     let nav_app = app.clone();
     let nav_label = label.to_string();
+    let page_app = app.clone();
     let win_app = app.clone();
     let win_label = label.to_string();
     WebviewBuilder::new(label, WebviewUrl::External(url))
-        .initialization_script(marker_script(module))
+        .initialization_script(marker_script(
+            module,
+            &app.state::<ThemeState>()
+                .current()
+                .unwrap_or_else(|_| "light".into()),
+        ))
+        // A webview can reload long after creation. Its fixed init script may
+        // carry an older theme; refresh from the host on every page load.
+        .on_page_load(move |webview, _| {
+            if let Ok(theme) = page_app.state::<ThemeState>().current() {
+                if let Ok(script) = theme_script(&theme) {
+                    if let Err(err) = webview.eval(script) {
+                        log::warn!("could not initialise module theme: {err}");
+                    }
+                }
+            }
+        })
         .initialization_script(crate::files::probe_script())
         // A plain <a href="laicpmsdb://…"> in a module goes to the shell's resolver.
         .on_navigation(move |url| {
@@ -141,7 +185,10 @@ fn build_webview<R: Runtime>(app: &AppHandle<R>, label: &str, module: &str, url:
                 forward_open(&nav_app, url.as_str(), &nav_label);
                 return false;
             }
-            let allowed = matches!(scheme, "http" | "https" | "tauri" | "about" | "data" | "blob");
+            let allowed = matches!(
+                scheme,
+                "http" | "https" | "tauri" | "about" | "data" | "blob"
+            );
             if !allowed {
                 log::warn!("refused navigation to {url} in {nav_label}");
             }
@@ -194,7 +241,8 @@ pub async fn module_open<R: Runtime>(
             log::info!("{label} loads {url}");
             wv.navigate(url).map_err(|e| e.to_string())?;
         }
-        wv.set_bounds(bounds.rect(title_bar_offset(&app, &bounds))).map_err(|e| e.to_string())?;
+        wv.set_bounds(bounds.rect(title_bar_offset(&app, &bounds)))
+            .map_err(|e| e.to_string())?;
         wv.show().map_err(|e| e.to_string())?;
         return Ok(());
     }
@@ -203,15 +251,24 @@ pub async fn module_open<R: Runtime>(
     let window = app.get_window(MAIN_WINDOW).ok_or("main window missing")?;
     let rect = bounds.rect(title_bar_offset(&app, &bounds));
     window
-        .add_child(build_webview(&app, &label, &module, url), rect.position, rect.size)
+        .add_child(
+            build_webview(&app, &label, &module, url),
+            rect.position,
+            rect.size,
+        )
         .map_err(|e| format!("could not create the {module} webview: {e}"))?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn module_bounds<R: Runtime>(app: AppHandle<R>, module: String, bounds: Bounds) -> Result<(), String> {
+pub fn module_bounds<R: Runtime>(
+    app: AppHandle<R>,
+    module: String,
+    bounds: Bounds,
+) -> Result<(), String> {
     if let Some(wv) = app.get_webview(&label(&module)?) {
-        wv.set_bounds(bounds.rect(title_bar_offset(&app, &bounds))).map_err(|e| e.to_string())?;
+        wv.set_bounds(bounds.rect(title_bar_offset(&app, &bounds)))
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }
@@ -255,14 +312,25 @@ mod tests {
 
     #[test]
     fn local_origins() {
-        assert!(is_local(&"tauri://localhost/modules/grainatlas/index.html".parse().unwrap()));
-        assert!(is_local(&"http://tauri.localhost/modules/grainatlas/index.html".parse().unwrap()));
+        assert!(is_local(
+            &"tauri://localhost/modules/grainatlas/index.html"
+                .parse()
+                .unwrap()
+        ));
+        assert!(is_local(
+            &"http://tauri.localhost/modules/grainatlas/index.html"
+                .parse()
+                .unwrap()
+        ));
         assert!(!is_local(&"http://localhost:8000/app/".parse().unwrap()));
     }
 
     #[test]
     fn marker_names_the_module() {
-        assert!(marker_script("images").contains("\"grainatlas\""));
-        assert!(marker_script("sessions").contains("\"laicpmsdb\""));
+        assert!(marker_script("images", "dark").contains("\"grainatlas\""));
+        assert!(marker_script("sessions", "light").contains("\"laicpmsdb\""));
+        let script = marker_script("images", "dark");
+        assert!(script.contains("v: 3, minor: 1, theme: \"dark\""));
+        assert!(script.contains("new MutationObserver"));
     }
 }

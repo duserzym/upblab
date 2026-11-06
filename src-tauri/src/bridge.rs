@@ -102,6 +102,73 @@ pub fn bridge_notify<R: Runtime>(app: AppHandle<R>, webview: Webview<R>, event: 
     }
 }
 
+pub const THEME_EVENT: &str = "lab-bridge:theme";
+
+/// The shell resolves System; the host only stores and forwards that value.
+pub struct ThemeState(Mutex<String>);
+
+impl Default for ThemeState {
+    fn default() -> Self {
+        Self(Mutex::new("light".into()))
+    }
+}
+
+pub fn valid_theme(theme: &str) -> bool {
+    matches!(theme, "light" | "dark")
+}
+
+impl ThemeState {
+    pub fn current(&self) -> Result<String, String> {
+        self.0
+            .lock()
+            .map(|value| value.clone())
+            .map_err(|e| e.to_string())
+    }
+
+    fn set(&self, theme: &str) -> Result<(), String> {
+        if !valid_theme(theme) {
+            return Err("invalid bridge theme".into());
+        }
+        *self.0.lock().map_err(|e| e.to_string())? = theme.into();
+        Ok(())
+    }
+}
+
+/// One eval updates older modules and notifies bridge-aware modules. The
+/// observer also handles document-start, before an <html> element exists.
+pub fn theme_script(theme: &str) -> Result<String, String> {
+    if !valid_theme(theme) {
+        return Err("invalid bridge theme".into());
+    }
+    Ok(format!(
+        "(() => {{ const theme = {theme:?}; const apply = () => {{ if (!document.documentElement) return false; document.documentElement.setAttribute('data-theme', theme); window.dispatchEvent(new CustomEvent({THEME_EVENT:?}, {{ detail: {{ theme }} }})); return true; }}; if (!apply()) {{ const observer = new MutationObserver(() => {{ if (apply()) observer.disconnect(); }}); observer.observe(document, {{ childList: true }}); }} }})();"
+    ))
+}
+
+/// Shell-only command: update all existing module webviews, including hidden ones.
+#[tauri::command]
+pub fn module_theme<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, ThemeState>,
+    theme: String,
+) -> Result<(), String> {
+    state.set(&theme)?;
+    let script = theme_script(&theme)?;
+    for label in ["module-images", "module-sessions"] {
+        if let Some(webview) = app.get_webview(label) {
+            if let Err(err) = webview.eval(&script) {
+                log::warn!("could not publish theme to {label}: {err}");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn bridge_theme(state: State<'_, ThemeState>) -> Result<String, String> {
+    state.current()
+}
+
 const COMMAND_EVENT: &str = "lab-bridge:command";
 
 /// Only the latest untaken command for each module webview matters.
@@ -214,6 +281,37 @@ pub fn bridge_take_command<R: Runtime>(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn themes_accept_only_resolved_values() {
+        let state = ThemeState::default();
+        assert_eq!(state.current().unwrap(), "light");
+        for theme in ["light", "dark"] {
+            assert!(valid_theme(theme));
+            state.set(theme).unwrap();
+            assert_eq!(state.current().unwrap(), theme);
+        }
+        for theme in ["", "system", "Dark", " dark", "dark\n", "<script>"] {
+            assert!(!valid_theme(theme));
+            assert!(state.set(theme).is_err());
+            assert!(theme_script(theme).is_err());
+        }
+        assert_eq!(state.current().unwrap(), "dark");
+    }
+
+    #[test]
+    fn theme_eval_sets_attribute_and_dispatches_event_when_html_exists() {
+        for theme in ["light", "dark"] {
+            let script = theme_script(theme).unwrap();
+            assert!(script.contains(&format!("const theme = {theme:?}")));
+            assert!(script.contains("setAttribute('data-theme', theme)"));
+            assert!(script.contains(THEME_EVENT));
+            assert!(script.contains("detail: { theme }"));
+            assert!(script.contains("if (!document.documentElement) return false"));
+            assert!(script.contains("new MutationObserver"));
+            assert!(script.contains("observer.disconnect()"));
+        }
+    }
 
     #[test]
     fn commands_validate_ids_and_optional_fields() {

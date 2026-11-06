@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   COMMANDS,
   COMMAND_EVENT,
+  THEME_EVENT,
   isBridgeCommand,
   isBridgePush,
   spotSelection,
@@ -15,7 +16,7 @@ import {
   detectTransport,
   type BridgeEnv,
 } from '../src/index';
-import { createFrameHost, frameName, pushOpenFiles, pushCommand } from '../src/host';
+import { createFrameHost, frameName, pushOpenFiles, pushCommand, pushTheme } from '../src/host';
 
 describe('detectTransport', () => {
   it('is none without a window', () => {
@@ -350,7 +351,8 @@ describe('commands (protocol v3)', () => {
   it('tauri: takes the newest waiting command once on registration and nudges', async () => {
     const target = new EventTarget();
     let waiting: unknown = first;
-    const invoke = vi.fn(async () => {
+    const invoke = vi.fn(async (cmd: string) => {
+      if (cmd !== COMMANDS.takeCommand) return null;
       const command = waiting;
       waiting = null;
       return command;
@@ -482,5 +484,106 @@ describe('spotSelection', () => {
       { ...base, name: 5 }, { type: 'grainatlas.spot.selected', project: 'p', spot: 'bad/id' }]) {
       expect(spotSelection(event)).toBeNull();
     }
+  });
+});
+
+
+describe('resolved theme (v3.1)', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  it('web: remembers pushes before registration, validates source and values, unsubscribes', () => {
+    const { env, childTarget, origin } = framePair();
+    const b = createBridge(env);
+    const push = (theme: unknown, source: unknown = env.parent) => childTarget.dispatchEvent(msgEvent({
+      data: { tag: MESSAGE_TAG, v: 3, push: 'theme', theme }, origin, source,
+    }));
+    expect(b.theme()).toBeNull();
+    push('dark');
+    const handler = vi.fn();
+    const stop = b.onTheme(handler);
+    expect(handler).toHaveBeenCalledExactlyOnceWith('dark');
+    for (const value of [null, undefined, 'system', 'Dark', true, {}, ' dark']) {
+      push(value);
+      expect(isBridgePush({ tag: MESSAGE_TAG, v: 3, push: 'theme', theme: value })).toBe(false);
+    }
+    push('light', {});
+    expect(b.theme()).toBe('dark');
+    expect(handler).toHaveBeenCalledTimes(1);
+    push('light');
+    expect(handler).toHaveBeenLastCalledWith('light');
+    stop();
+    push('dark');
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(b.theme()).toBe('dark');
+    b.onTheme(handler);
+    expect(handler).toHaveBeenCalledTimes(3);
+  });
+
+  it('tauri: reads the marker immediately and receives validated DOM events', async () => {
+    const target = new EventTarget();
+    const invoke = vi.fn(async () => 'light');
+    const b = createBridge({
+      __LAB_SHELL__: { module: 'grainatlas', v: 3, theme: 'light' },
+      __TAURI_INTERNALS__: { invoke },
+      addEventListener: (t, l) => target.addEventListener(t, l as EventListener),
+    });
+    expect(b.theme()).toBe('light');
+    const handler = vi.fn();
+    const stop = b.onTheme(handler);
+    const event = (theme: unknown) => {
+      const e = new Event(THEME_EVENT);
+      Object.defineProperty(e, 'detail', { value: { theme } });
+      target.dispatchEvent(e);
+    };
+    event('system');
+    event(null);
+    expect(handler).toHaveBeenCalledExactlyOnceWith('light');
+    event('dark');
+    await tick(); // stale command response must not overwrite the later event
+    expect(invoke).toHaveBeenCalledWith(COMMANDS.theme);
+    expect(b.theme()).toBe('dark');
+    expect(handler).toHaveBeenCalledTimes(2);
+    stop();
+    event('light');
+    expect(b.theme()).toBe('light');
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it('tauri: discovers the current theme via the command without a marker value', async () => {
+    const b = createBridge({ __LAB_SHELL__: { module: 'grainatlas', v: 3 },
+      __TAURI_INTERNALS__: { invoke: async () => 'dark' } });
+    const handler = vi.fn();
+    b.onTheme(handler);
+    await tick();
+    expect(b.theme()).toBe('dark');
+    expect(handler).toHaveBeenCalledExactlyOnceWith('dark');
+  });
+
+  it('older shells and noop have no theme and never fire', async () => {
+    const warn = vi.spyOn(console, 'warn');
+    const bridges = [createBridge({}), createBridge(framePair().env), createBridge({
+      __LAB_SHELL__: { module: 'grainatlas', v: 3 },
+      __TAURI_INTERNALS__: { invoke: async () => { throw new Error('unknown command'); } },
+    }), createBridge({
+      __LAB_SHELL__: { module: 'grainatlas', v: 3 },
+      __TAURI_INTERNALS__: { invoke: async () => 'system' },
+    })];
+    for (const b of bridges) {
+      const handler = vi.fn();
+      const stop = b.onTheme(handler);
+      await tick();
+      expect(b.theme()).toBeNull();
+      expect(handler).not.toHaveBeenCalled();
+      stop();
+    }
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('host pushTheme sends the compatible envelope to the specified origin', () => {
+    const frame = { postMessage: vi.fn() };
+    pushTheme(frame, 'dark', 'https://lab.example');
+    expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith({
+      tag: MESSAGE_TAG, v: 3, push: 'theme', theme: 'dark',
+    }, 'https://lab.example');
   });
 });

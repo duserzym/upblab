@@ -1,0 +1,10 @@
+# Theme commands are gated separately: only the shell may publish a theme.
+[[permission]]
+identifier = "allow-module-theme"
+description = "Allows the shell to publish its resolved theme."
+commands.allow = ["module_theme"]
+
+[[permission]]
+identifier = "allow-bridge-theme"
+description = "Allows hosted modules to read the shell theme."
+commands.allow = ["bridge_theme"]

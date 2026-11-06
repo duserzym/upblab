@@ -230,13 +230,15 @@ and legacy selection events from modules of any version.
   shell, so its presence does not mean "my own desktop app": only the bridge
   commands are allowed there, not the module's own Tauri commands.
 - Keep relative asset paths (`base: './'`) and route by hash or query string.
-- Read `?theme=light|dark` from `location.search` at start-up: the shell
-  passes its effective theme (light by default; Dark and System are the
-  user's choice) on every module URL it loads, and it wins over the module's
-  own stored choice while present (grainatlas `docs/ux-conventions.md`
-  rule 1). With nothing passed and nothing chosen, follow the system. The
-  value is set at load: a change in the shell reaches the module the next
-  time it loads.
+- Use `theme()` and `onTheme(handler)` (protocol v3.1) for the shell's resolved
+  `light` or `dark` theme. `onTheme` immediately delivers the current value if
+  known, then every change; it returns an unsubscribe. `theme()` returns null
+  when standalone or on an older shell. The shell defaults to System and
+  follows OS changes live. While hosted, the shell's theme wins over a module's
+  stored choice. Fallback order: bridge message, host-written `data-theme` on
+  `<html>`, then `?theme=light|dark` at load. Never reload to apply a theme.
+  See [the theme contract](../docs/bridge-theme.md) for both transports and
+  compatibility with older builds.
 - Leave `Ctrl/⌘ 1–4`, `Ctrl/⌘ ,` and `Ctrl/⌘ R` to the shell.
 - Links to other modules: `open('laicpmsdb://…')` or a plain
   `<a href="grainatlas://…">`. Never `location.href = '<other module URL>'`.

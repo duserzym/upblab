@@ -16,6 +16,9 @@
 import {
   COMMANDS,
   COMMAND_EVENT,
+  THEME_EVENT,
+  isTheme,
+  type Theme,
   FRAME_NAME_PREFIX,
   MESSAGE_TAG,
   OPEN_FILES_EVENT,
@@ -42,12 +45,18 @@ export type OpenedFiles = OpenFilesTransfer;
 
 export type OpenFilesHandler = (files: OpenedFiles) => void | Promise<void>;
 
+export type ThemeHandler = (theme: Theme) => void;
+
 export type CommandHandler = (command: BridgeCommand) => void | Promise<void>;
 
 export interface Bridge {
   readonly transport: Transport;
   /** Name of the module as the shell knows it, or null when not hosted. */
   readonly module: string | null;
+  /** v3.1: last known resolved shell theme, null when unavailable. */
+  theme(): Theme | null;
+  /** Called immediately if known, then for every change. Returns an unsubscribe. */
+  onTheme(handler: ThemeHandler): () => void;
   /** Ask the shell to route a URL (laicpmsdb://, grainatlas://, upbr://, https://). */
   open(url: string): Promise<boolean>;
   /** The signed-in laicpmsdb bearer token, or null (not hosted, or signed out). */
@@ -92,6 +101,8 @@ function noopBridge(): Bridge {
   return {
     transport: 'none',
     module: null,
+    theme: () => null,
+    onTheme: () => () => {},
     open: async () => false,
     token: async () => null,
     notify: async () => {},
@@ -151,7 +162,39 @@ function deliveryHub<T>(pull: () => Promise<T | null>, subscribe: (nudge: () => 
   };
 }
 
+/** Keep the latest value even without subscribers; ignore duplicates and invalid input. */
+function themeHub(initial?: unknown) {
+  let current: Theme | null = isTheme(initial) ? initial : null;
+  const handlers = new Set<ThemeHandler>();
+  return {
+    theme: () => current,
+    onTheme(handler: ThemeHandler) {
+      handlers.add(handler);
+      if (current) handler(current);
+      return () => { handlers.delete(handler); };
+    },
+    receive(value: unknown) {
+      if (!isTheme(value) || value === current) return;
+      current = value;
+      for (const handler of [...handlers]) handler(value);
+    },
+  };
+}
+
 function tauriBridge(marker: ShellMarker, internals: TauriInternals, env: BridgeEnv): Bridge {
+  const themes = themeHub(marker.theme);
+  let receivedEvent = false;
+  env.addEventListener?.(THEME_EVENT, (event) => {
+    const detail = (event as unknown as { detail?: { theme?: unknown } }).detail;
+    if (!isTheme(detail?.theme)) return;
+    receivedEvent = true;
+    themes.receive(detail.theme);
+  });
+  // Query once for hosts whose marker predates theme support. A later event wins
+  // over this reply if the shell changes while the command is in flight.
+  void Promise.resolve().then(() => internals.invoke(COMMANDS.theme)).then((value) => {
+    if (!receivedEvent) themes.receive(value);
+  }).catch(() => { /* older shells have no theme command */ });
   async function pull(): Promise<OpenedFiles | null> {
     let manifest: OpenFilesManifest | null;
     try {
@@ -193,6 +236,8 @@ function tauriBridge(marker: ShellMarker, internals: TauriInternals, env: Bridge
   }, 'command');
   return {
     transport: 'tauri',
+    theme: themes.theme,
+    onTheme: themes.onTheme,
     module: marker.module,
     async open(url) {
       try {
@@ -230,6 +275,12 @@ function nextId(): string {
 
 function frameBridge(env: BridgeEnv, module: string, opts: BridgeOptions): Bridge {
   const parent = env.parent!;
+  const themes = themeHub();
+  env.addEventListener?.('message', (event) => {
+    if (event.source === parent && isBridgePush(event.data) && event.data.push === 'theme') {
+      themes.receive(event.data.theme);
+    }
+  });
   const timeoutMs = opts.timeoutMs ?? 5000;
   // Same-origin in the /desk/ delivery; ancestorOrigins narrows the target when
   // the browser exposes it (WebKit, Chromium). Requests carry no secrets.
@@ -295,6 +346,8 @@ function frameBridge(env: BridgeEnv, module: string, opts: BridgeOptions): Bridg
 
   return {
     transport: 'postMessage',
+    theme: themes.theme,
+    onTheme: themes.onTheme,
     module,
     async open(url) {
       try {
@@ -364,3 +417,6 @@ export const notify = (event: BridgeEvent): Promise<void> => bridge().notify(eve
 export const isHosted = (): boolean => bridge().isHosted();
 export const onOpenFiles = (handler: OpenFilesHandler): (() => void) => bridge().onOpenFiles(handler);
 export const onCommand = (handler: CommandHandler): (() => void) => bridge().onCommand(handler);
+
+export const theme = (): Theme | null => bridge().theme();
+export const onTheme = (handler: ThemeHandler): (() => void) => bridge().onTheme(handler);

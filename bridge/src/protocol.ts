@@ -8,8 +8,15 @@
 //      never asks for them; a v2 module on a v1 shell gets none.
 //   3  command: the shell asks a module to show something (focus-spot,
 //      focus-grain); lab.spot.selected.
+//   3.1 theme: resolved shell theme at load and on every change.
 
 export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_MINOR = 1;
+
+export type Theme = 'light' | 'dark';
+export function isTheme(value: unknown): value is Theme {
+  return value === 'light' || value === 'dark';
+}
 
 /** Tag on every postMessage envelope, so unrelated messages are ignored. */
 export const MESSAGE_TAG = 'lab-bridge';
@@ -18,7 +25,7 @@ export const MESSAGE_TAG = 'lab-bridge';
 export const FRAME_NAME_PREFIX = 'lab-shell:';
 
 /**
- * On desktop the shell injects `window.__LAB_SHELL__ = { module, v }` into each
+ * On desktop the shell injects `window.__LAB_SHELL__ = { module, v, minor, theme }` into each
  * module webview before any page script runs.
  */
 export const SHELL_GLOBAL = '__LAB_SHELL__';
@@ -34,6 +41,8 @@ export const COMMANDS = {
   readFile: 'bridge_read_file',
   /** v3. Take and clear the newest command waiting for this webview. */
   takeCommand: 'bridge_take_command',
+  /** v3.1. The resolved theme, or null on an older shell. */
+  theme: 'bridge_theme',
 } as const;
 
 /**
@@ -45,6 +54,9 @@ export const OPEN_FILES_EVENT = 'lab-bridge:open-files';
 
 /** v3: the host dispatches this DOM event on the module window, detail `{ id }`. */
 export const COMMAND_EVENT = 'lab-bridge:command';
+
+/** v3.1: DOM event on the module window, detail `{ theme: 'light' | 'dark' }`. */
+export const THEME_EVENT = 'lab-bridge:theme';
 
 /** Events the desktop host emits to the shell webview after a module call. */
 export const EVENTS = {
@@ -204,7 +216,9 @@ export interface OpenFilesTransfer extends Omit<OpenFilesManifest, 'files'> {
 export interface BridgePush {
   tag: typeof MESSAGE_TAG;
   v: number;
-  push: 'open-files' | 'command';
+  push: 'open-files' | 'command' | 'theme';
+  /** v3.1: the resolved shell theme. */
+  theme?: Theme;
   /** v3: a command is delivered directly, without a reply. */
   command?: BridgeCommand;
 }
@@ -232,6 +246,8 @@ export interface BridgeResponse {
 export interface ShellMarker {
   module: string;
   v: number;
+  minor?: number;
+  theme?: Theme;
 }
 
 export function isBridgeRequest(data: unknown): data is BridgeRequest {
@@ -254,5 +270,5 @@ export function isBridgeResponse(data: unknown): data is BridgeResponse {
 export function isBridgePush(data: unknown): data is BridgePush {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
-  return d.tag === MESSAGE_TAG && (d.push === 'open-files' || d.push === 'command');
+  return d.tag === MESSAGE_TAG && (d.push === 'open-files' || d.push === 'command' || (d.push === 'theme' && isTheme(d.theme)));
 }

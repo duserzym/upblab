@@ -139,9 +139,12 @@ export interface ModuleBases {
 /** Add `?theme=` (or `&theme=`) before any `#` route. */
 export function withTheme(url: string, theme: ModuleBases['theme']): string {
   if (!theme) return url;
-  const hash = url.indexOf('#');
-  const [head, tail] = hash < 0 ? [url, ''] : [url.slice(0, hash), url.slice(hash)];
-  return `${head}${head.includes('?') ? '&' : '?'}theme=${theme}${tail}`;
+  const [head, tail = ''] = url.split(/#(.*)/s);
+  const query = head.indexOf('?');
+  const path = query < 0 ? head : head.slice(0, query);
+  const params = new URLSearchParams(query < 0 ? '' : head.slice(query + 1));
+  params.set('theme', theme);
+  return `${path}?${params}${url.includes('#') ? `#${tail}` : ''}`;
 }
 
 function joinBase(base: string, rest: string): string {
@@ -187,4 +190,15 @@ export function normaliseServerUrl(input: string): string | null {
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
   const path = u.pathname.replace(/\/+$/, '').replace(/\/app$/, '');
   return `${u.protocol}//${u.host}${path}`;
+}
+
+/** Navigation identity: theme changes are delivered live, without loading the URL again. */
+export function withoutTheme(url: string): string {
+  const [head, tail = ''] = url.split(/#(.*)/s);
+  const query = head.indexOf('?');
+  if (query < 0) return url;
+  const params = new URLSearchParams(head.slice(query + 1));
+  params.delete('theme');
+  const search = params.toString();
+  return `${head.slice(0, query)}${search ? `?${search}` : ''}${url.includes('#') ? `#${tail}` : ''}`;
 }

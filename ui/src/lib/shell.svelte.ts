@@ -1,7 +1,6 @@
 // Shell state: the active tab, what each module tab should show, the module
 // builds that are installed, and the routing of every incoming link.
 
-import { untrack } from 'svelte';
 import { moduleHome, moduleUrl, resolve, type ModuleBases, type ModuleTab, type Resolution, type TabId } from './links';
 import { isDesktop, launchStudio, logInfo, logWarn, openExternal, studioStatus, type AuthTarget, type StudioConfig } from './platform';
 import { identity } from './identity.svelte';
@@ -118,9 +117,7 @@ class Shell {
 
   get bases(): ModuleBases {
     const atlasDir = isDesktop || import.meta.env.DEV ? new URL('./modules/grainatlas/', location.href).href : '/atlas/';
-    // The theme is read untracked: a theme change applies when a module next
-    // loads, and never reloads a module tab (it would lose its state).
-    return { server: this.serverUrl, atlas: atlasDir, theme: untrack(() => settings.effectiveTheme) };
+    return { server: this.serverUrl, atlas: atlasDir, theme: settings.effectiveTheme };
   }
 
   /** Which laicpmsdb to sign in to; null while the local instance is not up yet. */

@@ -5,9 +5,10 @@
   transport.
 -->
 <script lang="ts">
-  import { onDestroy } from 'svelte';
-  import { frameName } from '@lab/bridge/host';
-  import type { ModuleTab } from '../lib/links';
+  import { onDestroy, untrack } from 'svelte';
+  import { frameName, pushTheme } from '@lab/bridge/host';
+  import { withTheme, withoutTheme, type ModuleTab } from '../lib/links';
+  import { settings } from '../lib/settings.svelte';
   import { desktopModules, isDesktop, type Bounds } from '../lib/platform';
   import { shell, type ModuleTarget } from '../lib/shell.svelte';
   import { registerFrame, unregisterFrame } from '../lib/incoming';
@@ -55,10 +56,10 @@
     // A new link wins; a changed home (server URL edited) goes home; otherwise
     // Rust just re-shows the existing webview where the user left it.
     const newTarget = t !== null && t.seq !== lastSeq;
-    const navigate = newTarget || h !== lastHome;
-    const url = newTarget ? t.url : h;
+    const navigate = newTarget || withoutTheme(h) !== lastHome;
+    const url = withTheme(newTarget ? t.url : h, untrack(() => settings.effectiveTheme));
     if (t) lastSeq = t.seq;
-    lastHome = h;
+    lastHome = withoutTheme(h);
     shown = true;
     const bounds = rect();
     queue(() => desktopModules.open(module, url, bounds, navigate));
@@ -97,8 +98,37 @@
     }
   });
 
-  // Web: the iframe follows the latest target, else home.
-  const src = $derived(target?.url ?? home);
+  // Keep navigation separate from live theme delivery. Read the latest theme
+  // for each new load, including a previously queued target.
+  let src = $state(untrack(() => withTheme(target?.url ?? home, settings.effectiveTheme)));
+  let webHome = '';
+  let webSeq = -1;
+  $effect(() => {
+    if (isDesktop) return;
+    const h = withoutTheme(home);
+    const t = target;
+    if (h === webHome && (t?.seq ?? -1) === webSeq) return;
+    const newTarget = t !== null && t.seq !== webSeq;
+    webHome = h;
+    webSeq = t?.seq ?? -1;
+    src = withTheme(newTarget ? t.url : home, untrack(() => settings.effectiveTheme));
+  });
+
+  function publishTheme() {
+    if (!iframe?.contentWindow || !src) return;
+    const theme = settings.effectiveTheme;
+    // Older same-origin modules watch this attribute; cross-origin ones use
+    // the bridge push (and the query parameter on their first load).
+    try {
+      iframe.contentDocument?.documentElement?.setAttribute('data-theme', theme);
+    } catch { /* cross-origin iframe */ }
+    pushTheme(iframe.contentWindow, theme, new URL(src, location.href).origin);
+  }
+  $effect(() => { publishTheme(); });
+  function frameLoaded() {
+    if (iframe?.contentWindow) registerFrame(module, iframe.contentWindow);
+    publishTheme();
+  }
   $effect(() => {
     if (iframe?.contentWindow) registerFrame(module, iframe.contentWindow, false);
   });
@@ -117,7 +147,7 @@
     {src}
     {title}
     referrerpolicy="same-origin"
-    onload={() => iframe?.contentWindow && registerFrame(module, iframe.contentWindow)}
+    onload={frameLoaded}
   ></iframe>
 {/if}
 

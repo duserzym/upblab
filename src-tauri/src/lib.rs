@@ -71,6 +71,7 @@ pub fn run() {
         .manage(modules::ModuleState::default())
         .manage(files::Files::default())
         .manage(bridge::Commands::default())
+        .manage(bridge::ThemeState::default())
         .manage(auth::Identity::default())
         .manage(local_service::LocalService::default())
         .invoke_handler(tauri::generate_handler![
@@ -96,6 +97,8 @@ pub fn run() {
             bridge::bridge_token,
             bridge::bridge_notify,
             bridge::module_command,
+            bridge::module_theme,
+            bridge::bridge_theme,
             bridge::bridge_take_command,
             files::bridge_open_files,
             files::bridge_read_file,

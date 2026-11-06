@@ -4,6 +4,7 @@
   "description": "The shell page: tabs, settings, link routing. Only the `shell` webview, never a module webview.",
   "webviews": ["shell"],
   "permissions": [
+    "allow-module-theme",
     "core:default",
     "deep-link:default",
     "store:default",

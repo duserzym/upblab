@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { moduleHome, moduleUrl, normaliseServerUrl, resolve, withTheme } from './links';
+import { moduleHome, moduleUrl, normaliseServerUrl, resolve, withTheme, withoutTheme } from './links';
 
 const A = '2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91';
 const B = '7c0e2b9d-1a3f-4e8b-8c6d-5f4a3b2c1d0e';
@@ -178,5 +178,19 @@ describe('withTheme', () => {
     expect(withTheme('/atlas/index.html?project=p', 'light')).toBe('/atlas/index.html?project=p&theme=light');
     expect(withTheme('http://h/app/', undefined)).toBe('http://h/app/');
     expect(moduleHome('images', { server: 'http://h', atlas: '/atlas/', theme: 'light' })).toBe('/atlas/index.html?theme=light');
+  });
+});
+
+
+describe('live theme URL handling', () => {
+  it('replaces old themes without changing a hash route or duplicating the parameter', () => {
+    expect(withTheme('http://h/app/?theme=light&theme=dark#/sessions/x', 'dark'))
+      .toBe('http://h/app/?theme=dark#/sessions/x');
+    expect(withTheme('/atlas/?project=p&theme=dark', 'light')).toBe('/atlas/?project=p&theme=light');
+  });
+  it('ignores only theme when deciding whether a module needs navigation', () => {
+    expect(withoutTheme('/atlas/?project=p&theme=dark')).toBe('/atlas/?project=p');
+    expect(withoutTheme('http://h/app/?theme=light#/sessions/x')).toBe('http://h/app/#/sessions/x');
+    expect(withoutTheme('/atlas/')).toBe('/atlas/');
   });
 });
