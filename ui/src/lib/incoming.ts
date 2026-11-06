@@ -49,10 +49,12 @@ export const FILE_EVENTS = {
 
 /** A module event: logged; a sign-out signs the shell out (clears the token for every module). */
 export function onModuleEvent(event: BridgeEvent, source: string) {
+  source = source === 'images' ? 'grainatlas' : source === 'sessions' ? 'laicpmsdb' : source;
   void logInfo(`[bridge] ${source}: ${JSON.stringify(event)}`);
   if (SIGN_OUT_EVENTS.includes(event.type) && identity.signedIn) void identity.logout(`${source} signed out`);
   const selected = spotSelection(event);
   if (selected) selection.fromImages = { ...selected, at: Date.now() };
+  if (event.type === 'grainatlas.files.opened') opener.outcome(source, event);
   if (event.type === 'lab.open-files.seen') opener.seen(source, event);
 }
 

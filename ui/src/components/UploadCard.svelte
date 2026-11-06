@@ -1,0 +1,79 @@
+<script lang="ts">
+  import { fromFileList } from '../lib/drop';
+  import { isDesktop, pickPaths, pickSessionPaths } from '../lib/platform';
+  import { review } from '../lib/review.svelte';
+  import { shell } from '../lib/shell.svelte';
+  import type { Upload } from '../lib/upload.svelte';
+
+  let { card }: { card: Upload } = $props();
+  let folderInput = $state<HTMLInputElement>();
+  let filesInput = $state<HTMLInputElement>();
+  const sessions = $derived(card.target === 'sessions');
+  async function choose() {
+    if (!isDesktop) { folderInput?.click(); return; }
+    try {
+      const paths = await (sessions ? pickSessionPaths() : pickPaths(true));
+      if (paths.length) await card.openPaths(paths);
+    } catch (err) { card.error = String(err); }
+  }
+  function chosen(input: HTMLInputElement | undefined) {
+    if (!input) return;
+    if (input.files?.length) void card.openWebFiles(fromFileList(input.files));
+    input.value = '';
+  }
+  function showReview() {
+    const id = sessions ? card.session?.id : card.mountId;
+    if (!id) return;
+    shell.show('review');
+    void review.open(sessions ? { kind: 'session', id, run: card.completeRun ?? 'preferred' } : { kind: 'mount', id });
+  }
+</script>
+
+<section class="stack upload-card" data-testid="upload-{card.target}">
+  <div class="row">
+    <button class="btn primary" onclick={() => void choose()}>{sessions ? 'Upload LA-ICP-MS session…' : 'Upload image set…'}</button>
+    {#if !isDesktop && sessions}<button class="btn" onclick={() => filesInput?.click()}>Choose session files…</button>{/if}
+    {#if card.open || card.error}<button class="btn" aria-label="Dismiss {sessions ? 'session' : 'image'} upload" onclick={() => { card.close(); card.error = ''; }}>Dismiss</button>{/if}
+  </div>
+  <p class="muted small">{sessions ? 'Rich CSV, per-spot folder, or both. Opens the ingest dialog in Sessions.' : 'SEM package folder or .grainatlas project folder. Opens in Images.'}</p>
+  {#if !isDesktop}
+    <input bind:this={folderInput} aria-label="{sessions ? 'Session' : 'Image set'} folder" type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
+    {#if sessions}<input bind:this={filesInput} aria-label="Session files" type="file" multiple hidden onchange={() => chosen(filesInput)} />{/if}
+  {/if}
+  {#if card.open}
+    <ol class="small" aria-label="{sessions ? 'Session' : 'Image'} upload progress" aria-live="polite">
+      {#each card.steps as step}
+        <li><span class="dot" style:background={step.done ? 'var(--ok)' : 'var(--text-faint)'} aria-hidden="true"></span><span>{step.text}{step.done ? ' ✓' : ''}</span></li>
+      {/each}
+    </ol>
+    {#if sessions && card.session}
+      <div class="row">
+        <button class="btn" onclick={() => void shell.handleLink(`laicpmsdb://session/${card.session!.id}`, 'home')}>Open in Sessions</button>
+        <button class="btn" onclick={() => void shell.handleLink(`upbr://session/${card.session!.id}`, 'home')}>Reduce in UPbRPy Studio</button>
+        <button class="btn" disabled={!card.ready} onclick={showReview}>Review</button>
+      </div>
+      {#if !card.ready}<p class="faint small">Review is available once a reduction run is submitted from UPbRPy Studio</p>{/if}
+    {:else if !sessions && card.imageOpened}
+      <p class="muted small">Publish the atlas to its mount from grainatlas (Publish button) to review it with results</p>
+      <div class="row">
+        <button class="btn" onclick={() => shell.show('images')}>Show Images</button>
+        <select aria-label="Review mount" bind:value={card.mountId}>
+          <option value="">Choose a mount…</option>
+          {#each card.mounts as mount}<option value={mount.id}>{mount.label}</option>{/each}
+        </select>
+        <button class="btn" disabled={!card.ready} onclick={showReview}>Review mount</button>
+      </div>
+      {#if !card.mounts.length}<p class="faint small">Register a mount in Sessions, then publish the atlas from grainatlas.</p>{/if}
+    {/if}
+  {/if}
+  {#if card.error}<p class="error small" role="alert">{card.error}</p>{/if}
+</section>
+
+<style>
+  .upload-card { min-width: 0; gap: var(--space-2); overflow-wrap: anywhere; }
+  p { margin: 0; }
+  ol { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-1); }
+  li { display: flex; align-items: baseline; gap: var(--space-2); }
+  .dot { flex: none; }
+  select { max-width: 100%; min-width: 0; }
+</style>

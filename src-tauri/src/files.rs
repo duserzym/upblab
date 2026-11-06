@@ -418,6 +418,75 @@ pub fn files_offer<R: Runtime>(
     Ok(OfferOut { id, files: count, bytes, nudged })
 }
 
+/// Only the package pointer is read here; grainatlas reads and applies the project.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ProjectPackage {
+    name: String,
+    path: String,
+    exists: bool,
+}
+
+#[tauri::command]
+pub fn files_project_package(path: String) -> Option<ProjectPackage> {
+    let bytes = std::fs::read(Path::new(&path).join("project.json")).ok()?;
+    let project: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    let package = project.get("package")?;
+    let name = package.get("name")?.as_str()?.to_owned();
+    let path = package.get("path")?.as_str()?.to_owned();
+    if name.is_empty() || path.is_empty() {
+        return None;
+    }
+    let exists = Path::new(&path).exists();
+    Some(ProjectPackage { name, path, exists })
+}
+
+/// macOS permits files and folders in one native panel. The other native
+/// backends expose separate pickers; collect both before making a single offer.
+#[tauri::command]
+pub async fn files_pick_session<R: Runtime>(_app: AppHandle<R>) -> Result<Vec<String>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let picked = rfd::AsyncFileDialog::new()
+            .set_title("Upload LA-ICP-MS session: Rich CSV, per-spot folder, or both")
+            .pick_files_or_folders()
+            .await;
+        Ok(picked
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| p.path().to_string_lossy().into_owned())
+            .collect())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        use tauri_plugin_dialog::DialogExt;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        _app.dialog()
+            .file()
+            .set_title("Select per-spot folders (Cancel to select only files)")
+            .pick_folders(move |paths| {
+                let _ = tx.send(paths);
+            });
+        let folders = rx.await.map_err(|e| e.to_string())?.unwrap_or_default();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        _app.dialog()
+            .file()
+            .set_title("Select Rich CSV or zip files (Cancel to use only folders)")
+            .pick_files(move |paths| {
+                let _ = tx.send(paths);
+            });
+        let files = rx.await.map_err(|e| e.to_string())?.unwrap_or_default();
+        folders
+            .into_iter()
+            .chain(files)
+            .map(|p| {
+                p.into_path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .map_err(|e| e.to_string())
+            })
+            .collect()
+    }
+}
+
 /// Shell: paths the OS asked to open since the last call.
 #[tauri::command]
 pub fn files_take_opened(state: State<'_, Files>) -> Vec<String> {
@@ -506,6 +575,33 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn project_package_pointer_only() {
+        let dir = tmp("project-package");
+        let package = dir.join("SEM");
+        fs::create_dir(&package).unwrap();
+        let json = dir.join("project.json");
+        let project = serde_json::json!({"package": {"name": "SEM", "path": package}});
+        fs::write(&json, project.to_string()).unwrap();
+        let read = files_project_package(dir.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(read.name, "SEM");
+        assert_eq!(Path::new(&read.path), package);
+        assert!(read.exists);
+        fs::remove_dir(&package).unwrap();
+        assert!(
+            !files_project_package(dir.to_string_lossy().into_owned())
+                .unwrap()
+                .exists
+        );
+        fs::write(&json, "{}").unwrap();
+        assert!(files_project_package(dir.to_string_lossy().into_owned()).is_none());
+        fs::write(&json, "{broken").unwrap();
+        assert!(files_project_package(dir.to_string_lossy().into_owned()).is_none());
+        fs::remove_file(&json).unwrap();
+        assert!(files_project_package(dir.to_string_lossy().into_owned()).is_none());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

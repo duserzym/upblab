@@ -5155,6 +5155,7 @@ dependencies = [
  "log",
  "postgresql_embedded",
  "reqwest",
+ "rfd",
  "serde",
  "serde_json",
  "tauri",

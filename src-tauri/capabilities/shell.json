@@ -11,6 +11,8 @@
     "opener:default",
     "dialog:allow-open",
     "allow-files-scan",
+    "allow-files-project-package",
+    "allow-files-pick-session",
     "allow-files-offer",
     "allow-files-take-opened",
     "allow-window-reset",

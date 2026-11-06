@@ -40,6 +40,8 @@ url = "2"
 # Bearer tokens live in the OS keychain: macOS Keychain, Windows Credential Manager.
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
+# The dialog plugin does not expose rfd's mixed files-and-folders panel.
+rfd = { version = "0.17.2", default-features = false }
 
 [target.'cfg(windows)'.dependencies.keyring]
 version = "3"

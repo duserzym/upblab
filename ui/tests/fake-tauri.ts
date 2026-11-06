@@ -8,6 +8,9 @@ export interface FakeOptions {
   store: Record<string, unknown>;
   fixtures?: Record<string, unknown>;
   signedIn?: boolean;
+  sessionPaths?: string[];
+  folderPaths?: string[];
+  projectPackages?: Record<string, unknown>;
   /** `files_scan` answers, by the joined paths. */
   scans?: Record<string, unknown>;
 }
@@ -19,6 +22,8 @@ export function installFakeTauri(opts: FakeOptions) {
   const listeners = new Map<string, number[]>();
   const calls: [string, Record<string, unknown> | undefined][] = [];
   const store = { ...opts.store };
+  const fixtures = { ...opts.fixtures };
+  let offerSequence = 0;
   let next = 1;
   const status = {
     phase: 'idle',
@@ -33,7 +38,7 @@ export function installFakeTauri(opts: FakeOptions) {
     logDir: '/Users/lab/Library/Logs/edu.umn.upbstudio',
     dataDir: '/Users/lab/Library/Application Support/edu.umn.upbstudio',
   };
-  w.__fake = { calls, store, listeners };
+  w.__fake = { calls, store, listeners, fixtures };
   w.__emit = (event: string, payload: unknown) =>
     (listeners.get(event) ?? []).forEach((id) => callbacks.get(id)?.({ event, id, payload }));
   w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
@@ -72,8 +77,14 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'module_command':
           return false; // exercises loading the target without leaving Review
         case 'api_get':
-          if (opts.fixtures && Object.prototype.hasOwnProperty.call(opts.fixtures, args!.path as string)) return { status: 200, body: opts.fixtures[args!.path as string] };
+          if (Object.prototype.hasOwnProperty.call(fixtures, args!.path as string)) return { status: 200, body: fixtures[args!.path as string] };
           return args!.path === '/v1/auth/providers' ? { status: 200, body: { orcid: true, google: true } } : { status: 401, body: {} };
+        case 'files_pick_session':
+          return opts.sessionPaths ?? [];
+        case 'plugin:dialog|open':
+          return opts.folderPaths ?? [];
+        case 'files_project_package':
+          return opts.projectPackages?.[args!.path as string] ?? null;
         case 'files_take_opened':
           return [];
         case 'files_scan': {
@@ -81,7 +92,7 @@ export function installFakeTauri(opts: FakeOptions) {
           return opts.scans?.[key] ?? { scan: 's0', roots: [], entries: [], truncated: false, missing: args!.paths };
         }
         case 'files_offer':
-          return { id: 'o1', files: (args!.files as unknown[]).length, bytes: 0, nudged: true };
+          return { id: `o${++offerSequence}`, files: (args!.files as unknown[]).length, bytes: 0, nudged: true };
         default:
           return null;
       }

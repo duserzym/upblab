@@ -25,6 +25,8 @@ fn main() {
             "bridge_open_files",
             "bridge_read_file",
             "files_scan",
+            "files_project_package",
+            "files_pick_session",
             "files_offer",
             "files_take_opened",
             "window_reset",

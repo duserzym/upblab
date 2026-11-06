@@ -92,6 +92,8 @@ pub fn run() {
             files::bridge_open_files,
             files::bridge_read_file,
             files::files_scan,
+            files::files_project_package,
+            files::files_pick_session,
             files::files_offer,
             files::files_take_opened,
             geometry::window_reset,

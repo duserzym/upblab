@@ -238,6 +238,7 @@ export const desktopFiles = {
     path: string | null;
     nudge: boolean;
   }) => invoke<FileOffer>('files_offer', args),
+  projectPackage: (path: string) => invoke<{ name: string; path: string; exists: boolean } | null>('files_project_package', { path }),
   takeOpened: () => invoke<string[]>('files_take_opened'),
 };
 
@@ -258,4 +259,9 @@ export async function pickPaths(folder: boolean): Promise<string[]> {
 /** Desktop: forget the remembered window place; 1280 x 800, centred (src-tauri/src/geometry.rs). */
 export function resetWindowLayout(): Promise<void> {
   return invoke('window_reset');
+}
+
+/** Mixed native picker: a Rich CSV and its per-spot folder may be selected together. */
+export function pickSessionPaths(): Promise<string[]> {
+  return invoke<string[]>('files_pick_session');
 }

@@ -26,10 +26,10 @@ Changed in v1.1: results appear in the Review tab with plots linked both ways to
 | --- | --- | --- | --- |
 | 0. Register samples | laicpmsdb (SESAR/IGSN sheet import or form) | `sample` | sample names used in spot names |
 | 1. Mount and polish | laicpmsdb mount page | `mount`, `mount_slot` (which sample sits where) | mount id |
-| 2. Image | grainatlas: open the SEM package, stitch, correct, segment, scale | grainatlas project (local folder) **published** to laicpmsdb as an *atlas bundle* attached to the mount | `atlas://` project id; grain rows |
+| 2. Image | Home’s **Upload image set** opens the SEM package or `.grainatlas` project in grainatlas; stitch, correct, segment, scale | grainatlas project (local folder) **published** to laicpmsdb as an *atlas bundle* attached to the mount | `atlas://` project id; grain rows |
 | 3. Place spots | grainatlas, with the mount's sample names | `physical_spot` rows in laicpmsdb (spot sync) with `atlas_project_id`, `atlas_spot_id` | laser spot list (registered to the laser stage) |
 | 4. Laser session | instrument; Qtegra per-spot export with the spot name as the acquisition label | nothing yet | the export folder |
-| 5. Upload | laicpmsdb ingest (UI drag-drop, or the command) | `session`, `acquisition` (matched to `physical_spot` by label), raw assets, sweep Parquet | "Reduce in UPbRPy Studio" |
+| 5. Upload | Home’s **Upload LA-ICP-MS session** opens laicpmsdb ingest (also UI drag-drop, or the command) | `session`, `acquisition` (matched to `physical_spot` by label), raw assets, sweep Parquet | "Reduce in UPbRPy Studio" |
 | 6. Open from database | UPbRPy Studio in **database mode**: fetches the *session bundle* over HTTP and opens it as a project | local project cache with `.upbr` carrying its `origin` | |
 | 7. Reduce | UPbRPy Studio, locally, exactly as standalone | `.upbr`, reduction bundle on disk | "Submit to database" |
 | 8. Submit | Studio posts the *reduction bundle* | `reduction_run`, `selection_window`, `scalar_result` (+ uncertainties), derived sweep Parquet, attachments | run id back to Studio |

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import UploadCard from '../components/UploadCard.svelte';
+  import { upload } from '../lib/upload.svelte';
   import { identity } from '../lib/identity.svelte';
   import { localService } from '../lib/localService.svelte';
   import { overview, type RunOut } from '../lib/overview.svelte';
@@ -58,6 +60,14 @@
     void overview.load();
   });
 
+  $effect(() => {
+    void identity.revision;
+    void identity.target?.server;
+    upload.sessions.syncIdentity();
+    upload.images.syncIdentity();
+    if (active) void upload.sessions.refreshReview();
+  });
+
   const go = (url: string) => void shell.handleLink(url, 'home');
   const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
   const runLabel = (r: RunOut) => `${r.pipeline_name} ${r.pipeline_version}`.trim() + (r.completed_at ? ` · ${day(r.completed_at)}` : ` · ${r.status}`);
@@ -79,6 +89,14 @@
         <strong>Sessions</strong>, stored results in <strong>Review</strong>, reduction in <strong>Reduce</strong>. Below: your recent sessions with their reductions,
         and the images of your mounts. The cross-module timeline and search arrive in a later phase.
       </p>
+    </div>
+
+    <div class="glass panel stack" data-testid="upload-panel">
+      <h2>Upload</h2>
+      <div class="uploads">
+        <UploadCard card={upload.sessions} />
+        <UploadCard card={upload.images} />
+      </div>
     </div>
 
     <div class="glass panel stack" data-testid="open-panel">
@@ -259,6 +277,8 @@
 </section>
 
 <style>
+  .uploads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+  @media (max-width: 700px) { .uploads { grid-template-columns: 1fr; } }
   .cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));

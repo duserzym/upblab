@@ -8,7 +8,7 @@ sweep and reduced result.
 
 | Tab | Module | Hosted as |
 | --- | --- | --- |
-| Home | the shell | Open folder… / Open files… (anything dropped on the window goes to the right tab by itself), module status, your sessions with their reductions (Reduce opens Studio), mounts with their current atlas, link box and log (timeline and search later) |
+| Home | the shell | Upload LA-ICP-MS session… / Upload image set… with progress and Review links; Open folder… / Open files… (anything dropped on the window goes to the right tab by itself), module status, your sessions with their reductions (Reduce opens Studio), mounts with their current atlas, link box and log (timeline and search later) |
 | Images | grainatlas | pinned static build bundled into the app (`modules.lock.json`) |
 | Sessions | laicpmsdb | `/app/` in a native webview, from a lab server or from the laicpmsdb the app runs on this computer |
 | Review | the shell | stored results by session or mount, plots and spot details linked to Images |
@@ -35,6 +35,27 @@ where it was left, fitted to the screen. Plan and roadmap:
 [ARCHITECTURE_PLAN.md](ARCHITECTURE_PLAN.md).
 
 The lab workflow and the hand-offs between the apps are in [docs/WORKFLOW.md](docs/WORKFLOW.md).
+
+## Upload
+
+Home's **Upload LA-ICP-MS session…** sends a Rich CSV, per-spot export
+folder, zip, or a Rich CSV and its per-spot folder to the ingest dialog in
+Sessions. Confirm the ingest there, then return Home to see the session and
+open it in Sessions or reduce it in UPbRPy Studio. **Review** becomes available
+when a complete reduction run has been submitted. Home checks for the session
+and reduction every 5 s for up to 10 minutes while the upload card is open.
+Dismiss stops the watch.
+
+**Upload image set…** sends an SEM package or `.grainatlas` project folder
+to Images. On desktop, a project is offered first, then its saved package
+folder if that path exists. On the web, grainatlas asks which package to open.
+Publish the atlas to its mount with grainatlas's **Publish** button, then use
+Home's **Review mount**. The shell lists and routes files; the modules read them.
+On macOS the session picker accepts files and folders together; Windows and
+Linux collect folders and files in consecutive native dialogs. Web Home has
+separate folder and file inputs. **Open folder…**, **Open files…** and drops
+continue to choose a module by content. An explicit upload button refuses a
+set intended for the other module with a line saying what it accepts.
 
 ## Review
 

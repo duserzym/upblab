@@ -8,11 +8,12 @@ vi.mock('./platform', () => ({
   desktopModules: { command: vi.fn(async () => true) },
 }));
 vi.mock('./identity.svelte', () => ({ identity: {}, SIGN_OUT_EVENTS: [] }));
-vi.mock('./opener.svelte', () => ({ opener: { seen: vi.fn() } }));
+vi.mock('./opener.svelte', () => ({ opener: { seen: vi.fn(), outcome: vi.fn() } }));
 vi.mock('./shell.svelte', () => ({ shell: {} }));
 vi.mock('./settings.svelte', () => ({ settings: {} }));
 
 const platform = await import('./platform');
+const { opener } = await import('./opener.svelte');
 const { frames, registerFrame, sendCommand, onModuleEvent } = await import('./incoming');
 const { selection } = await import('./selection.svelte');
 const command: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 's', via: 'review' };
@@ -82,5 +83,16 @@ describe('module selections', () => {
     onModuleEvent({ type: 'other' }, 'images');
     onModuleEvent({ type: 'lab.spot.selected', project: 'p', spot: 'bad/id' }, 'images');
     expect(selection.fromImages).toBe(selected);
+  });
+});
+
+describe('module upload outcomes', () => {
+  it('forwards image outcomes and probe receipts with the canonical module name', () => {
+    const opened = { type: 'grainatlas.files.opened', name: 'SEM', outcome: 'opened: package' };
+    onModuleEvent(opened, 'images');
+    expect(opener.outcome).toHaveBeenCalledWith('grainatlas', opened);
+    const seen = { type: 'lab.open-files.seen', id: 'o1', files: 2, bytes: 1024 };
+    onModuleEvent(seen, 'sessions');
+    expect(opener.seen).toHaveBeenCalledWith('laicpmsdb', seen);
   });
 });

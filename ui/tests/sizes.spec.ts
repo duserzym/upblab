@@ -103,6 +103,8 @@ for (const [w, h] of SIZES) {
     test('desktop: tabs, module areas, Settings and the sign-in dialog', async ({ page }) => {
       await desktop(page, { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'home' });
       await expect(page.getByRole('heading', { name: 'UPb Studio', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Upload LA-ICP-MS session…', exact: true })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Upload image set…', exact: true })).toBeVisible();
       expect(await problems(page, 'Home')).toEqual([]);
 
       await emit(page, 'shell://drag', true);
