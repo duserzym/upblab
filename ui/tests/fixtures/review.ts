@@ -16,6 +16,7 @@ export const rows = Array.from({ length: 12 }, (_, i) => ({
   '206Pb/238U_age': 550 + i * 3, '206Pb/238U_age_2e': 9, '207Pb/206Pb_age': 560 + i * 2, '207Pb/206Pb_age_2e': 12,
   preferred_date: 550 + i * 3, preferred_date_2e: 9, preferred_date_method: '206Pb/238U', preferred_date_pass: i !== 3,
   'disc%': i === 3 ? 8 : 1.5, 'Th/U': 0.3 + i * 0.02, U: 180 + i * 12, U_95CI: 6, Th: 60 + i * 8, Pb: 22 + i,
+  Ti: 4 + i * 0.4, Y: 800 + i * 25, Nb: 2 + i * 0.15, Hf: 9000 + i * 100, Ta: 0.6 + i * 0.03, Zr: 480000 + i * 100,
   La: 0.3 + i * 0.01, Ce: 8 + i * 0.2, Pr: 0.4 + i * 0.01, Nd: 3 + i * 0.1, Sm: 4 + i * 0.1, Eu: 0.2 + i * 0.01, Gd: 12 + i, Tb: 3 + i * 0.2,
   Dy: 30 + i, Ho: 9 + i * 0.3, Er: 40 + i, Tm: 8 + i * 0.2, Yb: 70 + i, Lu: 14 + i * 0.5,
   automatic_flags: i === 3 ? 'discordant; high ratio scatter' : '',

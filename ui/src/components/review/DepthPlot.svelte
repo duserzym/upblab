@@ -33,7 +33,7 @@
     <details><summary>Columns ({visible.length})</summary><div class="column-list">{#each columns as c}<label><input type="checkbox" checked={chosen.includes(c)} onchange={e=>toggle(c,e.currentTarget.checked)} /> {c}</label>{/each}</div></details>
   </div>
   <p class="faint small">Stored sweep values and uncertainty bands (2se where available). Select columns with compatible units.</p>
-  <Plot {marks} {bands} selected={null} onselect={()=>{}} xLabel={/time/i.test(xKey)?`${xKey} (s)`:xKey} yLabel="Stored values" />
+  <Plot sharedHover={false} {marks} {bands} selected={null} onselect={()=>{}} xLabel={/time/i.test(xKey)?`${xKey} (s)`:xKey} yLabel="Stored values" />
 {/if}
 <style>
   details {position:relative;min-width:0;} summary {cursor:pointer;}

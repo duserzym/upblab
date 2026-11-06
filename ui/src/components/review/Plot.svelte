@@ -1,11 +1,13 @@
 <script lang="ts">
   import uPlot from 'uplot';
+  import { untrack } from 'svelte';
+  import { review } from '../../lib/review.svelte';
   import 'uplot/dist/uPlot.min.css';
   import { settings } from '../../lib/settings.svelte';
   import { dateLabel, type ReviewSpot } from '../../lib/review-data';
   import type { Point } from '../../lib/concordia';
   import { color, type Mark, type Guide, type Band } from './plot-data';
-  let { marks, guides = [], bands = [], selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [] }: {
+  let { marks, guides = [], bands = [], selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true }: {
     marks: Mark[];
     guides?: Guide[];
     bands?: Band[];
@@ -16,17 +18,32 @@
     logX?: boolean;
     logY?: boolean;
     xTicks?: string[];
+    legend?: boolean;
+    sharedHover?: boolean;
   } = $props();
   let host = $state<HTMLDivElement>();
   let width = $state(400), height = $state(300);
+  let instance: uPlot | undefined;
+  let targets = $state<{ spot: ReviewSpot; x: number; y: number }[]>([]);
+  let chart = $state<HTMLDivElement>();
+  $effect(() => { void review.hoveredKey; instance?.redraw(false); });
   let hovered = $state<ReviewSpot | null>(null);
   let tooltip = $state({ x: 0, y: 0 });
   $effect(() => { void selected; hovered = null; });
+  function pointHover(target: {spot: ReviewSpot; x: number; y: number}) {
+    hovered = target.spot;
+    if (sharedHover) review.hoveredKey = target.spot.key;
+    tooltip = {x: Math.max(0, Math.min(width - 190, target.x + 8)), y: Math.max(0, target.y - 45)};
+  }
+  function clearPointHover() {
+    hovered = null;
+    if (sharedHover) review.hoveredKey = null;
+  }
   const samples = $derived([...new Set(marks.filter(m => m.point || m.polygon?.length || m.path?.some(Boolean)).map(m => m.spot.sampleName))]);
   $effect(() => {
     if (!host)
       return;
-    const ro = new ResizeObserver(([e]) => { width = Math.max(160, Math.floor(e.contentRect.width)); height = Math.max(180, Math.floor(e.contentRect.height)); });
+    const ro = new ResizeObserver(([e]) => { width = Math.max(1, Math.floor(e.contentRect.width)); height = Math.max(1, Math.floor(e.contentRect.height)); });
     ro.observe(host);
     return () => ro.disconnect();
   });
@@ -130,15 +147,24 @@
           ctx.fillText(guide.label ?? '', x + 4 * dpr, y - 4 * dpr);
         }
       }
-      for (const mark of ordered) {
+      const hoverKey = sharedHover ? untrack(() => review.hoveredKey) : null;
+      const priority = (m: Mark) => m.spot.key === hoverKey ? 2 : m.spot.key === selected ? 1 : 0;
+      for (const mark of [...ordered].sort((a,b)=>priority(a)-priority(b))) {
         const active = mark.spot.key === selected;
-        ctx.globalAlpha = selected && !active ? 0.45 : 1;
+        const highlighted = mark.spot.key === hoverKey;
+        ctx.globalAlpha = selected && !active && !highlighted ? 0.45 : 1;
         ctx.strokeStyle = color(mark.spot.sampleName);
         ctx.fillStyle = ctx.strokeStyle;
-        ctx.lineWidth = (active ? 2.5 : 1.2) * dpr;
+        ctx.lineWidth = (active || highlighted ? 2.5 : 1.2) * dpr;
         if (mark.path) {
           path(u, mark.path);
           ctx.stroke();
+          if (active || highlighted) {
+            for (const p of mark.path.filter(valid)) {
+              const [x, y] = pixel(u, p);
+              ctx.beginPath(); ctx.arc(x, y, 4 * dpr, 0, 2 * Math.PI); ctx.stroke();
+            }
+          }
         }
         if (mark.polygon) {
           path(u, mark.polygon, true);
@@ -149,7 +175,7 @@
           ctx.beginPath();
           ctx.arc(x, y, 3 * dpr, 0, 2 * Math.PI);
           ctx.fill();
-          if (active) {
+          if (active || highlighted) {
             ctx.beginPath();
             ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI);
             ctx.stroke();
@@ -164,13 +190,27 @@
       }
       ctx.restore();
     };
+    // Keyboard and pointer targets over each point, placed after uPlot has laid
+    // out (its first layout runs in a microtask), relative to the chart box.
+    const placeTargets = (u: uPlot) => {
+      if (!chart) return;
+      const o = u.over.getBoundingClientRect(), c = chart.getBoundingClientRect();
+      const next = (sharedHover ? marks : []).flatMap(m => {
+        const p = m.point ?? m.path?.find(valid);
+        if (!valid(p)) return [];
+        const x = o.left - c.left + u.valToPos(p[0], 'x'), y = o.top - c.top + u.valToPos(p[1], 'y');
+        return Number.isFinite(x) && Number.isFinite(y) ? [{ spot: m.spot, x, y }] : [];
+      });
+      untrack(() => { targets = next; });
+    };
     // Log axes: label and grid only whole decades (uPlot's default draws every minor line).
     const decades = (_u: uPlot, splits: number[]) => splits.map(v => v != null && v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9 ? v : null);
     const plot = new uPlot({ width, height, series: [{}, { show: false }], scales: { x: { time: false, distr: logX ? 3 : 1, range: () => xr }, y: { distr: logY ? 3 : 1, range: () => yr } },
       axes: [{ label: xLabel, labelSize: 20, size: 42, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logX && !xTicks.length ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), ...(xTicks.length ? { splits: () => xTicks.map((_, i) => i), values: (_u: uPlot, vals: number[]) => vals.map(v => xTicks[v] ?? '') } : {}) },
         { label: yLabel, labelSize: 18, size: 64, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logY ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), values: (_u, vals) => vals.map(v => v == null || !Number.isFinite(v) ? '' : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 0.001) ? v.toExponential(1) : Number(v.toPrecision(4)).toString()) }],
-      legend: { show: false }, cursor: { show: false }, select: { show: false, left: 0, top: 0, width: 0, height: 0 }, hooks: { draw: [draw] },
+      legend: { show: false }, cursor: { show: false }, select: { show: false, left: 0, top: 0, width: 0, height: 0 }, hooks: { draw: [draw], ready: [placeTargets] },
     }, [[xr[0], xr[1]], [yr[0], yr[1]]], host);
+    instance = plot;
     function hit(event: MouseEvent): ReviewSpot | null {
       const rect = plot.over.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
       let closest: ReviewSpot | null = null, distance = Infinity;
@@ -198,24 +238,28 @@
     }
     const click = (e: MouseEvent) => { const spot = hit(e); if (spot)
       onselect(spot); };
-    const move = (e: MouseEvent) => { hovered = hit(e); const r = host!.getBoundingClientRect(); tooltip = { x: Math.max(0, Math.min(width - 190, e.clientX - r.left + 8)), y: Math.max(0, e.clientY - r.top - 45) }; };
-    const leave = () => { hovered = null; };
+    const move = (e: MouseEvent) => { hovered = hit(e); if (sharedHover) review.hoveredKey = hovered?.key ?? null; const r = host!.getBoundingClientRect(); tooltip = { x: Math.max(0, Math.min(width - 190, e.clientX - r.left + 8)), y: Math.max(0, e.clientY - r.top - 45) }; };
+    const leave = () => { hovered = null; if (sharedHover) review.hoveredKey = null; };
     window.addEventListener('blur', leave);
     document.addEventListener('mouseleave', leave);
     plot.over.addEventListener('click', click);
     plot.over.addEventListener('mousemove', move);
     plot.over.addEventListener('mouseleave', leave);
-    return () => { window.removeEventListener('blur', leave); document.removeEventListener('mouseleave', leave); plot.destroy(); };
+    return () => { window.removeEventListener('blur', leave); document.removeEventListener('mouseleave', leave); if (instance === plot) instance = undefined; plot.destroy(); };
   });
 </script>
-<div class="chart">
+<div class="chart" bind:this={chart} data-testid="review-plot" data-point-count={targets.length} data-hovered-key={sharedHover ? review.hoveredKey ?? '' : ''}>
+  {#each targets as t (t.spot.key)}
+    <button class="point-target" aria-label={`Select ${t.spot.label}`} tabindex={selected===t.spot.key?0:-1} data-point-key={t.spot.key} data-sample={t.spot.sampleName} data-selected={selected===t.spot.key} data-hovered={sharedHover && review.hoveredKey === t.spot.key} style:left="{t.x}px" style:top="{t.y}px" onclick={()=>onselect(t.spot)} onmouseenter={()=>pointHover(t)} onmouseleave={clearPointHover} onfocus={()=>pointHover(t)} onblur={clearPointHover}></button>
+  {/each}
   <div class="canvas" bind:this={host}></div>
   {#if hovered}<div class="tooltip small" style:left="{tooltip.x}px" style:top="{tooltip.y}px">{hovered.label}<br />{dateLabel(hovered)} Ma</div>{/if}
 </div>
-<div class="legend small" aria-label="Sample legend">{#each samples as sample}<span><i style:background={color(sample)}></i>{sample}</span>{/each}</div>
+{#if legend}<div class="legend small" aria-label="Sample legend">{#each samples as sample}<span><i style:background={color(sample)}></i>{sample}</span>{/each}</div>{/if}
 {#if marks.length === 0}<p class="muted small">No stored values for these axes.</p>{/if}
 <style>
-  .chart { position:relative; flex:1; min-height:200px; background:var(--plot-bg); overflow:hidden; }
+  .chart { position:relative; flex:1; min-height:150px;min-width:0;border-radius:var(--radius-sm); background:var(--plot-bg); overflow:hidden; }
+  .point-target {position:absolute;z-index:1;width:12px;height:12px;transform:translate(-50%,-50%);padding:0;border:0;background:transparent;border-radius:50%;cursor:pointer;}
   .canvas { position:absolute; inset:0; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 12px; padding:4px; overflow-wrap:anywhere; }
   .legend span { display:inline-flex; gap:5px; align-items:center; }

@@ -110,6 +110,15 @@ describe('Review selection and loading', () => {
     await depth;
     expect(review.depth?.acquisition_id).toBe('acq-2');
   });
+  it('shares hover without selecting or sending an Images command and clears it on reload', async () => {
+    await review.open({ kind: 'session', id: session.id });
+    const selected = review.selectedKey;
+    review.hoveredKey = review.rows[1].key;
+    expect(review.selectedKey).toBe(selected);
+    expect(sendCommand).not.toHaveBeenCalled();
+    await review.load();
+    expect(review.hoveredKey).toBeNull();
+  });
   it('shows API errors', async () => {
     get.mockResolvedValue({ status: 503, body: { detail: 'maintenance' } } as never);
     await review.load();

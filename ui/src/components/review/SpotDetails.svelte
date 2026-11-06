@@ -46,7 +46,8 @@
   </div>
 {:else}<p class="muted">Select a spot to see its stored results.</p>{/if}
 <style>
-  h2,h3,p {margin:0;} h3 {font-size:0.9rem;} dd {min-width:0;overflow-wrap:anywhere;} dt {min-width:0;}
+  h2,h3,p {margin:0;} h3 {font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-top:4px;} dd {min-width:0;overflow-wrap:anywhere;} dt {min-width:0;}
+  .stack {gap:8px;} .btn {font-size:0.78rem;white-space:normal;text-align:left;}
   ul {margin:0;padding-left:18px;} .warning {color:var(--warning);}
   .grid-kv {grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);margin:0;}
 </style>

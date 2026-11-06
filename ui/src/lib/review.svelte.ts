@@ -5,6 +5,7 @@ import { settings } from './settings.svelte';
 import { sendCommand } from './incoming';
 import { resolve } from './links';
 import type { SessionOut, MountOut, RunOut } from './overview.svelte';
+import { assignSampleColors } from '../components/review/plot-data';
 import { normalise, parseScope, type ReviewScope, type ReviewSpot, type ResultTable, type ResultRow, type RunBrief, type DepthProfile } from './review-data';
 const enc = encodeURIComponent;
 type ScopeInput = {
@@ -26,6 +27,7 @@ export class Review {
   run = $state<RunBrief | null>(null);
   runInfo = $state<Record<string, RunBrief>>({});
   selectedKey = $state<string | null>(null);
+  hoveredKey = $state<string | null>(null);
   externalSpot = $state<ReviewSpot | null>(null);
   depth = $state<DepthProfile | null>(null);
   depthState = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -59,6 +61,7 @@ export class Review {
     this.depth = null;
     this.depthState = 'idle';
     this.rows = [];
+    this.hoveredKey = null;
     this.runs = [];
     this.run = null;
     this.runInfo = {};
@@ -115,6 +118,7 @@ export class Review {
       }
       if (gen !== this.generation)
         return;
+      assignSampleColors(rows.map(r => r.sampleName));
       this.rows = rows;
       this.runs = runs;
       this.run = run;

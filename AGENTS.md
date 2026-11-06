@@ -16,12 +16,19 @@ browser and app checks and makes the commits.
    laicpmsdb stores. No ratio, date, weighted mean or concentration is
    calculated here; plots read stored values. Drawing reference lines (the
    Concordia curve, an ellipse from a stored value, its 2σ and its error
-   correlation) is allowed.
+   correlation) is allowed. Review's geochemistry plots may also do display
+   arithmetic on stored concentrations: chondrite normalisation with the CI
+   values in `ui/src/lib/concordia.ts`, quotients of two stored values
+   (U/Yb, (Sm/La)N), Eu/Eu* and Ce/Ce* by the formulas in UPbRPy
+   `docs/export_table_spec.md` section 2.7, and the sum of REE + Y. A stored
+   column with the same meaning always wins, derived axes say "from stored
+   ppm", and they carry no uncertainty. Thermometers, dates, uncertainties
+   and anything needing model parameters are read only when stored.
 3. **No real data in the repository.** Fixtures are small and invented; never
    copy files from `~/laicpmsdb`, `~/My Drive…` or other repositories' data.
 4. **CI stays quiet.** Workflows run only on `v*` tags and
    `workflow_dispatch`. Never add push or pull-request triggers.
-5. **Light theme by default; every screen fits 1440 x 900 and 1280 x 800**
+5. **The theme follows the system by default (Light and Dark on request); every screen fits 1440 x 900 and 1280 x 800**
    CSS px in Chromium and WebKit (`docs/ux-conventions.md`, rule 7). Pages
    scroll inside the window, never sideways. Use the design tokens in
    `ui/src/tokens.css` (copied from laicpmsdb `ui/src/app.css`) and the

@@ -16,8 +16,21 @@ export interface Band {
   lower: (Point | null)[];
   color: string;
 }
-const palette = ['#4477aa', '#cc6677', '#228833', '#aa4499', '#bb7700', '#009988', '#7777bb', '#aa6633'];
+// Twelve colours that stay apart on white and dark plot surfaces (Tol muted and bright based).
+const palette = ['#4477aa', '#cc6677', '#228833', '#aa4499', '#bb7700', '#009988', '#7777bb', '#aa6633', '#332288', '#882255', '#117733', '#5aa0c8'];
+let assigned = new Map<string, string>();
+/**
+ * Give the samples of the current scope distinct colours, in name order (a
+ * hash of the name let two samples share one). Review calls this whenever its
+ * rows change; the chips, legends and every plot then agree.
+ */
+export function assignSampleColors(names: Iterable<string>): void {
+  const sorted = [...new Set(names)].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  assigned = new Map(sorted.map((name, i) => [name, palette[i % palette.length]]));
+}
 export function color(sample: string): string {
+  const known = assigned.get(sample);
+  if (known) return known;
   let h = 0;
   for (const c of sample)
     h = (h * 31 + c.charCodeAt(0)) >>> 0;
