@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { untrack, tick } from 'svelte';
+  import { untrack, tick, setContext } from 'svelte';
   import { review } from '../lib/review.svelte';
   import { groupSpots, dateLabel, type ReviewSpot } from '../lib/review-data';
   import { identity } from '../lib/identity.svelte';
@@ -16,6 +16,8 @@
     split?: boolean;
     wide?: boolean;
   } = $props();
+  // Release canvases while hidden, retaining each plot's axis and diagram choices.
+  setContext('upbstudio.review-visible', () => active);
   let filter = $state(''), scopeFilter = $state(''), plot = $state('Concordia');
   let tree = $state<HTMLDivElement>();
   let scopePopup = $state<HTMLDivElement>();

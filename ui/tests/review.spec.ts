@@ -224,3 +224,24 @@ test('Review has no sideways overflow at the minimum window or in compact split 
   await expect(board).toHaveAttribute('data-columns', String(width >= 880 ? 3 : width >= 460 ? 2 : 1));
   expect(await problems(page, 'Compact board')).toEqual([]);
 });
+
+test('hidden Review releases plots and restores its chosen view', async ({ page }) => {
+  await openReview(page);
+  const diagram = page.getByRole('combobox', { name: 'Concordia diagram' });
+  await diagram.selectOption('tw');
+  await page.getByRole('tab', { name: 'Images', exact: true }).click();
+  await expect(page.getByTestId('review-view').locator('.uplot')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Review', exact: true }).click();
+  await expect(diagram).toHaveValue('tw');
+  await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+  const plots = page.getByTestId('review-view').locator('.uplot');
+  await expect.poll(() => plots.count()).toBeGreaterThan(0);
+  const count = await plots.count();
+  const axis = await page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true }).textContent();
+  await page.getByRole('tab', { name: 'Images', exact: true }).click();
+  await expect(plots).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Review', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Geochemistry', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(plots).toHaveCount(count);
+  await expect(page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true })).toHaveText(axis!);
+});

@@ -1,6 +1,6 @@
 <script lang="ts">
   import uPlot from 'uplot';
-  import { untrack } from 'svelte';
+  import { untrack, getContext } from 'svelte';
   import { review } from '../../lib/review.svelte';
   import 'uplot/dist/uPlot.min.css';
   import { settings } from '../../lib/settings.svelte';
@@ -21,6 +21,7 @@
     legend?: boolean;
     sharedHover?: boolean;
   } = $props();
+  const visible = getContext<() => boolean>('upbstudio.review-visible') ?? (() => true);
   let host = $state<HTMLDivElement>();
   let width = $state(400), height = $state(300);
   let instance: uPlot | undefined;
@@ -41,14 +42,14 @@
   }
   const samples = $derived([...new Set(marks.filter(m => m.point || m.polygon?.length || m.path?.some(Boolean)).map(m => m.spot.sampleName))]);
   $effect(() => {
-    if (!host)
+    if (!visible() || !host)
       return;
     const ro = new ResizeObserver(([e]) => { width = Math.max(1, Math.floor(e.contentRect.width)); height = Math.max(1, Math.floor(e.contentRect.height)); });
     ro.observe(host);
     return () => ro.disconnect();
   });
   $effect(() => {
-    if (!host)
+    if (!visible() || !host)
       return;
     void settings.effectiveTheme;
     const css = getComputedStyle(document.documentElement);
@@ -245,7 +246,7 @@
     plot.over.addEventListener('click', click);
     plot.over.addEventListener('mousemove', move);
     plot.over.addEventListener('mouseleave', leave);
-    return () => { window.removeEventListener('blur', leave); document.removeEventListener('mouseleave', leave); if (instance === plot) instance = undefined; plot.destroy(); };
+    return () => { window.removeEventListener('blur', leave); document.removeEventListener('mouseleave', leave); if (instance === plot) instance = undefined; targets = []; hovered = null; plot.destroy(); };
   });
 </script>
 <div class="chart" bind:this={chart} data-testid="review-plot" data-point-count={targets.length} data-hovered-key={sharedHover ? review.hoveredKey ?? '' : ''}>
