@@ -163,7 +163,7 @@
     <section class="board-section stack" aria-label="Sessions">
       <Toolbar section="Sessions" bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} loaded={overview.sessions.length} refresh={identity.signedIn ? refresh : undefined} showAll={overview.sessions.length < overview.totalSessions ? showAll : undefined} busy={overview.refreshing} />
       {#if overview.state === 'idle' || (overview.state === 'loading' && overview.sessions.length === 0)}
-        <p class="faint small">{identity.target ? 'Loading sessions…' : shell.local ? 'Waiting for the local laicpmsdb to start…' : 'No laicpmsdb server configured.'}</p>
+        <p class="faint small">{identity.target ? 'Loading sessions…' : shell.local ? 'Open Sessions or Review to start the local database.' : 'No laicpmsdb server configured.'}</p>
       {:else if overview.state === 'signed-out'}
         <div class="row">
           <p class="muted small grow">Sign in to see your sessions, their reductions and the images of your mounts.</p>

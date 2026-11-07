@@ -59,6 +59,15 @@
     if (isDesktop && settings.loaded) void publishTheme(settings.effectiveTheme);
   });
 
+  // Images and Home work without starting the local database processes.
+  $effect(() => {
+    if (isDesktop && settings.loaded && localService.initialised && !firstRun &&
+        settings.mode === 'local' && (shell.view === 'sessions' || shell.view === 'review')) {
+      void localService.ensureStarted().catch((err) =>
+        logWarn(`[local-service] could not start: ${String(err)}`));
+    }
+  });
+
   onMount(async () => {
     await settings.load();
     if (isDesktop) await publishTheme(settings.effectiveTheme);
@@ -67,8 +76,6 @@
     if (tabs.some((t) => t.id === last)) shell.view = last;
     if (isDesktop) {
       await localService.init();
-      // "This computer": start laicpmsdb and PostgreSQL with the app.
-      if (settings.mode === 'local') void localService.start();
     }
     await shell.loadModules();
     await listenForLinks();

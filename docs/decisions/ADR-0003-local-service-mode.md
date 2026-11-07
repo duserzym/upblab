@@ -24,7 +24,8 @@ changeable in Settings:
 - **Lab server**: a URL, as today.
 - **This computer**: the shell owns the life cycle of a laicpmsdb instance
   on the local machine. It ships the service and a PostgreSQL 17 as bundled
-  resources, starts both when the app opens, and stops both when it quits.
+  resources, starts both when Sessions or Review first opens, and stops both
+  when the app quits.
 
 ### What is bundled
 

@@ -120,8 +120,7 @@
         <button class="glass panel choice" disabled={!ctx.localAvailable} onclick={() => send({ type: 'choose', mode: 'local' })}>
           <h2>This computer</h2>
           <p class="muted small">
-            UPb Studio runs its own laicpmsdb and PostgreSQL on this machine, starts them when it opens and stops them when it
-            quits. Works offline; nothing to install.
+            UPb Lab runs its own laicpmsdb and PostgreSQL on this machine, starts them when you open Sessions or Review, and stops them when it quits. Works offline; nothing to install.
           </p>
           <p class="faint small">{bundleNote}</p>
         </button>

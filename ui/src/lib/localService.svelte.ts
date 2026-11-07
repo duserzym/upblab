@@ -12,6 +12,7 @@ class LocalService {
   /** The first status has been asked for (or the web delivery has none). */
   initialised = $state(!isDesktop);
   private listening = false;
+  private startRequested = false;
   private waiters: ((s: LocalStatus) => void)[] = [];
 
   async init() {
@@ -59,8 +60,17 @@ class LocalService {
     };
   }
 
+  /** Start once on first database use; explicit Stop and failures stay stopped. */
+  async ensureStarted() {
+    if (this.startRequested) return;
+    this.startRequested = true;
+    if (this.status && ['ready', 'starting', 'stopping', 'failed'].includes(this.status.phase)) return;
+    await this.start();
+  }
+
   async start(overrides: Partial<LocalStartConfig> = {}) {
     if (!isDesktop) return;
+    this.startRequested = true;
     // Optimistic; the host re-emits the real status straight away.
     if (this.status && this.status.phase !== 'ready') this.status = { ...this.status, phase: 'starting', error: null, logTail: null };
     await localServiceApi.start(this.config(overrides));

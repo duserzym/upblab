@@ -129,13 +129,13 @@ make dev
 `make dev` opens the window with hot reload. The first launch shows the
 first-run wizard:
 
-- **This computer**: UPb Studio starts its bundled PostgreSQL 17 (port 55432,
-  or the next free one; never 5432) and the laicpmsdb checkout at
-  `../laicpmsdb` (the `local` of `laicpmsdb-service` in `modules.lock.json`;
-  run `make venv` and `make ui` there once) on port 8000 or the next free
-  one, creates your first account and optionally loads the demo sessions.
-  Both stop when the app quits. The first `cargo build` downloads the pinned
-  PostgreSQL archive (13 MB on macOS) into `~/.theseus/postgresql/`.
+- **This computer**: When you first open Sessions or Review, UPb Lab starts
+  PostgreSQL 17 (port 55432 or the next free port, never 5432) and laicpmsdb
+  (port 8000 or the next free port). It creates your first account and can load
+  the demo sessions. Both services stop when the app quits. For development, run
+  `make venv` and `make ui` in `../laicpmsdb`, the local checkout for
+  `laicpmsdb-service` in `modules.lock.json`. The first `cargo build` downloads
+  the pinned PostgreSQL archive (13 MB on macOS) into `~/.theseus/postgresql/`.
 - **Lab server**: a laicpmsdb URL, e.g. `http://localhost:8000` for
   `make dev` in the laicpmsdb repository; then **Sign in** in the tab bar
   (the demo accounts are in laicpmsdb's `.env.example`).
