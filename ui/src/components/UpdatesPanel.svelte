@@ -4,10 +4,11 @@
   import { isDesktop, openExternal } from '../lib/platform';
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
-  import { check, download, install, updater, updatePreview } from '../lib/updater.svelte';
+  import { check, checkStandards, download, install, updater, updatePreview } from '../lib/updater.svelte';
   import { RELEASES_PAGE } from '../lib/updates';
   import { collectVersions, type BuildVersions } from '../lib/versions';
 
+  const standardsPage = 'https://github.com/duserzym/upb-standards';
   let versions = $state<BuildVersions | null>(null);
   const status = $derived(updater.status);
   const info = $derived('info' in status ? status.info : null);
@@ -56,6 +57,20 @@
 <p class="faint small">Last check: {settings.updateLastCheck ? new Date(settings.updateLastCheck).toLocaleString() : 'Never'}{updater.lastResult ? ` · ${updater.lastResult}` : ''}</p>
 {#if info?.notes}<pre class="notes small">{info.notes}</pre>{/if}
 <a href={RELEASES_PAGE} target="_blank" rel="noreferrer" onclick={(e) => { if (isDesktop) { e.preventDefault(); void openExternal(RELEASES_PAGE); } }}>Release notes on GitHub</a>
+{#if isDesktop}
+  <h4>UPb Standards</h4>
+  <p class="small" role="status">{updater.standardsChecking ? 'Checking standards…' : updater.standards.message}</p>
+  {#if updater.standards.changed.length}
+    <details class="small">
+      <summary>Changed TOML files</summary>
+      <ul>{#each updater.standards.changed as file (file)}<li>{file}</li>{/each}</ul>
+    </details>
+  {/if}
+  <div class="row">
+    <button class="btn" disabled={updater.standardsChecking || !!updatePreview} onclick={() => void checkStandards()}>Check standards</button>
+    <a href={standardsPage} onclick={(e) => { e.preventDefault(); void openExternal(standardsPage); }}>Standards on GitHub</a>
+  </div>
+{/if}
 <h4>In this build</h4>
 <table class="data" aria-label="In this build">
   <tbody>

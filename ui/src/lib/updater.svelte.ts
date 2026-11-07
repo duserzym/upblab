@@ -27,6 +27,8 @@ export const updater = $state({
   supported: false,
   justChecked: false,
   lastResult: '',
+  standards: { message: 'Standards have not been checked.', warning: false, changed: [] } as StandardsStatus,
+  standardsChecking: false,
 });
 let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
 function showChecked() {
@@ -45,6 +47,22 @@ function fail(error: unknown) {
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   return (await import('@tauri-apps/api/core')).invoke<T>(command, args);
 }
+type StandardsStatus = { message: string; warning: boolean; changed: string[] };
+
+export async function checkStandards(): Promise<void> {
+  if (!isDesktop || updatePreview || updater.standardsChecking) return;
+  updater.standardsChecking = true;
+  try {
+    const result = await invoke<StandardsStatus | null>('standards_check');
+    if (!result || !Array.isArray(result.changed)) throw new Error('Missing standards status');
+    updater.standards = result;
+  } catch {
+    updater.standards = { ...updater.standards, message: 'Standards check unavailable in this build.' };
+  } finally {
+    updater.standardsChecking = false;
+  }
+}
+
 async function endpoint() {
   if (settings.updateChannel === 'stable') return STABLE_ENDPOINT;
   try {
@@ -58,6 +76,7 @@ async function endpoint() {
 /** A manual check always reaches the server, including when an update is ready. */
 export async function check(manual = false): Promise<void> {
   if (!updatePreview && !isDesktop) return;
+  void checkStandards();
   if (['checking', 'downloading', 'installing'].includes(updater.status.kind) || updater.status.kind === 'ready' && !manual) return;
   // Unsupported installed formats can still check and link to the download page.
   if (updater.status.kind === 'unsupported') updater.status = { kind: 'idle' };
@@ -113,6 +132,12 @@ export function startScheduler(): () => void {
   let first: ReturnType<typeof setTimeout> | undefined;
   let every: ReturnType<typeof setInterval> | undefined;
   if (!updatePreview && isDesktop) {
+    function scheduledCheck() {
+      if (updater.supported) void check();
+      else void checkStandards();
+    }
+    first = setTimeout(scheduledCheck, 8000);
+    every = setInterval(scheduledCheck, 6 * 3600_000);
     void (async () => {
       try {
         updater.version = await shellVersion();
@@ -125,8 +150,6 @@ export function startScheduler(): () => void {
         const pending = await invoke<UpdateInfo | null>('update_status');
         if (stopped) return;
         if (pending) updater.status = { kind: pending.ready ? 'ready' : 'available', info: pending };
-        first = setTimeout(() => void check(), 8000);
-        every = setInterval(() => void check(), 6 * 3600_000);
       } catch (error) {
         if (!stopped) { updater.status = { kind: 'checking' }; fail(error); }
       }

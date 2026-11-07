@@ -94,3 +94,16 @@ it('schedules after eight seconds and every six hours, and stops on cleanup', as
   await vi.advanceTimersByTimeAsync(6 * 3600_000);
   expect(mocks.invoke.mock.calls.filter(([name]) => name === 'update_check')).toHaveLength(2);
 });
+it('checks standards in the background when the app updater is unsupported', async () => {
+  const standards = { warning: true, changed: ['rutile/check.toml'], message: 'Standards differ.' };
+  mocks.invoke.mockImplementation(async (command) => command === 'standards_check' ? standards : false);
+  const runtime = await import('./updater.svelte');
+  const stop = runtime.startScheduler();
+  try {
+    await vi.advanceTimersByTimeAsync(8000);
+    expect(runtime.updater.standards).toEqual(standards);
+    expect(mocks.invoke).not.toHaveBeenCalledWith('update_check', expect.anything());
+  } finally {
+    stop();
+  }
+});

@@ -16,7 +16,7 @@ mod health;
 mod pidfile;
 mod ports;
 mod postgres;
-mod process;
+pub(super) mod process;
 mod service;
 
 use std::path::{Path, PathBuf};

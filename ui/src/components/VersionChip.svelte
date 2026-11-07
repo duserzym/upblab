@@ -24,7 +24,7 @@
 <button class="tab version" data-testid="version-chip" title="UPb Lab v{updater.version} · Settings > Updates" onclick={showUpdates}>
   {#if status.kind === 'checking' || status.kind === 'downloading'}<span class="spinner" aria-hidden="true"></span>{/if}
   {#if status.kind === 'available' || status.kind === 'ready'}<span class="dot" aria-hidden="true"></span>{/if}
-  <span>{text}</span>
+  <span>{updater.standards.warning ? `${text} · Standards warning` : text}</span>
 </button>
 
 <style>

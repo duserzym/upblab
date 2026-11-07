@@ -16,6 +16,7 @@ pub mod local_service;
 mod menu;
 mod modules;
 mod probe;
+mod standards;
 mod studio;
 mod updater;
 
@@ -80,6 +81,7 @@ pub fn run() {
             updater::update_install,
             updater::update_status,
             updater::update_supported,
+            standards::standards_check,
             modules::module_open,
             modules::module_bounds,
             modules::module_hide,
