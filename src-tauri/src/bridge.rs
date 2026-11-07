@@ -154,6 +154,16 @@ pub fn module_theme<R: Runtime>(
 ) -> Result<(), String> {
     state.set(&theme)?;
     let script = theme_script(&theme)?;
+    if let Some(window) = app.get_window("main") {
+        let native = if theme == "dark" {
+            tauri::Theme::Dark
+        } else {
+            tauri::Theme::Light
+        };
+        window
+            .set_theme(Some(native))
+            .map_err(|err| err.to_string())?;
+    }
     for label in ["module-images", "module-sessions"] {
         if let Some(webview) = app.get_webview(label) {
             if let Err(err) = webview.eval(&script) {
