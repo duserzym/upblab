@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalise, groupSpots, numericColumns, profileColumns, dateLabel, parseScope } from './review-data';
+import { normalise, groupSpots, numericColumns, profileColumns, groupDepthColumns, depthColumnLabel, dateLabel, parseScope } from './review-data';
 import { table, rows, mountResults, profile } from '../../tests/fixtures/review';
 describe('stored result tables', () => {
   it('normalises the session endpoint and splits flags without losing values', () => {
@@ -34,5 +34,21 @@ describe('stored result tables', () => {
     expect(profileColumns(profile)).toEqual(['206Pb/238U_age', '207Pb/206Pb_age', '206Pb/238U_fractionation_corrected', 'U']);
     expect(parseScope('{"kind":"session","id":"s"}')).toEqual({ kind: 'session', id: 's', run: 'preferred' });
     expect(parseScope('invalid')).toBeNull();
+  });
+});
+
+describe('depth profile channel picker', () => {
+  it('groups stored channels and finds both readable and original names', () => {
+    const keys = ['206Pb/238U_date', '207Pb/206Pb', '206Pb/238U_DH_corrected',
+      '204Pb', 'Ti', '206Pb/238U_session_correction_factor'];
+    expect(groupDepthColumns(keys).map(g => g.group)).toEqual(['Dates', 'Isotope ratios',
+      'Corrected ratios', 'Concentrations', 'Isotope signals', 'Correction diagnostics']);
+    expect(groupDepthColumns(keys, 'downhole 206pb')).toEqual([
+      { group: 'Corrected ratios', keys: ['206Pb/238U_DH_corrected'] },
+    ]);
+    expect(depthColumnLabel('206Pb/238U_date')).toBe('206Pb/238U (Ma)');
+    const percent = '206Pb/238U_age_2e_with_calibration%';
+    expect(profileColumns({ ...profile, columns: [...profile.columns, percent],
+      data: { ...profile.data, [percent]: [5] } })).not.toContain(percent);
   });
 });

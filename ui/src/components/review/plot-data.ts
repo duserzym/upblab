@@ -3,6 +3,7 @@ import { ellipse, type Point } from '../../lib/concordia';
 export interface Mark {
   spot: ReviewSpot;
   point?: Point;
+  boxed?: boolean;
   path?: (Point | null)[];
   polygon?: Point[];
 }

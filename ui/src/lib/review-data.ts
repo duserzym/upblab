@@ -135,9 +135,42 @@ export function groupSpots(rows: ReviewSpot[], text = '', references = false): S
 export function numericColumns(rows: ReviewSpot[]): string[] {
   return [...new Set(rows.flatMap(r => Object.keys(r.values).filter(k => number(r.values[k]) !== null)))].sort(natural);
 }
-export const uncertaintyColumn = (k: string) => /_(?:1s|2s|2e|2e%|95CI|no_calibration|with_calibration)$/.test(k);
+export const uncertaintyColumn = (k: string) => /_(?:1s|2s|2e|95CI)(?:_(?:no|with)_calibration)?%?$|_(?:no|with)_calibration%?$/i.test(k);
+export function profileAxes(profile: DepthProfile): string[] {
+  return profile.columns.filter(k => /(?:^|_)(?:time|depth)(?:_|$)/i.test(k) && profile.data[k]?.some(v => number(v) !== null));
+}
 export function profileColumns(profile: DepthProfile): string[] {
-  return profile.columns.filter(k => !uncertaintyColumn(k) && !/^(signal_relative_time|Time|time|depth|depth_um)$/i.test(k) && profile.data[k]?.some(v => number(v) !== null));
+  const axes = new Set(profileAxes(profile));
+  return profile.columns.filter(k => !axes.has(k) && !uncertaintyColumn(k) && profile.data[k]?.some(v => number(v) !== null));
+}
+
+const depthGroups = ['Dates', 'Isotope ratios', 'Corrected ratios', 'Concentrations', 'Isotope signals', 'Correction diagnostics', 'Other'] as const;
+type DepthGroup = typeof depthGroups[number];
+
+function depthGroup(key: string): DepthGroup {
+  if (/(?:^|_)(?:age|date)$/i.test(key)) return 'Dates';
+  if (/(?:factor|extrapolated|iterations|common_fraction|correction_f206|correction_common|err_corr|rho)/i.test(key)) return 'Correction diagnostics';
+  if (key.includes('/')) return /corrected/i.test(key) ? 'Corrected ratios' : 'Isotope ratios';
+  if (/^[A-Z][a-z]?(?:_ppm)?$/.test(key)) return 'Concentrations';
+  if (/^(?:\d+[A-Z][a-z]?|[A-Z][a-z]?\d+)(?:_cps)?$/.test(key)) return 'Isotope signals';
+  return 'Other';
+}
+
+export function depthColumnLabel(key: string): string {
+  return key.replace(/_DH_corrected$/i, ' (downhole corrected)')
+    .replace(/_fractionation_corrected$/i, ' (fractionation corrected)')
+    .replace(/^(20[478]Pb)_corrected_/, '$1 correction · ')
+    .replace(/_(?:age|date)$/i, ' (Ma)')
+    .replace(/_/g, ' ');
+}
+
+export function groupDepthColumns(columns: string[], query = '') {
+  const terms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return depthGroups.flatMap(group => {
+    const keys = columns.filter(key => depthGroup(key) === group && terms.every(term =>
+      `${key} ${depthColumnLabel(key)} ${group}`.toLowerCase().includes(term))).sort(natural);
+    return keys.length ? [{ group, keys }] : [];
+  });
 }
 export function dateLabel(spot: ReviewSpot): string {
   if (!spot.date)

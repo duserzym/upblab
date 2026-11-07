@@ -2,6 +2,7 @@
 export const L238 = 1.55125e-10;
 export const L235 = 9.8485e-10;
 export const U238_U235 = 137.818;
+export const EARTH_AGE = 4.54e9; // Years. USGS, Geologic Time: Age of the Earth.
 export type Point = [
   number,
   number
@@ -10,6 +11,9 @@ export type ConcordiaMode = 'wetherill' | 'tw';
 export function concordia(t: number, mode: ConcordiaMode = 'wetherill'): Point {
   const a = Math.expm1(L235 * t), b = Math.expm1(L238 * t);
   return mode === 'wetherill' ? [a, b] : [1 / b, a / (U238_U235 * b)];
+}
+export function twAgeAtX(x: number): number {
+  return Math.log1p(1 / x) / L238;
 }
 export function ellipse(x: number, y: number, x2s: number, y2s: number, rho = 0, n = 48): Point[] {
   const r = Math.max(-0.999, Math.min(0.999, Number.isFinite(rho) ? rho : 0));
@@ -23,7 +27,7 @@ export function ageRange(points: Point[], mode: ConcordiaMode): [
   number,
   number
 ] {
-  const ages = points.map(([x, y]) => Math.log1p(mode === 'tw' ? 1 / x : y) / L238).filter(t => Number.isFinite(t) && t > 0);
+  const ages = points.map(([x, y]) => mode === 'tw' ? twAgeAtX(x) : Math.log1p(y) / L238).filter(t => Number.isFinite(t) && t > 0);
   if (!ages.length)
     return [1e6, 3e9];
   const lo = Math.min(...ages), hi = Math.max(...ages), pad = Math.max((hi - lo) * 0.25, hi * 0.15, 10e6);

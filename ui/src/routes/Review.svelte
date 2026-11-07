@@ -22,6 +22,7 @@
   let tree = $state<HTMLDivElement>();
   let scopePopup = $state<HTMLDivElement>();
   let samplesShown = $state<string[] | null>(null);
+  let hiddenSpots = $state.raw(new Set<string>());
   let treeClosed = $state(false), detailsClosed = $state(false);
   const scopeRows = $derived(review.rows.filter(r=>review.references || !r.isReference));
   const samples = $derived([...new Set(scopeRows.map(r=>r.sampleName))].map(name=>({name,count:scopeRows.filter(r=>r.sampleName===name).length})));
@@ -33,6 +34,23 @@
     void review.scrollVersion;
     untrack(()=>{const spot=review.rows.find(r=>r.key===key);if(spot&&samplesShown&&!samplesShown.includes(spot.sampleName)) samplesShown=[...samplesShown,spot.sampleName];});
   });
+  $effect(() => {
+    void runContext;
+    hiddenSpots = new Set();
+  });
+  function hideSpots(keys: string[]) {
+    hiddenSpots = new Set([...hiddenSpots, ...keys]);
+    if (review.hoveredKey && hiddenSpots.has(review.hoveredKey)) review.hoveredKey = null;
+  }
+  function toggleSpot(spot: ReviewSpot) {
+    if (hiddenSpots.has(spot.key)) hiddenSpots = new Set([...hiddenSpots].filter(key => key !== spot.key));
+    else hideSpots([spot.key]);
+  }
+  function toggleSpotFromMenu(event: MouseEvent, spot: ReviewSpot) {
+    if (plot !== 'Concordia') return;
+    event.preventDefault();
+    toggleSpot(spot);
+  }
   function sampleAction(action: 'all'|'clear'|'click', name='', modifier=false) {
     samplesShown=sampleSelection(samplesShown,samples.map(s=>s.name),action,name,modifier);
     review.hoveredKey=null;
@@ -44,6 +62,7 @@
   const groups = $derived(groupSpots(plotted, filter, review.references));
   const visible = $derived(groups.flatMap(s => s.grains.flatMap(g => g.spots)));
   const scopeValue = $derived(review.scope ? `${review.scope.kind}:${review.scope.id}` : '');
+  const runContext = $derived(JSON.stringify(review.scope));
   const complete = $derived(review.runs.filter(r => r.status === 'completed' || r.status === 'complete').sort((a, b) => b.started_at.localeCompare(a.started_at)));
   const newest = $derived(complete[0]);
   const noPreferred = $derived(!complete.some(r => r.is_preferred_for_session));
@@ -82,7 +101,15 @@
     review.select(spot);
   }
   function keydown(e: KeyboardEvent) {
-    if (!['ArrowUp', 'ArrowDown', 'Enter'].includes(e.key))
+    if (plot === 'Concordia' && e.key.toLowerCase() === 'h' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const spot = visible.find(r => r.key === ((e.target as HTMLElement).closest<HTMLElement>('[data-spot-key]')?.dataset.spotKey ?? review.selectedKey));
+      if (spot) {
+        e.preventDefault();
+        toggleSpot(spot);
+      }
+      return;
+    }
+    if ((e.target as HTMLElement).closest('.spot-visibility') || !['ArrowUp', 'ArrowDown', 'Enter'].includes(e.key))
       return;
     e.preventDefault();
     if (e.key === 'Enter') {
@@ -142,9 +169,21 @@
               {#each sample.grains as grain (grain.key)}
                 <button class="grain" onclick={()=>void review.focusGrain(grain.spots)}>{grain.name}</button>
                 {#each grain.spots as spot (spot.key)}
-                  <button class="spot" role="treeitem" aria-selected={review.selectedKey===spot.key} tabindex={review.selectedKey===spot.key?0:-1} data-spot-key={spot.key} class:hovered={review.hoveredKey===spot.key} onclick={()=>review.select(spot)} ondblclick={()=>void review.focus(spot,true)}>
+                  <div class="spot-row" role="none" class:unplotted={plot === 'Concordia' && hiddenSpots.has(spot.key)} oncontextmenu={event => toggleSpotFromMenu(event, spot)}>
+                    <button class="spot" role="treeitem" aria-selected={review.selectedKey===spot.key} tabindex={review.selectedKey===spot.key?0:-1} data-spot-key={spot.key} aria-keyshortcuts={plot === 'Concordia' ? 'H' : undefined} class:hovered={review.hoveredKey===spot.key} onclick={()=>review.select(spot)} ondblclick={()=>void review.focus(spot,true)}>
                     <span>{spot.label}</span><span class="badge" style:color={badgeColor(spot)} title="Preferred date ± 2σ (Ma)">{dateLabel(spot)}</span>
                   </button>
+                    {#if plot === 'Concordia'}
+                      <button class="spot-visibility" type="button" tabindex={review.selectedKey === spot.key ? 0 : -1} aria-pressed={!hiddenSpots.has(spot.key)}
+                        aria-label={`${hiddenSpots.has(spot.key) ? 'Show' : 'Hide'} ${spot.label} on Concordia`}
+                        title={hiddenSpots.has(spot.key) ? 'Show on Concordia (right-click or H)' : 'Hide on Concordia (right-click or H)'} onclick={() => toggleSpot(spot)}>
+                        <svg viewBox="0 0 20 20" aria-hidden="true">
+                          <path d="M1.5 10s3-5.5 8.5-5.5 8.5 5.5 8.5 5.5-3 5.5-8.5 5.5S1.5 10 1.5 10Z"/><circle cx="10" cy="10" r="2.5"/>
+                          {#if hiddenSpots.has(spot.key)}<path d="m3 3 14 14"/>{/if}
+                        </svg>
+                      </button>
+                    {/if}
+                  </div>
                 {/each}
               {/each}
             </div>
@@ -154,13 +193,14 @@
       </aside>
       <div class="plots stack">
         <div class="view-switch" role="tablist" aria-label="Review plots">{#each ['Concordia','Geochemistry','Depth profile'] as tab}<button role="tab" class="chip" aria-selected={plot===tab} onclick={()=>plot=tab}><svg viewBox="0 0 20 20" aria-hidden="true"><path d={tab==='Concordia'?'M3 17V3m0 14h14M5 15c2-7 5-9 11-11':tab==='Geochemistry'?'M2 2h6v6H2zm10 0h6v6h-6zM2 12h6v6H2zm10 0h6v6h-6z':'M3 3v14h14M5 12l3-6 3 8 5-5'} /></svg><span>{tab}</span></button>{/each}</div>
-        {#if plot==='Concordia'}{#if samplesShown?.length===0}<p class="muted small">No samples shown</p>{/if}<ConcordiaPlot rows={plotted} selected={review.selectedKey} onselect={selectSpot} />
+        {#if plot==='Concordia'}{#if samplesShown?.length===0}<p class="muted small">No samples shown</p>{/if}{#key runContext}<ConcordiaPlot rows={plotted} selected={review.selectedKey} onselect={selectSpot}
+          hidden={hiddenSpots} onhide={hideSpots} onrestore={() => hiddenSpots = new Set()} />{/key}
         {:else if plot==='Geochemistry'}<GeochemistryPlot {material} catalogueRows={scopeRows} rows={plotted} selected={review.selectedKey} onselect={selectSpot} />
         {:else if samplesShown?.length===0}<p class="muted small">No samples shown</p>
         {:else if review.selected && (samplesShown===null||samplesShown.includes(review.selected.sampleName))}<DepthPlot />
         {:else}<p class="muted small">Select a spot from the shown samples to view its depth profile.</p>{/if}
       </div>
-      <aside class="details stack" aria-label="Spot details" data-testid="review-details"><div class="column-heading"><span class="section-label">Spot details</span><button class="rail-toggle" aria-label={detailsClosed?'Expand details':'Collapse details'} aria-expanded={!detailsClosed} onclick={()=>detailsClosed=!detailsClosed}>{detailsClosed?'‹':'›'}</button></div>{#if !detailsClosed}<SpotDetails />{/if}</aside>
+      <aside class="details stack" aria-label="Spot details" data-testid="review-details"><div class="column-heading"><span class="section-label">Spot details</span><button class="rail-toggle" aria-label={detailsClosed?'Expand details':'Collapse details'} aria-expanded={!detailsClosed} onclick={()=>detailsClosed=!detailsClosed}>{split ? (detailsClosed ? '⌃' : '⌄') : (detailsClosed ? '‹' : '›')}</button></div>{#if !detailsClosed}<SpotDetails />{/if}</aside>
     </div>
   {/if}
 </section>
@@ -178,10 +218,16 @@
   .tree-closed {--tree-width:32px;}.details-closed {--details-width:32px;}
   .tree,.plots,.details {padding:8px;min-height:0;min-width:0;gap:8px;}
   .tree-scroll {min-height:0;overflow-y:auto;overflow-x:hidden;}.tree>input {width:100%;min-width:0;font-size:0.78rem;}
-  .plots {overflow:hidden;background:var(--glass);}.details {overflow-y:auto;overflow-x:hidden;overflow-wrap:anywhere;}
+  .plots {overflow:auto;background:var(--glass);}.details {overflow-y:auto;overflow-x:hidden;overflow-wrap:anywhere;}
   .column-heading {display:flex;align-items:center;justify-content:space-between;gap:4px;flex:none;}.rail-toggle {background:transparent;border:0;color:var(--text-muted);font-size:1.2rem;cursor:pointer;padding:0 3px;}
   .tree-closed .tree,.details-closed .details {padding:8px 4px;}.tree-closed .tree .section-label,.details-closed .details .section-label {display:none;}
   .grain {display:block;max-width:100%;overflow-wrap:anywhere;text-align:left;color:var(--text-muted);background:transparent;border:0;padding:4px;cursor:pointer;font-size:0.75rem;}
+  .spot-row {display:flex;align-items:center;min-width:0;}
+  .spot-visibility {flex:none;display:grid;place-items:center;width:24px;height:26px;padding:3px;background:transparent;border:0;color:var(--text-muted);cursor:pointer;}
+  .spot-visibility svg {width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.4;}
+  .spot-visibility:hover {color:var(--accent);background:var(--row-hover);}
+  .unplotted .spot {opacity:0.62;}
+  .compact .spot-row .spot {flex-wrap:wrap;justify-content:flex-start;gap:0 4px;}
   .spot {display:flex;align-items:center;justify-content:space-between;gap:4px;width:100%;padding:6px 4px;background:transparent;border:1px solid transparent;border-radius:var(--radius-sm);cursor:pointer;text-align:left;font-size:0.75rem;}
   .spot>span:first-child {min-width:0;overflow-wrap:anywhere;}.badge {white-space:nowrap;font-size:0.65rem;padding:2px 4px;flex:none;}
   .spot[aria-selected='true'] {background:var(--accent-soft);border-color:var(--accent);}.spot:hover,.spot.hovered {background:var(--row-hover);}.spot.hovered {outline:1px solid var(--accent);outline-offset:-1px;}
