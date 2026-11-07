@@ -56,10 +56,10 @@
           <div class="row"><span class="dot" style="background: var(--ok)"></span><strong>UPbRPy Studio launched</strong></div>
           <p class="muted small">
             Studio opens the {request.object} from laicpmsdb in database mode{request.minted
-              ? ', signed in with a one-time code from your UPb Studio sign-in'
+              ? ', signed in with a one-time code from your UPb Lab sign-in'
               : identity.signedIn
                 ? ''
-                : '; sign in to UPb Studio first so Studio does not ask you to sign in again'}.
+                : '; sign in to UPb Lab first so Studio does not ask you to sign in again'}.
           </p>
           {#if request.command}<pre class="log-tail">{request.command}</pre>{/if}
           {#if request.error}<p class="faint small">Handoff code: {request.error}</p>{/if}
@@ -98,12 +98,12 @@
     <div class="glass panel stack">
       <h2>UPbRPy Studio</h2>
       <p class="muted">
-        UPbRPy Studio is a native desktop application. UPb Studio launches it rather than embedding it: a session's
+        UPbRPy Studio is a native desktop application. UPb Lab launches it rather than embedding it: a session's
         <strong>Reduce</strong> action (Home, or the Sessions tab) opens Studio in database mode; submitted reductions come
         back to laicpmsdb and show on Home and in the Sessions tab.
       </p>
       {#if !isDesktop}
-        <p class="muted">Launching Studio needs the UPb Studio desktop app; in the browser the Reduce links open Studio through the system.</p>
+        <p class="muted">Launching Studio needs the UPb Lab desktop app; in the browser the Reduce links open Studio through the system.</p>
       {:else if status === null}
         <p class="faint">Looking for UPbRPy Studio…</p>
       {:else if status.found}

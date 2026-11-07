@@ -1,6 +1,6 @@
 # Review tab: results in the context of the images
 
-**Status:** plan, 2026-11-06. Yiming's direction the same day: UPb Studio links
+**Status:** plan, 2026-11-06. Yiming's direction the same day: UPb Lab links
 the pipeline and does no reduction; raw LA-ICP-MS data and grainatlas image
 sets are uploaded from it; after spot placement and UPbRPy reduction the user
 comes back to it and reviews each grain's results next to its SEM images and

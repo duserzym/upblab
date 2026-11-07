@@ -1,12 +1,13 @@
-# UPb Studio (`upbstudio`): the unified shell for the lab workflow
+# UPb Lab (`upblab`): the unified shell for the lab workflow
 
-**Status:** plan and roadmap, 2026-11-03. Display name UPb Studio, repository and
-package name `upbstudio`, chosen 2026-11-03. The reduction module's own GUI
-keeps its name UPbRPy Studio; inside UPb Studio it appears as the Reduce tab.
+**Status:** plan and roadmap, 2026-11-03. Display name UPb Lab, renamed
+2026-11-06 to distinguish the shell from UPbRPy Studio. Repository renamed `upblab` on 2026-11-06; the internal
+package name remains `upbstudio`. The reduction module's own GUI
+keeps its name UPbRPy Studio; inside UPb Lab it appears as the Reduce tab.
 
 ## 1. Purpose
 
-UPb Studio is the one application a lab member opens. It hosts the workflow
+UPb Lab is the one application a lab member opens. It hosts the workflow
 modules as tabs, carries identity and settings between them, and turns a click
 in one module into the right view in another:
 
@@ -110,7 +111,7 @@ same on Windows:
 ### 4.2 Repository layout
 
 ```text
-upbstudio/
+upblab/
   src-tauri/            Tauri host (Rust)
   ui/                   shell UI (Svelte)
   bridge/               @lab/bridge package used by grainatlas and laicpmsdb

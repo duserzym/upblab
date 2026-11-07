@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "UPb Studio shell UI (Svelte 5): tab bar, Home, Settings, link resolver; runs in Tauri and at /desk/",
+  "description": "UPb Lab shell UI (Svelte 5): tab bar, Home, Settings, link resolver; runs in Tauri and at /desk/",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

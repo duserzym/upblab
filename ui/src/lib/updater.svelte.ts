@@ -4,7 +4,7 @@ import { shellVersion } from './versions';
 import { pickEndpoint, STABLE_ENDPOINT, transition, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
 
 const WEB_REASON = 'Updates come with the desktop app; the web page is always the version its server serves.';
-const INSTALL_REASON = 'Install UPb Studio to receive in-app updates on this computer.';
+const INSTALL_REASON = 'Install UPb Lab to receive in-app updates on this computer.';
 const previewName = !isDesktop && typeof location !== 'undefined'
   ? new URLSearchParams(location.search).get('update-preview') : null;
 export const updatePreview = ['none', 'available', 'downloading', 'ready', 'error', 'unsupported'].includes(previewName ?? '');
@@ -48,7 +48,7 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
 async function endpoint() {
   if (settings.updateChannel === 'stable') return STABLE_ENDPOINT;
   try {
-    const res = await fetch('https://api.github.com/repos/duserzym/upbstudio/releases?per_page=10', {
+    const res = await fetch('https://api.github.com/repos/duserzym/upblab/releases?per_page=10', {
       headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15_000),
     });
     return res.ok ? pickEndpoint('beta', await res.json()) : STABLE_ENDPOINT;

@@ -1,6 +1,6 @@
 # Links between modules
 
-Cross-module navigation uses URLs (plan section 4.4). UPb Studio registers
+Cross-module navigation uses URLs (plan section 4.4). UPb Lab registers
 three schemes with the operating system and routes them to a tab:
 
 | Link | Opens |
@@ -66,7 +66,7 @@ it; use the Home tab's link box instead.
 Per the cross-platform contract, the module apps' own installers register only
 their own scheme (grainatlas desktop registers `grainatlas`, UPbRPy Studio
 registers `upbr`). When both are installed, the OS picks one handler per
-scheme; UPb Studio routes a `grainatlas://` link to its Images tab and a
+scheme; UPb Lab routes a `grainatlas://` link to its Images tab and a
 `upbr://` link to Studio (adding a handoff code), while the standalone app
 opens it itself (Studio then asks for a sign-in if the link has no code).
 

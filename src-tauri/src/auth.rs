@@ -175,7 +175,7 @@ impl Identity {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
             .connect_timeout(Duration::from_secs(4))
-            .user_agent(concat!("UPbStudio/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("UPbLab/", env!("CARGO_PKG_VERSION")))
             .build()
             .expect("HTTP client");
         Self { vault, http, active: watch::Sender::new(None) }

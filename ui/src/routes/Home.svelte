@@ -101,7 +101,7 @@
 <section class="view scroll" class:hidden={!active}>
   <div class="page stack board">
     <header class="row intro">
-      <h1>UPb Studio</h1>
+      <h1>UPb Lab</h1>
       <p class="muted small">Images, sessions, stored results and reduction in one window.</p>
     </header>
 

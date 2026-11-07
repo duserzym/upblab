@@ -137,7 +137,7 @@ pub fn ensure_initialised(bins: &Binaries, data_dir: &Path, superuser_password: 
         let v = std::fs::read_to_string(&version_file).unwrap_or_default();
         if v.trim() != MAJOR {
             return Err(format!(
-                "{} holds a PostgreSQL {} cluster; UPb Studio runs {MAJOR}. Upgrading needs pg_upgrade.",
+                "{} holds a PostgreSQL {} cluster; UPb Lab runs {MAJOR}. Upgrading needs pg_upgrade.",
                 data_dir.display(),
                 v.trim()
             ));
@@ -182,7 +182,7 @@ pub fn clear_previous(bins: &Binaries, data_dir: &Path, log: &Path) -> Option<St
                 std::thread::sleep(Duration::from_millis(500));
                 let _ = std::fs::remove_file(&pid_path);
             }
-            Some(format!("stopped PostgreSQL pid {pid} left running by a previous UPb Studio"))
+            Some(format!("stopped PostgreSQL pid {pid} left running by a previous UPb Lab"))
         }
     }
 }

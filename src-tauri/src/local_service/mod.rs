@@ -6,7 +6,7 @@
 //! Files (see docs/installing.md):
 //! - `<app local data>/laicpmsdb/pg/`          PostgreSQL data directory
 //! - `<app local data>/laicpmsdb/postgresql/`  unpacked bundled binaries
-//! - `<app local data>/laicpmsdb/shell.pid`    which UPb Studio owns them
+//! - `<app local data>/laicpmsdb/shell.pid`    which UPb Lab owns them
 //! - `<app local data>/laicpmsdb/service.pid`  the running service, for clean-up after a crash
 //! - `<app log dir>/postgres.log`, `laicpmsdb.log`
 //! - store `local-service.json`                 generated passwords and secret key
@@ -280,18 +280,18 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
     let p = paths(app).map_err(pg_err)?;
     std::fs::create_dir_all(&p.base).map_err(|e| pg_err(format!("{}: {e}", p.base.display())))?;
 
-    // Is another UPb Studio (a release app next to a development build) using this database?
+    // Is another UPb Lab (a release app next to a development build) using this database?
     let owner = std::fs::read_to_string(&p.owner).ok();
     if let OwnerState::Held { pid } = assess_owner(owner.as_deref(), std::process::id(), &OsProbe) {
         return Err(pg_err(format!(
-            "Another UPb Studio (process {pid}) is running this computer's laicpmsdb. Quit it first, then retry."
+            "Another UPb Lab (process {pid}) is running this computer's laicpmsdb. Quit it first, then retry."
         )));
     }
     std::fs::write(&p.owner, std::process::id().to_string()).map_err(|e| pg_err(e.to_string()))?;
 
     // A service left by a shell that was killed together with its watchdog.
     if let Some(pid) = assess_service(std::fs::read_to_string(&p.service_pid).ok().as_deref(), &OsProbe) {
-        log::warn!("[local-service] stopping laicpmsdb pid {pid} left running by a previous UPb Studio");
+        log::warn!("[local-service] stopping laicpmsdb pid {pid} left running by a previous UPb Lab");
         process::kill_tree(pid, SERVICE_GRACE);
     }
     let _ = std::fs::remove_file(&p.service_pid);

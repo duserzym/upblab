@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "UPb Studio",
+  "productName": "UPb Lab",
   "mainBinaryName": "upbstudio",
   "version": "0.1.0",
   "identifier": "edu.umn.upbstudio",
@@ -21,7 +21,7 @@
     "targets": "all",
     "category": "Education",
     "shortDescription": "One window for the lab's LA-ICP-MS workflow",
-    "longDescription": "UPb Studio hosts grainatlas (Images), laicpmsdb (Sessions) and launches UPbRPy Studio (Reduce), with links between them.",
+    "longDescription": "UPb Lab hosts grainatlas (Images), laicpmsdb (Sessions) and launches UPbRPy Studio (Reduce), with links between them.",
     "copyright": "MIT License",
     "fileAssociations": [
       {
@@ -62,7 +62,7 @@
   "plugins": {
     "updater": {
       "pubkey": "",
-      "endpoints": ["https://github.com/duserzym/upbstudio/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/duserzym/upblab/releases/latest/download/latest.json"],
       "windows": { "installMode": "passive" }
     },
     "deep-link": {

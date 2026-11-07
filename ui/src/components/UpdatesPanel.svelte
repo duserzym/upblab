@@ -34,7 +34,7 @@
   });
 </script>
 
-<strong>UPb Studio v{versions?.shell ?? updater.version}</strong>
+<strong>UPb Lab v{versions?.shell ?? updater.version}</strong>
 <p class="small muted" role="status">{line}</p>
 <div class="row">
   <button class="btn" disabled={busy || !isDesktop && !updatePreview} onclick={() => void check(true)}>Check now</button>
@@ -68,7 +68,7 @@
     <tr><th scope="row">UPbRPy Studio</th><td>{versions?.studio.found ? `${versions.studio.kind ?? 'installed'} · ${versions.studio.path ?? ''}` : 'not found'}</td></tr>
   </tbody>
 </table>
-<p class="faint small">Modules update with UPb Studio; UPbRPy Studio updates itself from its own Settings.</p>
+<p class="faint small">Modules update with UPb Lab; UPbRPy Studio updates itself from its own Settings.</p>
 
 <style>
   p, h4 { margin: 0; }

@@ -1,4 +1,4 @@
-// @lab/bridge: the small API a module calls to talk to the UPb Studio shell.
+// @lab/bridge: the small API a module calls to talk to the UPb Lab shell.
 //
 //   import { open, token, notify, isHosted, onOpenFiles } from '@lab/bridge';
 //   await open('laicpmsdb://acquisition/<uuid>');
@@ -63,7 +63,7 @@ export interface Bridge {
   token(): Promise<string | null>;
   /** Tell the shell something happened (fire and forget). */
   notify(event: BridgeEvent): Promise<void>;
-  /** True when running inside the UPb Studio shell. */
+  /** True when running inside the UPb Lab shell. */
   isHosted(): boolean;
   /**
    * Receive files the user dropped on the shell window, opened through the OS

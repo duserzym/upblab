@@ -1,4 +1,4 @@
-//! UPb Studio desktop host.
+//! UPb Lab desktop host.
 //!
 //! One window (`main`) holding the shell webview (`shell`, the Svelte UI) and
 //! one child webview per module tab (`module-images`, `module-sessions`),
@@ -134,7 +134,7 @@ pub fn run() {
             // (ux-conventions rule 7).
             let place = geometry::initial(app.handle());
             let window = WindowBuilder::new(app, MAIN_WINDOW)
-                .title("UPb Studio")
+                .title("UPb Lab")
                 .inner_size(place.w, place.h)
                 .position(place.x, place.y)
                 .min_inner_size(geometry::MIN.0, geometry::MIN.1)
@@ -152,7 +152,7 @@ pub fn run() {
                 let _ = window.maximize();
             }
             geometry::track(&window);
-            log::info!("UPb Studio {} started", app.package_info().version);
+            log::info!("UPb Lab {} started", app.package_info().version);
             // Windows: launched by a file association or the folder verb with a path.
             // (macOS hands opened files over as file:// URLs through the deep-link plugin.)
             files::push_opened(app.handle(), files::paths_in_args(std::env::args_os().skip(1)));
@@ -160,7 +160,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building UPb Studio")
+        .expect("error while building UPb Lab")
         .run(|app, event| {
             // Quit (menu, last window closed, Cmd-Q): stop laicpmsdb, then
             // PostgreSQL, before the process ends (ADR-0003, life cycle 3).

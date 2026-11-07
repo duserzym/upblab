@@ -4,7 +4,7 @@ Every app of the lab workflow updates itself the way repohub and CodexBar do:
 a quiet check in the background, a download when allowed, and one "Update
 ready, restart now" action. The version chip is always visible in the header,
 and a click there opens the Updates panel. The last section describes the
-UPb Studio implementation.
+UPb Lab implementation.
 
 ## Mechanism (Tauri apps)
 
@@ -27,7 +27,7 @@ UPb Studio implementation.
   drafts, and takes `latest.json` from the newest release, pre-releases
   included. A tag like `v0.4.0-beta.1` becomes a pre-release and only the Beta
   channel receives it.
-- Hosted inside UPb Studio (the `@lab/bridge` transport is `tauri` or
+- Hosted inside UPb Lab (the `@lab/bridge` transport is `tauri` or
   `postMessage`), a module never runs its own updater: the shell updates
   itself and the modules it pins in `modules.lock.json`. The chip is hidden
   there; the shell's own Updates panel lists the module versions.
@@ -94,7 +94,7 @@ them as workflow artifacts without publishing a release; it is the dry run.
 - With `SCREENSHOTS=1`, browser tests save screenshots of the chip and panel
   in `docs/screenshots/`.
 
-## UPb Studio specifics
+## UPb Lab specifics
 
 - Tauri project: `src-tauri/`. Updater code: `src-tauri/src/updater.rs`; page
   side `ui/src/lib/updates.ts` (pure logic, `updates.test.ts` next to it),
@@ -111,7 +111,7 @@ them as workflow artifacts without publishing a release; it is the dry run.
 - Settings > Updates also lists what this build contains: the grainatlas web
   build pinned in `modules.lock.json` (release or local build), the laicpmsdb
   service bundle, and the UPbRPy Studio found on this computer. The modules
-  update with UPb Studio; UPbRPy Studio updates itself from its own Settings.
+  update with UPb Lab; UPbRPy Studio updates itself from its own Settings.
 - Version copies that must agree: `package.json`, `ui/package.json`,
   `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`; `make check-version`
   compares them and the workflow refuses a tag that does not match.
@@ -121,7 +121,7 @@ them as workflow artifacts without publishing a release; it is the dry run.
   `.msi` and NSIS `-setup.exe`, the signed update bundles and `latest.json`,
   attached to a draft release of the tag). Publish the draft on GitHub and the
   updater endpoint starts serving it.
-- Update endpoint: `https://github.com/duserzym/upbstudio/releases/latest/download/latest.json`.
+- Update endpoint: `https://github.com/duserzym/upblab/releases/latest/download/latest.json`.
 - Settings: the channel, the automatic-download switch and the last check are
   shell settings (`settings.json` in the app's config folder on the desktop,
   `localStorage['upbstudio.settings']` on the web).

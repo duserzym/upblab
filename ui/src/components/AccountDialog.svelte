@@ -87,7 +87,7 @@
           <div class="stack tight">
             <div class="row"><span class="spinner" aria-hidden="true"></span><strong>Finish signing in in your browser</strong></div>
             <p class="faint small">
-              {identity.pending.provider === 'orcid' ? 'ORCID' : 'Google'} sends you back to UPb Studio when you are done.
+              {identity.pending.provider === 'orcid' ? 'ORCID' : 'Google'} sends you back to UPb Lab when you are done.
             </p>
             <div class="row"><button class="btn" onclick={() => (identity.pending = null)}>Cancel</button></div>
           </div>
@@ -114,7 +114,7 @@
               {#if providers.orcid}<button class="btn" onclick={() => browser('orcid')}>Sign in with ORCID</button>{/if}
               {#if providers.google}<button class="btn" onclick={() => browser('google')}>Sign in with Google</button>{/if}
             </div>
-            <p class="faint small">Opens your web browser; it returns to UPb Studio through a <code>laicpmsdb://</code> link.</p>
+            <p class="faint small">Opens your web browser; it returns to UPb Lab through a <code>laicpmsdb://</code> link.</p>
           {/if}
         {/if}
       {/if}

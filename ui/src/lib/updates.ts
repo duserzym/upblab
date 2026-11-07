@@ -1,5 +1,5 @@
-export const STABLE_ENDPOINT = 'https://github.com/duserzym/upbstudio/releases/latest/download/latest.json';
-export const RELEASES_PAGE = 'https://github.com/duserzym/upbstudio/releases';
+export const STABLE_ENDPOINT = 'https://github.com/duserzym/upblab/releases/latest/download/latest.json';
+export const RELEASES_PAGE = 'https://github.com/duserzym/upblab/releases';
 export type Channel = 'stable' | 'beta';
 export interface UpdateInfo {
   version: string;

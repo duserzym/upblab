@@ -89,7 +89,7 @@ pub async fn update_download(
     state: State<'_, UpdateState>,
 ) -> Result<UpdateInfo, String> {
     if !update_supported() {
-        return Err("Install UPb Studio before downloading updates".into());
+        return Err("Install UPb Lab before downloading updates".into());
     }
     let update = state
         .0
@@ -124,7 +124,7 @@ pub async fn update_download(
 #[tauri::command]
 pub async fn update_install(app: AppHandle, state: State<'_, UpdateState>) -> Result<(), String> {
     if !update_supported() {
-        return Err("Install UPb Studio before updating".into());
+        return Err("Install UPb Lab before updating".into());
     }
     let pending = state.0.lock().map_err(|e| e.to_string())?;
     let update = pending.update.as_ref().ok_or("No update downloaded")?;
@@ -203,8 +203,8 @@ mod tests {
             PathBuf::from(r"C:\Users\lab\AppData\Local\Programs"),
         ];
         for path in [
-            r"c:\PROGRAM FILES\UPb Studio\upbstudio.exe",
-            r"C:\Users\lab\AppData\Local\Programs\UPb Studio\upbstudio.exe",
+            r"c:\PROGRAM FILES\UPb Lab\upbstudio.exe",
+            r"C:\Users\lab\AppData\Local\Programs\UPb Lab\upbstudio.exe",
         ] {
             assert!(windows_install_path(Path::new(path), &roots));
         }

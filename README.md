@@ -1,4 +1,9 @@
-# UPb Studio
+# UPb Lab
+
+Formerly UPb Studio; renamed 2026-11-06 to distinguish this workflow shell
+from the separate UPbRPy Studio reduction app. The repository is `upblab`. The executable, app identifier and stored settings
+retain their existing `upbstudio` names so existing data, sign-in credentials
+and links continue to work.
 
 The unified desktop and web shell for the lab's LA-ICP-MS workflow: one window
 with tabs for grain images ([grainatlas](../grainatlas)), sessions and data
@@ -218,7 +223,7 @@ docs/             decisions (ADRs), cross-platform contract, deep links, install
 
 - [docs/cross-platform-contract.md](docs/cross-platform-contract.md): rules every module follows on macOS and Windows
 - [docs/service-bundle-contract.md](docs/service-bundle-contract.md): what the laicpmsdb service bundle provides and how the shell runs it
-- [docs/installing.md](docs/installing.md): installing, opening files and folders with UPb Studio, the two modes, data and log locations
+- [docs/installing.md](docs/installing.md): installing, opening files and folders with UPb Lab, the two modes, data and log locations
 - [docs/deep-links.md](docs/deep-links.md): the `laicpmsdb://`, `grainatlas://` and `upbr://` links
 - [docs/ux-conventions.md](docs/ux-conventions.md): where the shell follows the lab's UX rules (source: grainatlas `docs/ux-conventions.md`)
 - [bridge/README.md](bridge/README.md): `@lab/bridge` for module authors

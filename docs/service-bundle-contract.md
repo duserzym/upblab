@@ -2,10 +2,10 @@
 
 **Status:** v1, 2026-11-03. Implements ADR-0003 ("This computer" mode) and
 `ARCHITECTURE_PLAN.md` decision 9. The laicpmsdb repository builds the bundle;
-UPb Studio (this repository) runs it. Both sides follow this page; change it
+UPb Lab (this repository) runs it. Both sides follow this page; change it
 here first and bump the version line.
 
-UPb Studio already implements its side, including a development fallback that
+UPb Lab already implements its side, including a development fallback that
 runs a laicpmsdb checkout until the bundle exists (last section).
 
 ## 1. Bundle layout
@@ -27,7 +27,7 @@ laicpmsdb-service/
 
 - The runtime is relocatable: it works from any folder, including paths with
   spaces and non-ASCII characters (`C:/Users/Zoë Smith/AppData/...`,
-  `/Applications/UPb Studio.app/Contents/Resources/...`). No absolute paths
+  `/Applications/UPb Lab.app/Contents/Resources/...`). No absolute paths
   of the build machine may remain in scripts, `.pth` files or `sysconfig`.
 - The bundle is read-only at run time. Nothing is written inside it
   (`PYTHONDONTWRITEBYTECODE` is set by the shell; ship precompiled `.pyc`
@@ -37,9 +37,9 @@ laicpmsdb-service/
   it relative to its own package, not through the repository layout.
 - macOS: every Mach-O file must keep a valid ad-hoc signature after
   relocation (python-build-standalone's are), so Gatekeeper and the hardened
-  runtime of a signed UPb Studio accept them.
+  runtime of a signed UPb Lab accept them.
 
-UPb Studio ships the folder as a Tauri resource at
+UPb Lab ships the folder as a Tauri resource at
 `<resources>/laicpmsdb-service/` (`Contents/Resources/laicpmsdb-service/` in
 the macOS app, next to `upbstudio.exe` on Windows).
 
@@ -109,7 +109,7 @@ Content-Type: application/json
   `laicpmsdb-service-<version>-windows-x64.tar.gz`, each with
   `<archive>.sha256` beside it (`<hex>  <filename>`). The archive holds the
   `laicpmsdb-service/` folder at its top level.
-- UPb Studio pins it as the `laicpmsdb-service` entry in `modules.lock.json`
+- UPb Lab pins it as the `laicpmsdb-service` entry in `modules.lock.json`
   with one `url` and `sha256` per platform (`platforms.macos-arm64`,
   `platforms.windows-x64`); `scripts/fetch-modules.mjs` downloads the one for
   the build machine, checks the SHA-256 and unpacks it into
@@ -132,7 +132,7 @@ Content-Type: application/json
 
 When no bundle is in the resources folder, the shell runs a laicpmsdb
 checkout configured in Settings ("laicpmsdb checkout", default `../laicpmsdb`
-next to the UPb Studio checkout in development builds). It needs
+next to the UPb Lab checkout in development builds). It needs
 `.venv/bin/python` (Windows `.venv/Scripts/python.exe`) and
 `service/manage.py`, i.e. `make venv` and `make ui` done in that checkout.
 The working directory is `<checkout>/service` and the mapping is:

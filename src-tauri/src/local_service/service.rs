@@ -83,7 +83,7 @@ pub fn locate(resource_dir: Option<&Path>, dev_path: Option<&Path>) -> Result<So
     }
     match dev_path {
         Some(p) => dev_checkout(p),
-        None => Err("This build of UPb Studio does not include the laicpmsdb service yet, and no laicpmsdb \
+        None => Err("This build of UPb Lab does not include the laicpmsdb service yet, and no laicpmsdb \
                      checkout is set in Settings. Use a Lab server, or set Settings → laicpmsdb checkout."
             .into()),
     }

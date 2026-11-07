@@ -1,6 +1,6 @@
 # Cross-platform contract
 
-Applies to UPb Studio and to the modules it hosts (grainatlas, laicpmsdb, and
+Applies to UPb Lab and to the modules it hosts (grainatlas, laicpmsdb, and
 UPbRPy Studio where relevant). macOS (arm64) and Windows (x86-64) are both
 first-class: a feature that works on only one of them is not done. Module
 repositories link here instead of copying the rules.
@@ -19,7 +19,7 @@ and here together.
 | Builds | GitHub Actions matrix `macos-latest` (arm64) and `windows-latest`; artifacts `.dmg` (notarised when a Developer ID is available) and `.msi` plus `.exe` (NSIS); unsigned builds documented with the SmartScreen and Gatekeeper steps |
 | Tests | Playwright smoke test of the shell on both OS: sign in to a local laicpmsdb, open the Images tab, place a spot, follow its link to the Sessions tab |
 
-## How UPb Studio meets it today
+## How UPb Lab meets it today
 
 | Concern | Where |
 | --- | --- |

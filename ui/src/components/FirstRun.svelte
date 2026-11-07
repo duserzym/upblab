@@ -111,7 +111,7 @@
 <section class="view scroll wizard">
   <div class="page narrow stack">
     <header class="stack tight">
-      <h1>Welcome to UPb Studio</h1>
+      <h1>Welcome to UPb Lab</h1>
       <p class="muted">Where should your LA-ICP-MS sessions and data live? You can change this later in Settings.</p>
     </header>
 

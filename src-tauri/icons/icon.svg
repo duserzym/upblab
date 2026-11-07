@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <!-- Zircon: Pupin S2 habit projected from the STL models of https://github.com/duserzym/mineral-habit-matrix -->
-  <title id="title">UPb Studio icon</title>
+  <title id="title">UPb Lab icon</title>
   <desc id="desc">A concordia diagram with age ticks, two error ellipses and a Pupin S2 zircon from the Mineral Habit Matrix models, on a softly shaded tile.</desc>
   <defs>
     <linearGradient id="tile" x2="0.8" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#e9eef5"/></linearGradient>

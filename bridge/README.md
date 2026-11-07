@@ -1,6 +1,6 @@
 # @lab/bridge
 
-The API a lab module (grainatlas, laicpmsdb) calls to talk to the UPb Studio
+The API a lab module (grainatlas, laicpmsdb) calls to talk to the UPb Lab
 shell. It has no dependencies and works the same whether the module runs in
 the desktop shell, in the web shell at `/desk/`, or on its own.
 
@@ -220,7 +220,7 @@ and legacy selection events from modules of any version.
 ## Adopting the bridge in a module
 
 `@lab/bridge` is not on npm yet. Until it is, depend on it from a checkout
-(`"@lab/bridge": "file:../upbstudio/bridge"`, after `make setup` here builds
+(`"@lab/bridge": "file:../upblab/bridge"`, after `make setup` here builds
 `bridge/dist/`) or vendor the tarball from `pnpm --filter @lab/bridge pack`.
 
 ### Both modules

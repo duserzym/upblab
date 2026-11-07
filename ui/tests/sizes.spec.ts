@@ -87,7 +87,7 @@ for (const [w, h] of SIZES) {
 
     test('desktop: first-run wizard', async ({ page }) => {
       await desktop(page, { mode: '' });
-      await expect(page.getByRole('heading', { name: 'Welcome to UPb Studio' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Welcome to UPb Lab' })).toBeVisible();
       expect(await problems(page, 'wizard, choose')).toEqual([]);
       await page.getByRole('button', { name: /^Lab server/ }).click();
       await expect(page.getByLabel('laicpmsdb server URL')).toBeVisible();
@@ -102,7 +102,7 @@ for (const [w, h] of SIZES) {
 
     test('desktop: tabs, module areas, Settings and the sign-in dialog', async ({ page }) => {
       await desktop(page, { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'home' });
-      await expect(page.getByRole('heading', { name: 'UPb Studio', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Upload LA-ICP-MS session…', exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Upload image set…', exact: true })).toBeVisible();
       expect(await problems(page, 'Home')).toEqual([]);
@@ -138,7 +138,7 @@ for (const [w, h] of SIZES) {
     test('web delivery: Home, Settings and module frames', async ({ page }) => {
       await serveModules(page);
       await page.goto('./');
-      await expect(page.getByRole('heading', { name: 'UPb Studio', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
       expect(await problems(page, 'web Home')).toEqual([]);
       for (const tab of ['Images', 'Sessions']) {
         await page.getByRole('tab', { name: tab }).click();
@@ -158,7 +158,7 @@ for (const [w, h] of SIZES) {
 test(`the smallest window (${MIN[0]} x ${MIN[1]}) has no sideways overflow`, async ({ page }) => {
   await page.setViewportSize({ width: MIN[0], height: MIN[1] });
   await desktop(page, { mode: 'server', serverUrl: 'http://localhost:8000' });
-  await expect(page.getByRole('heading', { name: 'UPb Studio', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
   expect(await problems(page, 'Home')).toEqual([]);
   await page.getByRole('button', { name: 'Settings' }).click();
   expect(await problems(page, 'Settings')).toEqual([]);
@@ -167,7 +167,7 @@ test(`the smallest window (${MIN[0]} x ${MIN[1]}) has no sideways overflow`, asy
 test('desktop: drops go to the tab that reads them, never asking', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await desktop(page, { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'home' });
-  await expect(page.getByRole('heading', { name: 'UPb Studio', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
 
   await emit(page, 'shell://drop', { paths: [PKG], over: 'shell' });
   await expect(page.getByRole('tab', { name: 'Images' })).toHaveAttribute('aria-selected', 'true');

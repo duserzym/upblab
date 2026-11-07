@@ -1,12 +1,12 @@
-# Installing UPb Studio
+# Installing UPb Lab
 
-Releases are on the [Releases page](https://github.com/duserzym/upbstudio/releases).
+Releases are on the [Releases page](https://github.com/duserzym/upblab/releases).
 Download the macOS `.dmg` or Windows `.msi` / `-setup.exe` there. Later versions
-install from inside UPb Studio: click the version chip in the header, or open
+install from inside UPb Lab: click the version chip in the header, or open
 Settings > Updates, then Check now and Restart to update when ready.
 
 Until the lab has an Apple Developer ID and a Windows code-signing certificate,
-UPb Studio installers are **unsigned** (macOS builds are ad-hoc signed only).
+UPb Lab installers are **unsigned** (macOS builds are ad-hoc signed only).
 Both operating systems warn before the first launch. The steps below are the
 expected, one-time way past those warnings; they do not lower security for
 other apps.
@@ -19,12 +19,12 @@ artifact downloads as a `.zip`; unzip it first.
 
 ## macOS (Apple Silicon)
 
-1. Open `UPb Studio_<version>_aarch64.dmg` and drag **UPb Studio** to
+1. Open `UPb Lab_<version>_aarch64.dmg` and drag **UPb Lab** to
    **Applications**.
-2. Open UPb Studio from Applications. macOS says it *cannot verify the
+2. Open UPb Lab from Applications. macOS says it *cannot verify the
    developer* (Gatekeeper). Click **Done** (or **Cancel**).
 3. Open **System Settings → Privacy & Security**, scroll to *Security*, and
-   click **Open Anyway** next to "UPb Studio was blocked". Confirm with your
+   click **Open Anyway** next to "UPb Lab was blocked". Confirm with your
    password or Touch ID, then **Open**.
 
 From then on it opens normally. If macOS instead says the app *is damaged and
@@ -32,7 +32,7 @@ can't be opened*, the download kept its quarantine flag on a build without the
 ad-hoc signature; clear it once in Terminal:
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/UPb Studio.app"
+xattr -dr com.apple.quarantine "/Applications/UPb Lab.app"
 ```
 
 Launch Services learns the `laicpmsdb://`, `grainatlas://` and `upbr://`
@@ -42,14 +42,14 @@ links after the first launch from Applications.
 
 Use either installer:
 
-- `UPb Studio_<version>_x64_en-US.msi`: per-machine install, needs
+- `UPb Lab_<version>_x64_en-US.msi`: per-machine install, needs
   administrator rights.
-- `UPb Studio_<version>_x64-setup.exe` (NSIS): per-user install into
+- `UPb Lab_<version>_x64-setup.exe` (NSIS): per-user install into
   `%LOCALAPPDATA%\Programs`, no administrator rights.
 
 1. Double-click the installer. Microsoft Defender SmartScreen shows
    *Windows protected your PC*.
-2. Click **More info**, check that the app is *UPb Studio* and the publisher
+2. Click **More info**, check that the app is *UPb Lab* and the publisher
    *Unknown publisher*, then click **Run anyway**.
 3. If the browser blocked the download first (Edge: *isn't commonly
    downloaded*), open the downloads list, choose **…  → Keep → Show more →
@@ -62,9 +62,9 @@ The installers bundle the WebView2 bootstrapper, so machines without the
 WebView2 runtime get it installed (this needs internet access once). They
 also register the three link schemes.
 
-## Opening files and folders with UPb Studio
+## Opening files and folders with UPb Lab
 
-UPb Studio opens anything the lab's modules read and decides where it goes
+UPb Lab opens anything the lab's modules read and decides where it goes
 by content, without asking (grainatlas `docs/ux-conventions.md` rule 4): a
 TM4000 package, an area folder, image files or a `.grainatlas` project go to
 **Images**; a Qtegra export folder, its zip or its CSVs open the ingest page in
@@ -73,15 +73,15 @@ folder…** / **Open files…** on Home. From the system:
 
 | | macOS | Windows |
 | --- | --- | --- |
-| A TM4000 `.zag` file (opens its package folder) | Finder → right-click → **Open With → UPb Studio**, or drag it onto the Dock icon | Explorer → right-click → **Open with → UPb Studio** (both installers register `.zag`) |
-| A folder (package, area, export, `.grainatlas`) | drag it onto UPb Studio in the Dock (the app declares folders as a document type) | Explorer → right-click the folder → **Open in UPb Studio** (NSIS installer only; `src-tauri/windows/hooks.nsh`) |
-| Image files, CSVs, zips | **Open With → Other… → UPb Studio**, or the Dock icon | **Open with → Choose another app → UPb Studio** |
+| A TM4000 `.zag` file (opens its package folder) | Finder → right-click → **Open With → UPb Lab**, or drag it onto the Dock icon | Explorer → right-click → **Open with → UPb Lab** (both installers register `.zag`) |
+| A folder (package, area, export, `.grainatlas`) | drag it onto UPb Lab in the Dock (the app declares folders as a document type) | Explorer → right-click the folder → **Open in UPb Lab** (NSIS installer only; `src-tauri/windows/hooks.nsh`) |
+| Image files, CSVs, zips | **Open With → Other… → UPb Lab**, or the Dock icon | **Open with → Choose another app → UPb Lab** |
 
 Windows cannot associate a folder by its extension, which is why folders get
 the Explorer verb instead; the per-machine MSI does not add it (use the NSIS
 installer, or drop the folder on the window). The associations are declared
 in `bundle.fileAssociations` in `src-tauri/tauri.conf.json` with the
-*Alternate* rank, so UPb Studio never takes over a type another app already
+*Alternate* rank, so UPb Lab never takes over a type another app already
 opens by default. macOS learns them on the first launch from Applications,
 like the link schemes.
 
@@ -90,25 +90,25 @@ like the link schemes.
 The first launch asks where laicpmsdb, the Sessions tab, should live. Settings
 (gear icon or Ctrl/⌘ ,) changes it later.
 
-- **This computer**: UPb Studio runs its own laicpmsdb and PostgreSQL 17 on
+- **This computer**: UPb Lab runs its own laicpmsdb and PostgreSQL 17 on
   this machine. Choose the data root (default `~/laicpmsdb`, the same layout
   as the lab NAS), create your account (user name, email and a password of
   your choice; it is the first administrator of this laicpmsdb), and
-  optionally load the demo sessions. Both programs start when UPb Studio
-  opens (a few seconds) and stop when it quits; they listen on 127.0.0.1
+  optionally load the demo sessions. After setup, both programs start when Sessions or Review is opened
+  (a few seconds) and stop when UPb Lab quits; they listen on 127.0.0.1
   only. If the start fails, the screen shows the end of the log with
   **Retry** and **Use a lab server instead**.
-  The wizard signs UPb Studio in with that account.
+  The wizard signs UPb Lab in with that account.
 - **Lab server**: the URL of the lab's laicpmsdb (e.g.
   `https://laicpmsdb.example.edu`); then sign in with **Sign in** in the tab
   bar.
 
 ## Signing in
 
-UPb Studio signs in to laicpmsdb once, with **Sign in** at the right of the
+UPb Lab signs in to laicpmsdb once, with **Sign in** at the right of the
 tab bar: a user name and password, or **Sign in with ORCID** / **with
 Google** when the server offers them (your web browser opens, and returns to
-UPb Studio through a `laicpmsdb://auth/callback` link). The Sessions and
+UPb Lab through a `laicpmsdb://auth/callback` link). The Sessions and
 Images tabs and UPbRPy Studio use that sign-in; the button then shows your
 name, and clicking it shows the account and **Sign out**. The token is kept
 in the system keychain, one entry per server under `edu.umn.upbstudio`
@@ -121,7 +121,7 @@ make macOS ask once to allow keychain access.
 ## Reducing a session in UPbRPy Studio
 
 **Reduce** on Home (or *Reduce in UPbRPy Studio* in the Sessions tab) opens
-the session in UPbRPy Studio in database mode: UPb Studio asks laicpmsdb for a
+the session in UPbRPy Studio in database mode: UPb Lab asks laicpmsdb for a
 one-time, five-minute code with your sign-in and launches Studio with
 `upbr://session/<id>?server=<server>&code=<code>` (docs/WORKFLOW.md section 4).
 A `upbr://` link clicked elsewhere (an email, a notebook) arrives the same way.
@@ -138,14 +138,14 @@ A `upbr://` link clicked elsewhere (an email, a notebook) arrives the same way.
 Home, Settings and the Reduce tab show whether Studio was found and the
 command; `upbstudio.log` records each launch with the code replaced by `…`.
 Without Studio, the Reduce tab shows how to install it and the link to open
-in Studio by hand. Both UPb Studio and UPbRPy Studio register `upbr://`;
+in Studio by hand. Both UPb Lab and UPbRPy Studio register `upbr://`;
 whichever the system picks, the link works (Studio alone asks you to sign in).
 
 Release builds include "This computer" only once laicpmsdb publishes its
 service bundle (`docs/service-bundle-contract.md`); until then the option is
 greyed out and the log says so at start-up.
 
-On Windows, run UPb Studio as your normal user, not with *Run as
+On Windows, run UPb Lab as your normal user, not with *Run as
 administrator*: PostgreSQL refuses to start under an administrator token.
 
 ## Where things are
@@ -165,8 +165,7 @@ The log folder holds `upbstudio.log` (the shell), `postgres.log` and
 `laicpmsdb.log` (This computer mode); Settings → **Logs** shows their ends and
 opens the folder. A log over 10 MB is rotated to `.1` when the program starts.
 
-Back up the PostgreSQL data directory and the data root together (with UPb
-Studio closed). Deleting `local-service.json` makes the database unreachable,
+Back up the PostgreSQL data directory and the data root together (with UPb Lab closed). Deleting `local-service.json` makes the database unreachable,
 because its password is lost: move `laicpmsdb/pg` aside to start over.
 
 UPbRPy Studio: if it is not in its usual place, set its path in Settings (see

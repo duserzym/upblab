@@ -105,11 +105,11 @@ jobs:
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: "UPb Studio ${{ github.ref_name }}"
+          releaseName: "UPb Lab ${{ github.ref_name }}"
           releaseBody: |
             Download the macOS .dmg or Windows .msi / -setup.exe below.
-            See [Installing UPb Studio](https://github.com/duserzym/upbstudio/blob/main/docs/installing.md) for first-launch instructions.
-            Later versions install from inside UPb Studio (Settings > Updates).
+            See [Installing UPb Lab](https://github.com/duserzym/upblab/blob/main/docs/installing.md) for first-launch instructions.
+            Later versions install from inside UPb Lab (Settings > Updates).
 
       - name: Test the Rust host
         run: cargo test --manifest-path src-tauri/Cargo.toml --release
@@ -117,7 +117,7 @@ jobs:
       # initdb, start, role and database, orphan and stale-pid handling with
       # the bundled binaries. macOS only: GitHub's Windows runners run
       # elevated, and postgres.exe refuses to start under an administrator
-      # token (UPb Studio users run unelevated).
+      # token (UPb Lab users run unelevated).
       - name: Test the bundled PostgreSQL
         if: runner.os == 'macOS'
         run: cargo test --manifest-path src-tauri/Cargo.toml --release -- --ignored bundled_cluster

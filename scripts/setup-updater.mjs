@@ -24,7 +24,7 @@ const conf = JSON.parse(readFileSync(confPath, 'utf8'));
 conf.plugins.updater.pubkey = pub;
 writeFileSync(confPath, JSON.stringify(conf, null, 2) + '\n');
 console.log('Public key written to src-tauri/tauri.conf.json. Commit that change.');
-const secret = spawnSync('gh', ['secret', 'set', 'TAURI_SIGNING_PRIVATE_KEY', '--repo', 'duserzym/upbstudio'], {
+const secret = spawnSync('gh', ['secret', 'set', 'TAURI_SIGNING_PRIVATE_KEY', '--repo', 'duserzym/upblab'], {
   input: readFileSync(key), stdio: ['pipe', 'inherit', 'inherit'], cwd: root,
 });
 if (secret.error || secret.status !== 0) {

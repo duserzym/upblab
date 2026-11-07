@@ -4,9 +4,9 @@
 //! - `pg/postmaster.pid`, written by PostgreSQL. After a crash or a forced
 //!   kill it can be stale (the process is gone, or its PID now belongs to an
 //!   unrelated process), or it can belong to a postmaster that outlived a
-//!   previous UPb Studio (an orphan to stop before starting again).
-//! - `shell.pid`, written by UPb Studio while it owns the database. A live
-//!   UPb Studio holding it (a release app and a development build share the
+//!   previous UPb Lab (an orphan to stop before starting again).
+//! - `shell.pid`, written by UPb Lab while it owns the database. A live
+//!   UPb Lab holding it (a release app and a development build share the
 //!   app-data folder) must not have its PostgreSQL stopped by a second one.
 //!
 //! - `service.pid`, the laicpmsdb service (leader of its own process group
@@ -94,7 +94,7 @@ pub enum OwnerState {
     Free,
     /// This process already holds it.
     Ours,
-    /// Another running UPb Studio holds it.
+    /// Another running UPb Lab holds it.
     Held { pid: u32 },
 }
 
@@ -231,9 +231,9 @@ mod tests {
         assert_eq!(assess_owner(Some("11"), 10, &probe(&[])), OwnerState::Free);
         // PID reused by something else.
         assert_eq!(assess_owner(Some("11"), 10, &probe(&[(11, "zsh")])), OwnerState::Free);
-        // Another UPb Studio (release app and dev build share the folder).
+        // Another UPb Lab (release app and dev build share the folder).
         assert_eq!(
-            assess_owner(Some("11"), 10, &probe(&[(11, "/Applications/UPb Studio.app/Contents/MacOS/upbstudio")])),
+            assess_owner(Some("11"), 10, &probe(&[(11, "/Applications/UPb Lab.app/Contents/MacOS/upbstudio")])),
             OwnerState::Held { pid: 11 }
         );
         assert_eq!(assess_owner(Some("11"), 10, &probe(&[(11, "upbstudio.exe")])), OwnerState::Held { pid: 11 });

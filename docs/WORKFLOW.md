@@ -19,7 +19,7 @@ Changed in v1.1: results appear in the Review tab with plots linked both ways to
        results ◀── submit ◀── reduce locally ◀── open from database ◀── upload session
       laicpmsdb      UPbRPy Studio   UPbRPy Studio     UPbRPy Studio       laicpmsdb
          │
-         └─ shown on the images (grainatlas), the timeline (laicpmsdb) and Home / Review (UPb Studio)
+         └─ shown on the images (grainatlas), the timeline (laicpmsdb) and Home / Review (UPb Lab)
 ```
 
 | Stage | Where | Record created | Hand-off out |
@@ -33,7 +33,7 @@ Changed in v1.1: results appear in the Review tab with plots linked both ways to
 | 6. Open from database | UPbRPy Studio in **database mode**: fetches the *session bundle* over HTTP and opens it as a project | local project cache with `.upbr` carrying its `origin` | |
 | 7. Reduce | UPbRPy Studio, locally, exactly as standalone | `.upbr`, reduction bundle on disk | "Submit to database" |
 | 8. Submit | Studio posts the *reduction bundle* | `reduction_run`, `selection_window`, `scalar_result` (+ uncertainties), derived sweep Parquet, attachments | run id back to Studio |
-| 9. Results | laicpmsdb: results per acquisition, spot, grain, sample, session; preferred run per session; Table S1 | | shown in grainatlas's spot panel, UPb Studio's Home and Review tab (plots with clicks both ways to the images) |
+| 9. Results | laicpmsdb: results per acquisition, spot, grain, sample, session; preferred run per session; Table S1 | | shown in grainatlas's spot panel, UPb Lab's Home and Review tab (plots with clicks both ways to the images) |
 
 Two guarantees shape every hand-off:
 
@@ -125,7 +125,7 @@ new run that may name the one it supersedes.
    The code comes from `POST /v1/auth/handoff` (signed-in user; 5-minute,
    single-use) and is exchanged by Studio at `POST /v1/auth/exchange` (which
    exists for the ORCID flow) for a bearer token stored in the OS keychain.
-2. UPb Studio resolves `upbr://` to the installed Studio and launches it with
+2. UPb Lab resolves `upbr://` to the installed Studio and launches it with
    `upbrpy-gui --open "upbr://…"`; a standalone laicpmsdb in a browser hands
    the same link to the OS, which opens Studio directly (scheme registered by
    Studio's own installer on macOS and Windows).
@@ -172,7 +172,7 @@ new run that may name the one it supersedes.
 | laicpmsdb | session bundle export; reduction import; prefer; results read endpoints; handoff code; atlas bundle upload, storage and `/atlas/projects/` serving; mount page with the atlas view; UI ingest |
 | grainatlas | publish and open atlas bundles; spot sync over the bridge token; results overlay in the spot panel; laser-stage registration and spot list export |
 | UPbRPy | `upbr://` scheme and `--open` of URLs and `.upbr`; the `[database]` extra with the client; database mode in Studio (open, submit, prefer); `origin` in `.upbr` and the manifest; `hash_inputs=True`; `session_manifest.toml` support |
-| UPb Studio | identity (phase 3) including the handoff code; `upbr://` launch; Home status of sessions and runs |
+| UPb Lab | identity (phase 3) including the handoff code; `upbr://` launch; Home status of sessions and runs |
 
 Dependencies: laicpmsdb's endpoints are specified here precisely enough for
 the three clients to be built in parallel against them; integration is

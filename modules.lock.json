@@ -1,6 +1,6 @@
 {
   "lockVersion": 1,
-  "description": "Module builds bundled into UPb Studio. scripts/fetch-modules.mjs installs web modules into ui/public/modules/<name>/ and services (kind \"service\") into their `out` folder, verifying sha256 (of the release archive). A web module with no url falls back to its local development build; a service with no url for the build platform is left out, and the `local` checkout is what development builds run instead (docs/service-bundle-contract.md).",
+  "description": "Module builds bundled into UPb Lab. scripts/fetch-modules.mjs installs web modules into ui/public/modules/<name>/ and services (kind \"service\") into their `out` folder, verifying sha256 (of the release archive). A web module with no url falls back to its local development build; a service with no url for the build platform is left out, and the `local` checkout is what development builds run instead (docs/service-bundle-contract.md).",
   "modules": [
     {
       "name": "grainatlas",

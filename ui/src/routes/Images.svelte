@@ -15,7 +15,7 @@
         <h2>No grainatlas build pinned yet</h2>
         <p class="muted">
           The Images tab hosts a pinned build of grainatlas, the SEM mosaic, segmentation and spot tool. The shell
-          bundles that build from <code>modules.lock.json</code>; none has been fetched into this copy of UPb Studio.
+          bundles that build from <code>modules.lock.json</code>; none has been fetched into this copy of UPb Lab.
         </p>
         <ul class="muted small">
           <li>Developers: build grainatlas's web UI, then run <code>make fetch-modules</code> here and restart.</li>

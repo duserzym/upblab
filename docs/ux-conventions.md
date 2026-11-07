@@ -2,7 +2,7 @@
 
 The rules are written once, in grainatlas:
 [`docs/ux-conventions.md`](../../grainatlas/docs/ux-conventions.md) (the
-source; read it there). This page only says where UPb Studio's shell follows
+source; read it there). This page only says where UPb Lab's shell follows
 each one, and which do not apply to it. Module tabs follow the rules in their
 own code; the shell's part is to pass them what they need (theme, files,
 sign-in) and to give them the whole area under the tab bar.

@@ -1,4 +1,4 @@
-# UPb Studio developer tasks. On Windows run them from Git Bash with GNU make,
+# UPb Lab developer tasks. On Windows run them from Git Bash with GNU make,
 # or run the commands under each target directly in PowerShell.
 
 TAURI ?= cargo tauri

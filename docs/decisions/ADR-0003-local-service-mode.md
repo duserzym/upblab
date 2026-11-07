@@ -1,4 +1,4 @@
-# ADR-0003: UPb Studio starts a local laicpmsdb service ("This computer" mode)
+# ADR-0003: UPb Lab starts a local laicpmsdb service ("This computer" mode)
 
 **Status:** accepted, 2026-11-03.
 
@@ -18,7 +18,7 @@ and UPbRPy Studio is launched, not embedded (ADR-0001 of this repository).
 
 ## Decision
 
-UPb Studio gets two ways to reach laicpmsdb, chosen on first run and
+UPb Lab gets two ways to reach laicpmsdb, chosen on first run and
 changeable in Settings:
 
 - **Lab server**: a URL, as today.

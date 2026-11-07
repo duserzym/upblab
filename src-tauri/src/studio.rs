@@ -505,7 +505,7 @@ mod tests {
                 Some(format!("\r\n{key}\r\n    DisplayName    REG_SZ    UPbRPy Studio\r\n    InstallLocation    REG_SZ    \"C:\\B\"\r\n    DisplayIcon    REG_SZ    C:\\B\\UPbRPy Studio.exe,0\r\n"))
             } else if key.contains(r"Classes\upbr") {
                 // The shell's own handler is skipped.
-                Some(format!("\r\n{key}\r\n    (Default)    REG_SZ    \"C:\\Program Files\\UPb Studio\\upbstudio.exe\" \"%1\"\r\n"))
+                Some(format!("\r\n{key}\r\n    (Default)    REG_SZ    \"C:\\Program Files\\UPb Lab\\upbstudio.exe\" \"%1\"\r\n"))
             } else {
                 None
             }
