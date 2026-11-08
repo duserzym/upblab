@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atlasFileUrl, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsShown, thumbnailPath } from './home';
+import { atlasFileUrl, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsShown, thumbnailPaths } from './home';
 import type { MountRow, RunOut, SessionRow } from './overview.svelte';
 
 const run: RunOut = { id: 'r', session_id: 's', pipeline_name: 'UPbRPy', pipeline_version: '0.1', status: 'completed', started_at: '2026-11-05', completed_at: '2026-11-05', upbrpy_version: '0.1', is_preferred_for_session: true, run_by: null, result_count: 2 };
@@ -54,21 +54,21 @@ describe('Home spot bars', () => {
 describe('Home atlas thumbnails', () => {
   it('uses a thumbnail or lowest pyramid level from the published manifest', () => {
     const files = { 'pyramid/area1/2/0_0.webp': 'sha', 'pyramid/area1/0/0_0.webp': 'sha', 'project.json': 'sha' };
-    expect(thumbnailPath({ files })).toBe('pyramid/area1/0/0_0.webp');
-    expect(thumbnailPath({ files: { ...files, 'thumbnail.png': 'sha' } })).toBe('thumbnail.png');
-    expect(thumbnailPath({ files: {} })).toBeNull();
+    expect(thumbnailPaths({ files: { ...files, 'pyramid/area2/1/0_0.webp': 'sha' } })).toEqual(['pyramid/area1/2/0_0.webp', 'pyramid/area2/1/0_0.webp']);
+    expect(thumbnailPaths({ files: { ...files, 'thumbnail.png': 'sha' } })).toEqual(['thumbnail.png']);
+    expect(thumbnailPaths({ files: {} })).toEqual([]);
     // grainatlas atlas.json: a list of { path, sha256, size }.
-    expect(thumbnailPath({ files: [
+    expect(thumbnailPaths({ files: [
       { path: 'grains.geojson', sha256: 'a', size: 1 },
       { path: 'pyramid/001_WG26/3/0_0.webp', sha256: 'b', size: 9 },
       { path: 'pyramid/001_WG26/0/0_0.webp', sha256: 'c', size: 6 },
       { path: '../bad.png', sha256: 'd', size: 1 },
-    ] })).toBe('pyramid/001_WG26/0/0_0.webp');
-    expect(thumbnailPath({ files: [] })).toBeNull();
-    expect(thumbnailPath(null)).toBeNull();
+    ] })).toEqual(['pyramid/001_WG26/3/0_0.webp']);
+    expect(thumbnailPaths({ files: [] })).toEqual([]);
+    expect(thumbnailPaths(null)).toEqual([]);
   });
   it('rejects traversal, external URLs and query strings and encodes access separately', () => {
-    expect(thumbnailPath({ files: { '../bad.png': '', 'https://other/image.png': '', '/bad.png': '', '%2e%2e/bad.png': '', 'bad.png?token=x': '' } })).toBeNull();
+    expect(thumbnailPaths({ files: { '../bad.png': '', 'https://other/image.png': '', '/bad.png': '', '%2e%2e/bad.png': '', 'bad.png?token=x': '' } })).toEqual([]);
     expect(atlasFileUrl('http://lab/prefix/', 'project', 'pyramid/area 1/0/0_0.webp', 'read+/token')).toBe('http://lab/prefix/atlas/projects/project/pyramid/area%201/0/0_0.webp?access=read%2B%2Ftoken');
   });
 });

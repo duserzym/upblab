@@ -30,7 +30,9 @@ async function home(page: Page, desktop: boolean, inventory = fixtures, brokenTh
   await page.route('**/atlas/projects/**', r => {
     const url = new URL(r.request().url());
     if (!url.searchParams.get('access')?.startsWith('read-only-')) return r.fulfill({ status: 401 });
-    if (url.pathname.endsWith('/atlas.json')) return r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, json: { areas: [{ id: 'area1' }], files: { 'pyramid/area1/0/0_0.png': 'invented' } } });
+    if (url.pathname.endsWith('/atlas.json')) return r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, json: { areas: [{ id: 'area1' }], files: {
+      'pyramid/area1/0/0_0.png': 'invented', 'pyramid/area1/3/0_0.png': 'invented', 'pyramid/area2/2/0_0.png': 'invented',
+    } } });
     return brokenThumbnail ? r.fulfill({ status: 404 }) : r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, contentType: 'image/png', body: png });
   });
   await page.route('**/v1/**', r => {
@@ -96,9 +98,12 @@ for (const desktop of [true, false]) {
     await expect(page.getByRole('treeitem').first()).toBeVisible();
     await page.getByRole('tab', { name: 'Home', exact: true }).click();
     await page.getByLabel('Search mounts').fill('Demo mount 1');
-    const thumbnail = page.getByTestId('mount-card').getByRole('img', { name: 'Atlas thumbnail for Demo mount 1', exact: true });
+    const thumbnail = page.getByTestId('mount-card').getByRole('img', { name: 'Atlas overview for Demo mount 1', exact: true });
     await expect(thumbnail).toBeVisible();
-    await expect.poll(() => thumbnail.evaluate(img => (img as HTMLImageElement).naturalWidth)).toBe(1);
+    const images = thumbnail.locator('img');
+    await expect(images).toHaveCount(2);
+    await expect(images.first()).toHaveAttribute('src', /pyramid\/area1\/3\/0_0.png/);
+    await expect.poll(() => images.evaluateAll(tiles => tiles.every(img => (img as HTMLImageElement).naturalWidth === 1))).toBe(true);
     await page.getByLabel('Search mounts').fill('glass');
     await expect(page.getByTestId('mount-card')).toHaveCount(3);
     await page.getByLabel('Search atlases').fill('Demo atlas 1');

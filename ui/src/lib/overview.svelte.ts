@@ -7,7 +7,7 @@
 //   GET /v1/mounts
 //   GET /v1/mounts/{id}/atlas            {current: {...} | null, versions, …}; current null = none published
 
-import { atlasFileUrl, newestMounts, thumbnailPath } from './home';
+import { atlasFileUrl, newestMounts, thumbnailPaths } from './home';
 import { identity } from './identity.svelte';
 import type { ApiReply } from './platform';
 
@@ -69,7 +69,7 @@ export interface MountRow {
   mount: MountOut;
   /** null: none published; 'error': could not be read. */
   atlas: Atlas | null | 'error';
-  thumbnail?: string | null;
+  thumbnails?: string[];
 }
 
 export type OverviewState = 'idle' | 'signed-out' | 'loading' | 'ready' | 'unreachable' | 'error';
@@ -204,7 +204,7 @@ class Overview {
       if (r.status === 200) {
         const atlas = parseAtlas(r.body);
         const access = (r.body as { access?: unknown } | null)?.access;
-        let thumbnail: string | null = null;
+        let thumbnails: string[] = [];
         // The host's authenticated proxy only permits /v1/. Atlas files use the
         // project-scoped read token directly, also in desktop webviews.
         if (atlas && server && typeof access === 'string' && access) {
@@ -212,12 +212,12 @@ class Overview {
           const timeout = setTimeout(() => controller.abort(), 5000);
           try {
             const response = await fetch(atlasFileUrl(server, atlas.projectId, 'atlas.json', access), { referrerPolicy: 'no-referrer', signal: controller.signal });
-            const path = response.ok ? thumbnailPath(await response.json()) : null;
-            if (path) thumbnail = atlasFileUrl(server, atlas.projectId, path, access);
+            if (response.ok)
+              thumbnails = thumbnailPaths(await response.json()).map(path => atlasFileUrl(server, atlas.projectId, path, access));
           } catch { /* A missing thumbnail must never hide the mount. */ }
           finally { clearTimeout(timeout); }
         }
-        return { mount, atlas, thumbnail };
+        return { mount, atlas, thumbnails };
       }
       if (r.status === 404 || r.status === 405) return { mount, atlas: null };
     } catch { /* fall through */ }

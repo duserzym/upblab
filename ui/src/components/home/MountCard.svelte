@@ -10,7 +10,7 @@
 </script>
 <article class="glass panel mount-card" data-testid={atlasOnly ? 'atlas-card' : 'mount-card'}>
   <div class="summary">
-    <Thumbnail src={row.thumbnail} label={row.mount.label} />
+    <Thumbnail sources={row.thumbnails} label={row.mount.label} />
     <div class="details">
       <button class="main" title={[label, atlas?.name, atlas?.publishedAt ? day(atlas.publishedAt) : null].filter(Boolean).join(' · ')} aria-label={atlasOnly ? `Open atlas ${label}` : `Open mount ${label}`} onclick={() => void shell.handleLink(atlasOnly && atlas ? `grainatlas://project/${atlas.projectId}` : `laicpmsdb://mount/${row.mount.id}`, 'home')}><span class="key">{label}</span></button>
       <p class="muted small ellipsis" title={atlasOnly ? row.mount.label : row.mount.mount_type}>{atlasOnly ? row.mount.label : row.mount.mount_type || 'Mount'}</p>

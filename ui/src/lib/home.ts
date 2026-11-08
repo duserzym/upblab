@@ -58,18 +58,29 @@ const kinds = new Set(['sample', 'primary_standard', 'secondary_standard', 'blan
 export const kindColor = (kind: string) => kinds.has(kind) ? `var(--kind-${kind})` : 'var(--text-faint)';
 
 /** Only bundle-relative image files; never let a manifest redirect the access token. */
-export function thumbnailPath(body: unknown): string | null {
-  if (!body || typeof body !== 'object') return null;
+export function thumbnailPaths(body: unknown): string[] {
+  if (!body || typeof body !== 'object') return [];
   // grainatlas writes `files` as a list of { path, sha256, size }; an object keyed by path is read too.
   const files = (body as { files?: unknown }).files;
-  if (!files || typeof files !== 'object') return null;
+  if (!files || typeof files !== 'object') return [];
   const listed = Array.isArray(files)
     ? files.map(f => (f && typeof f === 'object' ? (f as { path?: unknown }).path : null)).filter((p): p is string => typeof p === 'string')
     : Object.keys(files);
   const paths = listed.filter(p => !/[\\:?#]/.test(p) && !p.startsWith('/') &&
     !p.split('/').some(s => s === '..' || s === '.' || /%/i.test(s)) && /\.(webp|png|jpe?g)$/i.test(p));
-  const rank = (p: string) => /thumbnail/i.test(p) ? -1 : Number(p.match(/(?:^|\/)pyramid\/[^/]+\/(\d+)\//)?.[1] ?? (/overview/i.test(p) ? 1000 : 1001));
-  return paths.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))[0] ?? null;
+  const overview = paths.find(p => /(?:^|\/)(?:thumbnail|overview)\.(webp|png|jpe?g)$/i.test(p));
+  if (overview) return [overview];
+
+  // GrainAtlas starts at z=0 (full size) and downsamples to one tile per area.
+  const areas = new Map<string, { z: number; path: string }>();
+  for (const path of paths) {
+    const tile = path.match(/^pyramid\/([^/]+)\/(\d+)\/0_0\.(webp|png|jpe?g)$/i);
+    if (!tile) continue;
+    const [, area, level] = tile;
+    const z = Number(level);
+    if (z > (areas.get(area)?.z ?? -1)) areas.set(area, { z, path });
+  }
+  return [...areas.keys()].sort().map(area => areas.get(area)!.path);
 }
 export function atlasFileUrl(server: string, project: string, path: string, access: string): string {
   return `${server.replace(/\/+$/, '')}/atlas/projects/${encodeURIComponent(project)}/${path.split('/').map(encodeURIComponent).join('/')}?access=${encodeURIComponent(access)}`;

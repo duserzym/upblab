@@ -158,11 +158,11 @@ describe('Home inventory details', () => {
     });
     await overview.load();
     expect(fetch).toHaveBeenCalledWith('http://h/atlas/projects/p/atlas.json?access=read-token', expect.anything());
-    expect(overview.mounts[0].thumbnail).toBe('http://h/atlas/projects/p/pyramid/area1/0/0_0.webp?access=read-token');
+    expect(overview.mounts[0].thumbnails).toEqual(['http://h/atlas/projects/p/pyramid/area1/0/0_0.webp?access=read-token']);
     fetch.mockRejectedValue(new Error('missing image manifest'));
     await overview.load();
     expect(overview.mounts[0].atlas).toMatchObject({ projectId: 'p' });
-    expect(overview.mounts[0].thumbnail).toBeNull();
+    expect(overview.mounts[0].thumbnails).toEqual([]);
     vi.unstubAllGlobals();
   });
 
