@@ -37,6 +37,12 @@ export function color(sample: string): string {
     h = (h * 31 + c.charCodeAt(0)) >>> 0;
   return palette[h % palette.length];
 }
+/** Format display text without changing stored column keys. */
+export function isotopeLabel(label: string): string {
+  return label.replace(/(?<![A-Za-z0-9])(\d{2,3})(?=(?:U|Pb|Th)(?![A-Za-z]))/g,
+    (_, mass: string) => [...mass].map(digit => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(digit)]).join(''));
+}
+
 export function ratioMarks(rows: ReviewSpot[], mode: 'wetherill' | 'tw'): Mark[] {
   const [xk, yk] = mode === 'tw' ? ['238U/206Pb', '207Pb/206Pb'] : ['207Pb/235U', '206Pb/238U'];
   return rows.flatMap(spot => {

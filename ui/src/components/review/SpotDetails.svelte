@@ -19,7 +19,9 @@
 {#if spot}
   <h2>{spot.label}</h2>
   <dl class="grid-kv small">
-    <dt>Sample</dt><dd>{spot.sampleName}</dd><dt>Grain</dt><dd>{spot.grainLabel??'No grain'}</dd>
+    <dt>{spot.isReference ? 'Reference material' : 'Sample'}</dt><dd>{spot.sampleName}</dd>
+    {#if spot.isReference}<dt>Role</dt><dd>{spot.kind.replaceAll('_', ' ')}</dd>{/if}
+    <dt>Grain</dt><dd>{spot.grainLabel??'No grain'}</dd>
     <dt>Mount</dt><dd>{review.mounts.find(m=>m.id===spot.mountId)?.label??spot.mountId??'—'}</dd>
     <dt>Session</dt><dd>{spot.sessionKey??spot.sessionId??'—'}</dd>
   </dl>

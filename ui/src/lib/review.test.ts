@@ -21,6 +21,17 @@ beforeEach(() => {
   vi.mocked(sendCommand).mockResolvedValue(true);
 });
 describe('Review selection and loading', () => {
+  it('groups standard spots by the acquisition reference name while preserving raw labels', async () => {
+    const previous = get.getMockImplementation()!;
+    get.mockImplementation(async path => path === `/v1/sessions/${session.id}/acquisitions`
+      ? { status: 200, body: [{ id: 'acq-9', reference_material_name: 'Canonical reference' }] } as never
+      : previous(path));
+    await review.open({ kind: 'session', id: session.id });
+    expect(review.rows[8]).toMatchObject({ isReference: true, sampleName: 'Canonical reference', label: 'Reference_1' });
+    expect(review.rows[9].sampleName).toBe('Demo reference');
+    expect(review.selected?.isReference).toBe(false);
+  });
+
   it('loads a run and focuses Images while keeping Review selected', async () => {
     await review.open({ kind: 'session', id: session.id });
     review.select(review.rows[1]);
@@ -43,7 +54,7 @@ describe('Review selection and loading', () => {
     expect(shell.show).not.toHaveBeenCalled();
     vi.stubGlobal('window', { innerWidth: 1280 });
     await review.focus(review.rows[0], true);
-    expect(shell.show).toHaveBeenCalledWith('images');
+    expect(shell.show).not.toHaveBeenCalled();
   });
   it('does not echo shell selections and selects loaded user spots without sending a command', async () => {
     await review.open({ kind: 'session', id: session.id });

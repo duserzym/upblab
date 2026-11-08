@@ -19,12 +19,14 @@ describe('stored result tables', () => {
   });
   it('groups unknowns by sample and grain and keeps every reference kind apart', () => {
     const spots = rows.map(r => normalise(r, table));
-    expect(groupSpots(spots).map(g => g.name)).toEqual(['Sample A', 'Sample B']);
+    expect(groupSpots(spots).map(g => g.name)).toEqual(['Sample A', 'Sample B', 'Demo reference']);
     expect(groupSpots(spots)[0].grains.map(g => g.name)).toEqual(['area/1', 'area/2']);
-    expect(groupSpots(spots, '', true).at(-1)?.grains[0].spots).toHaveLength(4);
+    expect(groupSpots(spots).at(-1)?.grains[0].spots).toHaveLength(4);
     for (const kind of ['primary_standard', 'secondary_standard', 'reference_material', 'other_standard', 'unknown', 'sample'])
       expect(normalise({ kind }).isReference).toBe(/standard|reference/.test(kind));
     expect(groupSpots([normalise({ label: 'spot10' }), normalise({ label: 'spot2' })])[0].grains[0].spots.map(s => s.label)).toEqual(['spot2', 'spot10']);
+    expect(normalise({ kind: 'secondary_standard', label: 'Alias_12' }).sampleName).toBe('Alias');
+    expect(normalise({ kind: 'secondary_standard', label: 'Alias_12', reference_material_name: 'Canonical' }).sampleName).toBe('Canonical');
     expect(groupSpots(spots, 'high ratio')[0].grains[0].spots[0].label).toBe('Zircon_4');
     expect(groupSpots(spots, 'area/3')[0].name).toBe('Sample B');
   });

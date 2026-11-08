@@ -2,13 +2,13 @@
   import ModuleSurface from '../components/ModuleSurface.svelte';
   import { shell } from '../lib/shell.svelte';
 
-  let { active, split = false }: { active: boolean; split?: boolean } = $props();
+  let { active, layoutKey }: { active: boolean; layoutKey: string } = $props();
   const atlas = $derived(shell.atlas);
 </script>
 
-<section class="view images-view" class:split class:hidden={!active}>
+<section class="view images-view" class:hidden={!active}>
   {#if atlas}
-    <ModuleSurface module="images" title="grainatlas" home={shell.homeUrl('images')} target={shell.targets.images} {active} />
+    <ModuleSurface module="images" title="grainatlas" home={shell.homeUrl('images')} target={shell.targets.images} {active} {layoutKey} />
   {:else}
     <div class="center">
       <div class="glass panel card stack">

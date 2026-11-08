@@ -106,7 +106,14 @@ export interface FocusGrainCommand {
   via?: string;
 }
 
-export type BridgeCommand = FocusSpotCommand | FocusGrainCommand;
+export interface ReviewSpotsCommand {
+  type: 'review-spots';
+  /** Each listed atlas shows only these spots. Unlisted atlases keep their full overlays. */
+  projects: Record<string, string[]>;
+  focus?: Omit<FocusSpotCommand, 'type'>;
+}
+
+export type BridgeCommand = FocusSpotCommand | FocusGrainCommand | ReviewSpotsCommand;
 
 /** The shell also accepts grainatlas.spot.selected ({ project, spot, name }) as via 'user'. */
 export interface SpotSelectedEvent extends BridgeEvent {
@@ -138,6 +145,14 @@ function isServer(x: unknown): boolean {
 export function isBridgeCommand(x: unknown): x is BridgeCommand {
   if (!x || typeof x !== 'object') return false;
   const c = x as Record<string, unknown>;
+  if (c.type === 'review-spots') {
+    if (!c.projects || typeof c.projects !== 'object' || Array.isArray(c.projects)) return false;
+    const projects = Object.entries(c.projects);
+    if (projects.length > 64 || !projects.every(([project, spots]) =>
+      isId(project) && Array.isArray(spots) && spots.length <= 10000 && spots.every(isId))) return false;
+    return c.focus === undefined || (!!c.focus && typeof c.focus === 'object' &&
+      isBridgeCommand({ ...c.focus, type: 'focus-spot' }));
+  }
   if ((c.server !== undefined && !isServer(c.server)) || !isId(c.project) || (c.flash !== undefined && typeof c.flash !== 'boolean') ||
       (c.via !== undefined && typeof c.via !== 'string')) return false;
   if (c.type === 'focus-spot') return isId(c.spot);

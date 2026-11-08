@@ -28,8 +28,7 @@
     { id: 'reduce', label: 'Reduce', hint: 'UPbRPy Studio' },
   ];
 
-  let windowWidth = $state(window.innerWidth);
-  const reviewSplit = $derived(shell.view === 'review' && settings.reviewSplit && windowWidth >= 1440);
+  const reviewSplit = $derived(shell.view === 'review' && settings.reviewSplit);
 
   // Desktop with no mode stored yet: the first-run wizard (ADR-0003).
   // Waits for the host's status, which says whether "This computer" can run.
@@ -132,7 +131,6 @@
   }
 </script>
 
-<svelte:window bind:innerWidth={windowWidth} onkeydown={onKey} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop} />
 
 <div class="shell">
   <header class="bar glass">
@@ -182,14 +180,17 @@
     {/if}
   </header>
 
-  <main class="content" class:review-split={reviewSplit}>
+  <main class="content">
     {#if firstRun}
       <FirstRun />
     {:else if settings.loaded && (settings.mode !== '' || !isDesktop)}
       <Home active={shell.view === 'home'} />
-      <Images active={shell.view === 'images' || reviewSplit} split={reviewSplit} />
       <Sessions active={shell.view === 'sessions'} />
-      <Review active={shell.view === 'review'} split={reviewSplit} wide={windowWidth >= 1440} />
+      <Review active={shell.view === 'review'} imagesOnly={shell.view === 'images'} split={reviewSplit}>
+        {#snippet images(active, layoutKey)}
+          <Images {active} {layoutKey} />
+        {/snippet}
+      </Review>
       <Reduce active={shell.view === 'reduce'} />
       <Settings active={shell.view === 'settings'} />
     {/if}

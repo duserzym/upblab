@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignSampleColors, color } from './plot-data';
+import { assignSampleColors, color, isotopeLabel } from './plot-data';
 
 describe('sample colours', () => {
   it('gives every sample of a scope its own colour, in name order', () => {
@@ -13,4 +13,10 @@ describe('sample colours', () => {
     assignSampleColors([]);
     expect(color('Other')).toBe(color('Other'));
   });
+});
+
+it('superscripts isotope masses without changing unrelated numbers', () => {
+  expect(isotopeLabel('207Pb/235U')).toBe('²⁰⁷Pb/²³⁵U');
+  expect(isotopeLabel('204Pb_corrected_206Pb/238U_age')).toBe('²⁰⁴Pb_corrected_²⁰⁶Pb/²³⁸U_age');
+  expect(isotopeLabel('20 µm · 18 points · 12000 Ma')).toBe('20 µm · 18 points · 12000 Ma');
 });

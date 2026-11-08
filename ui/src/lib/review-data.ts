@@ -88,13 +88,19 @@ export function normalise(row: ResultRow, table: Partial<ResultTable> = {}): Rev
   const acquisitionId = str(row.acquisition_id), spotId = str(row.spot_id), atlasSpotId = str(row.atlas_spot_id);
   const value = number(values.preferred_date);
   const kind = str(row.kind) ?? 'sample';
+  const reference = isReference(kind);
+  const name = str(row.sample_name);
+  const label = str(row.label) ?? spotId ?? 'Unnamed spot';
+  const sampleName = reference
+    ? str(row.reference_material_name) ?? name ?? str(row.sample_label) ?? label.replace(/_\d+$/, '')
+    : name ?? 'No sample';
   return {
     key: acquisitionId ?? spotId ?? atlasSpotId ?? String(row.label ?? 'unmeasured'), acquisitionId, spotId,
-    atlasProjectId: str(row.atlas_project_id), atlasSpotId, label: str(row.label) ?? spotId ?? 'Unnamed spot',
-    sampleName: str(row.sample_name) ?? 'No sample', grainLabel: str(row.grain_label), grainId: str(row.grain_id),
+    atlasProjectId: str(row.atlas_project_id), atlasSpotId, label,
+    sampleName, grainLabel: str(row.grain_label), grainId: str(row.grain_id),
     mountId: str(row.mount_id), sessionId: str(row.session_id) ?? table.session_id ?? null,
     sessionKey: str(row.session_key) ?? table.session_key ?? null, runId: str(row.run_id) ?? table.run?.run_id ?? null,
-    kind, isReference: isReference(kind), values, flags,
+    kind, isReference: reference, values, flags,
     date: value === null ? null : { value, two_sigma: number(values.preferred_date_2e), method: str(values.preferred_date_method), passes: typeof values.preferred_date_pass === 'boolean' ? values.preferred_date_pass : null },
   };
 }
@@ -108,15 +114,15 @@ export interface SpotGroup {
     spots: ReviewSpot[];
   }[];
 }
-export function groupSpots(rows: ReviewSpot[], text = '', references = false): SpotGroup[] {
+export const spotGroupKey = (spot: ReviewSpot) => `${spot.isReference}:${spot.sampleName}`;
+
+export function groupSpots(rows: ReviewSpot[], text = ''): SpotGroup[] {
   const groups = new Map<string, SpotGroup>();
   const query = text.trim().toLowerCase();
   for (const spot of rows) {
-    if (spot.isReference && !references)
-      continue;
     if (query && ![spot.label, spot.sampleName, spot.grainLabel, ...spot.flags].join(' ').toLowerCase().includes(query))
       continue;
-    const key = `${spot.isReference}:${spot.sampleName}`;
+    const key = spotGroupKey(spot);
     let sample = groups.get(key);
     if (!sample) {
       sample = { key, name: spot.sampleName, reference: spot.isReference, grains: [] };

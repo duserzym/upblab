@@ -66,6 +66,24 @@ describe('theme preference and migration', () => {
   });
 });
 
+describe('Review pane widths', () => {
+  it.each([[undefined, 50], [63, 63], [20, 30], [100, 70], ['60', 50]])(
+    'restores a saved width of %s as %s', async (width, expected) => {
+      stored = { reviewDataWidth: width };
+      await settings.load();
+      expect(settings.reviewDataWidth).toBe(expected);
+    },
+  );
+
+  it('keeps the split width when other settings are saved', async () => {
+    await settings.load();
+    await settings.update({ reviewDataWidth: 62 });
+    await settings.update({ lastTab: 'images' });
+    await settings.load();
+    expect(settings.reviewDataWidth).toBe(62);
+  });
+});
+
 describe('resolved theme', () => {
   it.each([false, true])('writes an explicit attribute for System (dark=%s)', async (value) => {
     dark = value;

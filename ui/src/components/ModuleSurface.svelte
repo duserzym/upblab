@@ -23,8 +23,9 @@
     /** Whether the surface should be visible now. */
     active: boolean;
     title: string;
+    layoutKey?: string;
   }
-  let { module, home, target, active, title }: Props = $props();
+  let { module, home, target, active, title, layoutKey }: Props = $props();
 
   let el = $state<HTMLDivElement>();
   let iframe = $state<HTMLIFrameElement>();
@@ -75,6 +76,12 @@
     });
     ro.observe(el);
     return () => ro.disconnect();
+  });
+
+  $effect(() => {
+    if (!isDesktop || !layoutKey || !active || !el || shell.overlay) return;
+    const bounds = rect();
+    if (shown) queue(() => desktopModules.bounds(module, bounds));
   });
 
   onDestroy(() => {

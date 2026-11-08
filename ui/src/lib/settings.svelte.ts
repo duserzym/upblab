@@ -27,12 +27,17 @@ export interface SettingsData {
   lastTab: string;
   reviewScope: string;
   reviewSplit: boolean;
+  reviewDataWidth: number;
+  reviewDockSolo: string;
+  reviewDockSplit: string;
   updateChannel: 'stable' | 'beta';
   updateAuto: boolean;
   updateLastCheck: number;
 }
 
 export const DEFAULT_DATA_ROOT = '~/laicpmsdb';
+export const REVIEW_DATA_WIDTH_MIN = 30;
+export const REVIEW_DATA_WIDTH_MAX = 70;
 
 export const DEFAULTS: SettingsData = {
   mode: '',
@@ -47,10 +52,19 @@ export const DEFAULTS: SettingsData = {
   lastTab: 'home',
   reviewScope: '',
   reviewSplit: false,
+  reviewDataWidth: 50,
+  reviewDockSolo: '',
+  reviewDockSplit: '',
   updateChannel: 'stable',
   updateAuto: true,
   updateLastCheck: 0,
 };
+
+export function clampReviewDataWidth(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULTS.reviewDataWidth;
+  const width = Math.max(REVIEW_DATA_WIDTH_MIN, Math.min(REVIEW_DATA_WIDTH_MAX, value));
+  return Math.round(width * 10) / 10;
+}
 
 const FILE = 'settings.json';
 const LS_KEY = 'upbstudio.settings';
@@ -125,6 +139,9 @@ export class Settings {
   lastTab = $state(DEFAULTS.lastTab);
   reviewScope = $state(DEFAULTS.reviewScope);
   reviewSplit = $state(DEFAULTS.reviewSplit);
+  reviewDataWidth = $state(DEFAULTS.reviewDataWidth);
+  reviewDockSolo = $state(DEFAULTS.reviewDockSolo);
+  reviewDockSplit = $state(DEFAULTS.reviewDockSplit);
   updateChannel = $state<SettingsData['updateChannel']>(DEFAULTS.updateChannel);
   updateAuto = $state(DEFAULTS.updateAuto);
   updateLastCheck = $state(DEFAULTS.updateLastCheck);
@@ -175,6 +192,9 @@ export class Settings {
       this.lastTab = data.lastTab;
       this.reviewScope = typeof data.reviewScope === 'string' ? data.reviewScope : '';
       this.reviewSplit = data.reviewSplit === true;
+      this.reviewDataWidth = clampReviewDataWidth(data.reviewDataWidth);
+      this.reviewDockSolo = typeof data.reviewDockSolo === 'string' ? data.reviewDockSolo : '';
+      this.reviewDockSplit = typeof data.reviewDockSplit === 'string' ? data.reviewDockSplit : '';
       this.updateChannel = data.updateChannel === 'beta' ? 'beta' : 'stable';
       this.updateAuto = typeof data.updateAuto === 'boolean' ? data.updateAuto : true;
       this.updateLastCheck = Number.isFinite(data.updateLastCheck) && data.updateLastCheck > 0 ? data.updateLastCheck : 0;
@@ -205,6 +225,9 @@ export class Settings {
       lastTab: this.lastTab,
       reviewScope: this.reviewScope,
       reviewSplit: this.reviewSplit,
+      reviewDataWidth: this.reviewDataWidth,
+      reviewDockSolo: this.reviewDockSolo,
+      reviewDockSplit: this.reviewDockSplit,
       updateChannel: this.updateChannel,
       updateAuto: this.updateAuto,
       updateLastCheck: this.updateLastCheck,

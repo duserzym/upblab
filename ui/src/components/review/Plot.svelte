@@ -6,7 +6,7 @@
   import { settings } from '../../lib/settings.svelte';
   import { dateLabel, type ReviewSpot } from '../../lib/review-data';
   import type { Point } from '../../lib/concordia';
-  import { color, type Mark, type Guide, type Band } from './plot-data';
+  import { color, isotopeLabel, type Mark, type Guide, type Band } from './plot-data';
   import { panBounds, zoomBounds, type Bounds, type DragTool } from './plot-viewport';
   let { marks, guides = [], bands = [], selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true, viewport = $bindable(null), onbox, ontoggle }: {
     marks: Mark[];
@@ -243,8 +243,8 @@
     const decades = (_u: uPlot, splits: number[]) => splits.map(v => v != null && v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9 ? v : null);
     const plotHost = host;
     const opts: uPlot.Options = { width: untrack(() => width), height: untrack(() => height), series: [{}, { show: false }], scales: { x: { time: false, distr: logX ? 3 : 1, range: () => bounds.x }, y: { distr: logY ? 3 : 1, range: () => bounds.y } },
-      axes: [{ label: xLabel, labelSize: 20, size: 42, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logX && !xTicks.length ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), ...(xTicks.length ? { splits: () => xTicks.map((_, i) => i), values: (_u: uPlot, vals: number[]) => vals.map(v => xTicks[v] ?? '') } : {}) },
-        { label: yLabel, labelSize: 18, size: 64, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logY ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), values: (_u, vals) => vals.map(v => v == null || !Number.isFinite(v) ? '' : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 0.001) ? v.toExponential(1) : Number(v.toPrecision(4)).toString()) }],
+      axes: [{ label: isotopeLabel(xLabel), labelSize: 20, size: 42, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logX && !xTicks.length ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), ...(xTicks.length ? { splits: () => xTicks.map((_, i) => i), values: (_u: uPlot, vals: number[]) => vals.map(v => xTicks[v] ?? '') } : {}) },
+        { label: isotopeLabel(yLabel), labelSize: 18, size: 64, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logY ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), values: (_u, vals) => vals.map(v => v == null || !Number.isFinite(v) ? '' : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 0.001) ? v.toExponential(1) : Number(v.toPrecision(4)).toString()) }],
       legend: { show: false }, cursor: { show: false }, select: { show: false, left: 0, top: 0, width: 0, height: 0 }, hooks: { draw: [u => untrack(() => draw(u))], ready: [placeTargets] },
     };
     const plot = untrack(() => new uPlot(opts, [[], []], plotHost));

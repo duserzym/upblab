@@ -33,7 +33,6 @@ export class Review {
   depthState = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
   depthError = $state('');
   scrollVersion = $state(0);
-  references = $state(false);
   private generation = 0;
   private depthGeneration = 0;
   private selectionGeneration = 0;
@@ -54,6 +53,23 @@ export class Review {
     if (settings.loaded)
       void settings.update({ reviewScope: JSON.stringify(this.scope) });
     await this.load();
+  }
+  private async referenceNames(rows: ReviewSpot[]) {
+    const sessions = new Set(rows.flatMap(row => row.isReference && row.sessionId && !row.values.reference_material_name
+      ? [row.sessionId] : []));
+    const names = new Map<string, string>();
+    await Promise.all([...sessions].map(async id => {
+      try {
+        const acquisitions = await this.get<{ id: string; reference_material_name?: string }[]>(`/v1/sessions/${enc(id)}/acquisitions`);
+        for (const acq of acquisitions) {
+          if (acq.reference_material_name) names.set(acq.id, acq.reference_material_name);
+        }
+      } catch { /* Older or unavailable metadata leaves the result table's names usable. */ }
+    }));
+    return rows.map(row => {
+      const sampleName = row.isReference && row.acquisitionId ? names.get(row.acquisitionId) : undefined;
+      return sampleName ? { ...row, sampleName } : row;
+    });
   }
   async load() {
     const gen = ++this.generation;
@@ -118,6 +134,9 @@ export class Review {
       }
       if (gen !== this.generation)
         return;
+      rows = await this.referenceNames(rows);
+      if (gen !== this.generation)
+        return;
       assignSampleColors(rows.map(r => r.sampleName));
       this.rows = rows;
       this.runs = runs;
@@ -161,8 +180,6 @@ export class Review {
     this.selectionGeneration++;
     this.selectedKey = spot.key;
     this.externalSpot = this.rows.some(r => r.key === spot.key) ? null : spot;
-    if (spot.isReference)
-      this.references = true;
     this.scrollVersion++;
     void this.loadDepth();
     if (focus)
@@ -184,7 +201,7 @@ export class Review {
     if (!spot.atlasProjectId || !spot.atlasSpotId)
       return;
     await this.command(spot, { type: 'focus-spot', project: spot.atlasProjectId, spot: spot.atlasSpotId, flash: true, via: 'review', server: shell.serverUrl });
-    const split = shell.view === 'review' && settings.reviewSplit && typeof window !== 'undefined' && window.innerWidth >= 1440;
+    const split = shell.view === 'review' && settings.reviewSplit;
     if (show && !split)
       shell.show('images');
   }

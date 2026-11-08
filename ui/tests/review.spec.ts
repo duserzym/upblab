@@ -23,15 +23,15 @@ async function openReview(page: Page) {
       listeners: Map<string, unknown>;
     };
   }).__fake.listeners.has('lab-bridge://notify'));
-  await expect(page.getByRole('treeitem').first()).toBeVisible();
+  await expect(page.locator('[data-spot-key]').first()).toBeVisible();
 }
 for (const [width, height] of [[1440, 900], [1280, 800]]) {
   test.describe(`${width} × ${height}`, () => {
     test.beforeEach(async ({ page }) => { await page.setViewportSize({ width, height }); await openReview(page); });
     test('stored results, plots and image selections stay within the window', async ({ page }) => {
       expect(await problems(page, 'Review')).toEqual([]);
-      await expect(page.getByRole('treeitem')).toHaveCount(8);
-      await page.getByRole('treeitem', { name: /Zircon_2/ }).click();
+      await expect(page.locator('[data-spot-key]')).toHaveCount(12);
+      await page.locator('[data-spot-key="acq-2"]').click();
       await expect.poll(async () => (await calls(page)).filter(([c]) => c === 'module_command').pop()?.[1]).toMatchObject({ module: 'images', command: { type: 'focus-spot', project: 'project-demo', spot: 'atlas-2', server: 'http://localhost:8000', via: 'review' } });
       await expect(page.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true');
       await page.getByLabel('Filter spots').fill('Zircon_2');
@@ -50,25 +50,26 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.getByRole('dialog', {name:'Choose Y quantity'}).getByRole('button', {name:'REE pattern',exact:true}).click();
       await expect(page.getByText('CI chondrite, McDonough and Sun (1995)')).toBeVisible();
       expect(await problems(page, 'REE')).toEqual([]);
-      await page.getByRole('treeitem', { name: /Zircon_1/ }).click();
+      await page.locator('[data-spot-key="acq-1"]').click();
       await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
       await expect(page.getByLabel('Depth profile axis')).toBeVisible();
       expect(await problems(page, 'Depth profile')).toEqual([]);
-      await page.getByRole('button', {name:'Reference materials',exact:true}).click();
-      await expect(page.getByRole('treeitem')).toHaveCount(12);
+      await page.getByRole('button', {name:'Standard Demo reference',exact:true}).click();
+      await expect(page.locator('[data-spot-key]')).toHaveCount(4);
+      await page.getByRole('checkbox', {name:'Show Reference_1 in Review',exact:true}).click();
+      await expect(page.getByRole('checkbox', {name:'Show Standards in Review',exact:true})).toHaveAttribute('aria-checked', 'mixed');
+      await page.getByRole('checkbox', {name:'Show Standards in Review',exact:true}).click();
+      await expect(page.getByRole('checkbox', {name:'Show Reference_1 in Review',exact:true})).toBeChecked();
       await page.getByRole('button', {name:'Choose review scope',exact:true}).click();
       await page.getByLabel('Review scope', { exact: true }).selectOption('mount:mount-demo');
-      await expect(page.getByRole('treeitem')).toHaveCount(13);
-      await page.getByRole('treeitem', { name: /Zircon_13/ }).click();
+      await expect(page.locator('[data-spot-key]')).toHaveCount(13);
+      await page.getByLabel('Filter spots').fill('Zircon_13');
+      await page.locator('[data-spot-key="spot-unmeasured"]').click();
       await expect(page.getByTestId('review-details')).toContainText('not measured yet');
       expect(await problems(page, 'Mount Review')).toEqual([]);
     });
-    test('split uses the existing Images surface and follows the width threshold', async ({ page }) => {
-      const toggle = page.getByLabel('Side by side');
-      if (width < 1440) {
-        await expect(toggle).toHaveCount(0);
-        return;
-      }
+    test('split keeps the same Images surface and fits a narrow window', async ({ page }) => {
+      const toggle = page.getByRole('checkbox', { name: 'SEM images', exact: true });
       await page.getByRole('tab', { name: 'Images', exact: true }).click();
       const surface = page.locator('[data-module="images"]');
       await expect(surface).toBeVisible();
@@ -79,7 +80,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(page.getByTestId('review-view')).toBeVisible();
       await expect(surface).toBeVisible();
       await expect(surface).toHaveAttribute('data-instance', 'original');
-      const left = (await page.getByTestId('review-view').boundingBox())!, right = (await surface.boundingBox())!;
+      const left = (await page.getByRole('region', { name: 'Age & plots' }).boundingBox())!, right = (await surface.boundingBox())!;
       expect(left.x + left.width).toBeLessThanOrEqual(right.x + 1);
       expect(right.x + right.width).toBeLessThanOrEqual(width);
       expect(right.y + right.height).toBeLessThanOrEqual(height);
@@ -92,7 +93,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
         expect(await problems(page, `Split ${tab}`)).toEqual([]);
       }
       await page.setViewportSize({ width: 1280, height: 800 });
-      await expect(toggle).toHaveCount(0);
+      await expect(toggle).toBeChecked();
       await expect(surface).toBeHidden();
       expect(await problems(page, 'Review after narrowing')).toEqual([]);
     });
@@ -142,7 +143,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.keyboard.press('Enter');
       await expect(first.getByRole('button', { name: 'Choose X axis', exact: true })).toContainText('Hf (ppm)');
       await page.reload();
-      await expect(page.getByRole('treeitem').first()).toBeVisible();
+      await expect(page.locator('[data-spot-key]').first()).toBeVisible();
       await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
       first = page.getByTestId('geochem-panel').first();
       await expect(first.getByRole('button', { name: 'Choose Y axis', exact: true })).toContainText('U/Yb (from stored ppm)');
@@ -172,10 +173,10 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     });
     test('sample chips filter all points and rows; shared hover does not command Images', async ({ page }) => {
       const plots = page.getByTestId('review-plot');
-      await expect(plots.first()).toHaveAttribute('data-point-count', '8');
+      await expect(plots.first()).toHaveAttribute('data-point-count', '12');
       await page.getByRole('button', { name: 'Sample Sample A', exact: true }).click();
       await expect(plots.first()).toHaveAttribute('data-point-count', '4');
-      await expect(page.getByRole('treeitem')).toHaveCount(4);
+      await expect(page.locator('[data-spot-key]')).toHaveCount(4);
       await expect(page.locator('[data-point-key][data-sample="Sample B"]')).toHaveCount(0);
       const before = (await calls(page)).filter(([c]) => c === 'module_command').length;
 
@@ -187,22 +188,25 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(plots.first()).toHaveAttribute('data-point-count', '8');
       await page.getByRole('button', { name: 'Clear', exact: true }).click();
       await expect(plots.first()).toHaveAttribute('data-point-count', '0');
-      await expect(page.getByRole('treeitem')).toHaveCount(0);
+      await expect(page.locator('[data-spot-key]')).toHaveCount(0);
       await expect(page.getByTestId('geochem-board')).toContainText('No samples shown');
       await page.getByRole('button', { name: 'All', exact: true }).click();
-      await expect(plots.first()).toHaveAttribute('data-point-count', '8');
+      await expect(plots.first()).toHaveAttribute('data-point-count', '12');
       await page.getByRole('button', { name: 'Sample Sample B', exact: true }).click();
       await emit(page, 'atlas-1');
-      await expect(page.locator('[data-spot-key="acq-1"]')).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('treeitem', { name: 'Zircon_1', exact: true })).toHaveAttribute('aria-selected', 'true');
     });
-    test('side columns collapse and restore without losing the board', async ({ page }) => {
-      await page.getByRole('button', { name: 'Collapse spot list', exact: true }).click();
-      await expect(page.getByLabel('Filter spots')).toHaveCount(0);
-      await page.getByRole('button', { name: 'Collapse details', exact: true }).click();
-      expect(await problems(page, 'Collapsed board')).toEqual([]);
-      await page.getByRole('button', { name: 'Expand spot list', exact: true }).click();
-      await page.getByRole('button', { name: 'Expand details', exact: true }).click();
-      await expect(page.getByLabel('Filter spots')).toBeVisible();
+    test('panels can re-tile and return to the default without losing the selected spot', async ({ page }) => {
+      const spots = page.getByRole('region', { name: 'Spots', exact: true });
+      const metadata = page.getByRole('region', { name: 'Spot metadata', exact: true });
+      const plots = page.getByRole('region', { name: 'Age & plots', exact: true });
+      const original = (await spots.boundingBox())!;
+      await page.getByRole('button', { name: 'Move Spot metadata', exact: true }).click();
+      await page.getByRole('button', { name: 'Dock right of Age & plots', exact: true }).click();
+      await expect.poll(async () => (await metadata.boundingBox())!.x).toBeGreaterThan((await plots.boundingBox())!.x);
+      await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
+      await expect.poll(async () => (await metadata.boundingBox())!.x).toBe(original.x);
+      await expect.poll(async () => (await metadata.boundingBox())!.y).toBeGreaterThan(original.y);
       await expect(page.getByTestId('review-details').getByRole('heading', { name: 'Zircon_1', exact: true })).toBeVisible();
     });
   });
@@ -216,8 +220,8 @@ test('Review has no sideways overflow at the minimum window or in compact split 
     expect(await problems(page, `Minimum ${tab}`)).toEqual([]);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByLabel('Side by side').check();
-  await expect(page.getByTestId('review-view')).toHaveClass(/compact/);
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+  await expect(page.getByRole('region', { name: 'SEM images' })).toBeVisible();
   await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
   const board = page.getByTestId('geochem-board');
   const width = (await board.boundingBox())!.width;

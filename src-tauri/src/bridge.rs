@@ -218,6 +218,24 @@ fn valid_server(value: &Value) -> bool {
 }
 
 fn valid_command(command: &Value) -> bool {
+    if command.get("type").and_then(Value::as_str) == Some("review-spots") {
+        let projects = command.get("projects").and_then(Value::as_object);
+        return projects.is_some_and(|projects| {
+            projects.len() <= 64
+                && projects.iter().all(|(project, spots)| {
+                    valid_id(Some(&Value::String(project.clone())))
+                        && spots.as_array().is_some_and(|spots| {
+                            spots.len() <= 10000 && spots.iter().all(|spot| valid_id(Some(spot)))
+                        })
+                })
+        }) && command.get("focus").is_none_or(|focus| {
+            focus.as_object().is_some_and(|focus| {
+                let mut focus = focus.clone();
+                focus.insert("type".into(), Value::String("focus-spot".into()));
+                valid_command(&Value::Object(focus))
+            })
+        });
+    }
     if command.get("server").is_some_and(|v| !valid_server(v))
         || !valid_id(command.get("project"))
         || command.get("flash").is_some_and(|v| !v.is_boolean())
