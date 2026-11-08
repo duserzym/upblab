@@ -7,12 +7,14 @@
   let { row, atlasOnly = false }: { row: MountRow; atlasOnly?: boolean } = $props();
   const atlas = $derived(row.atlas && row.atlas !== 'error' ? row.atlas : null);
   const label = $derived(atlasOnly ? atlas?.name ?? row.mount.label : row.mount.label);
+  const target = $derived(atlas ? `grainatlas://project/${atlas.projectId}` : `laicpmsdb://mount/${row.mount.id}`);
+  const action = $derived(atlasOnly ? `Open atlas ${label}` : atlas ? `Open images for ${label}` : `Open mount details for ${label}`);
 </script>
 <article class="glass panel mount-card" data-testid={atlasOnly ? 'atlas-card' : 'mount-card'}>
   <div class="summary">
     <Thumbnail sources={row.thumbnails} label={row.mount.label} />
     <div class="details">
-      <button class="main" title={[label, atlas?.name, atlas?.publishedAt ? day(atlas.publishedAt) : null].filter(Boolean).join(' · ')} aria-label={atlasOnly ? `Open atlas ${label}` : `Open mount ${label}`} onclick={() => void shell.handleLink(atlasOnly && atlas ? `grainatlas://project/${atlas.projectId}` : `laicpmsdb://mount/${row.mount.id}`, 'home')}><span class="key">{label}</span></button>
+      <button class="main" title={action} aria-label={action} onclick={() => void shell.handleLink(target, 'home')}><span class="key">{label}</span></button>
       <p class="muted small ellipsis" title={atlasOnly ? row.mount.label : row.mount.mount_type}>{atlasOnly ? row.mount.label : row.mount.mount_type || 'Mount'}</p>
       {#if !atlasOnly}<p class="small counts">{row.mount.grain_count} grains · {row.mount.spot_count} spots</p>{/if}
     </div>
@@ -22,7 +24,6 @@
     {#if !atlasOnly}
       <div class="controls">
         <button class="btn" onclick={(e) => { e.stopPropagation(); shell.show('review'); void review.open({ kind: 'mount', id: row.mount.id }); }}>Review</button>
-        {#if atlas}<button class="btn" onclick={(e) => { e.stopPropagation(); void shell.handleLink(`grainatlas://project/${atlas!.projectId}`, 'home'); }}>Open images</button>{/if}
       </div>
     {/if}
   </div>

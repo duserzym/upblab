@@ -104,6 +104,17 @@ for (const desktop of [true, false]) {
     await expect(images).toHaveCount(2);
     await expect(images.first()).toHaveAttribute('src', /pyramid\/area1\/3\/0_0.png/);
     await expect.poll(() => images.evaluateAll(tiles => tiles.every(img => (img as HTMLImageElement).naturalWidth === 1))).toBe(true);
+    await page.getByRole('button', { name: 'Open images for Demo mount 1', exact: true }).click();
+    await expect(page.getByRole('tab', { name: 'Images', exact: true })).toHaveAttribute('aria-selected', 'true');
+    if (desktop) await expect.poll(async () => (await calls(page)).filter(([c, a]) => c === 'module_open' && a?.module === 'images').pop()?.[1]?.url).toContain('project=project-0');
+    else await expect(page.locator('iframe.surface:visible')).toHaveAttribute('src', /project=project-0/);
+    await page.getByRole('tab', { name: 'Home', exact: true }).click();
+    await page.getByLabel('Search mounts').fill('Demo mount 4');
+    await page.getByRole('button', { name: 'Open mount details for Demo mount 4', exact: true }).click();
+    await expect(page.getByRole('tab', { name: 'Sessions', exact: true })).toHaveAttribute('aria-selected', 'true');
+    if (desktop) await expect.poll(async () => (await calls(page)).filter(([c, a]) => c === 'module_open' && a?.module === 'sessions').pop()?.[1]?.url).toContain('#/mounts/mount-3');
+    else await expect(page.locator('iframe.surface:visible')).toHaveAttribute('src', /#\/mounts\/mount-3/);
+    await page.getByRole('tab', { name: 'Home', exact: true }).click();
     await page.getByLabel('Search mounts').fill('glass');
     await expect(page.getByTestId('mount-card')).toHaveCount(3);
     await page.getByLabel('Search atlases').fill('Demo atlas 1');
