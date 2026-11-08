@@ -1,16 +1,20 @@
 import type { Point } from '../../lib/concordia';
 
 export type Bounds = { x: [number, number]; y: [number, number] };
+export type ZoomAxis = 'both' | keyof Bounds;
 export type DragTool = 'pan' | 'zoom' | 'select';
 
-export function zoomBounds(bounds: Bounds, factor: number, anchor: Point): Bounds {
+export function zoomBounds(bounds: Bounds, factor: number, anchor: Point, axis: ZoomAxis = 'both'): Bounds {
   const scale = ([lo, hi]: [number, number], at: number): [number, number] => {
     const center = lo + (hi - lo) * at;
     const next: [number, number] = [center + (lo - center) * factor, center + (hi - center) * factor];
     return next.every(Number.isFinite) && next[1] - next[0] > Math.max(1, Math.abs(center)) * 1e-12
       ? next : [lo, hi];
   };
-  return { x: scale(bounds.x, anchor[0]), y: scale(bounds.y, anchor[1]) };
+  return {
+    x: axis === 'y' ? bounds.x : scale(bounds.x, anchor[0]),
+    y: axis === 'x' ? bounds.y : scale(bounds.y, anchor[1]),
+  };
 }
 
 export function panBounds(bounds: Bounds, dx: number, dy: number): Bounds {

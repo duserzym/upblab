@@ -7,10 +7,11 @@
   import { dateLabel, type ReviewSpot } from '../../lib/review-data';
   import type { Point } from '../../lib/concordia';
   import { color, isotopeLabel, type Mark, type Guide, type Band } from './plot-data';
-  import { panBounds, zoomBounds, type Bounds, type DragTool } from './plot-viewport';
-  let { marks, guides = [], bands = [], selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true, viewport = $bindable(null), onbox, ontoggle }: {
+  import { panBounds, zoomBounds, type Bounds, type DragTool, type ZoomAxis } from './plot-viewport';
+  let { marks, guidesForBounds, emptyBounds, bands = [], selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true, viewport = $bindable(null), onbox, ontoggle }: {
     marks: Mark[];
-    guides?: Guide[];
+    guidesForBounds?: (bounds: Bounds) => Guide[];
+    emptyBounds?: Bounds;
     bands?: Band[];
     selected: string | null;
     onselect: (spot: ReviewSpot) => void;
@@ -30,6 +31,7 @@
   let width = $state(400), height = $state(300);
   let instance = $state.raw<uPlot>();
   let tool = $state<DragTool>('pan');
+  let zoomAxis = $state<ZoomAxis>('both');
   let box = $state<{ start: Point; end: Point } | null>(null);
   const tools: { id: DragTool; label: string; title: string }[] = [
     { id: 'pan', label: 'Pan', title: 'Drag to move the view' },
@@ -64,8 +66,7 @@
   const fullBounds = $derived.by((): Bounds => {
     // Axes follow the data: points and paths first. An ellipse widens them only
     // when it is no larger than the spread of the points (a badly measured spot
-    // must not squash the others), and reference lines (the Concordia curve)
-    // only when there is no data at all; they are clipped to the plot.
+    // must not squash the others). The reference curve follows the resulting view.
     const core = [...marks.flatMap(m => [...(m.point ? [m.point] : []), ...(m.path ?? [])]), ...bands.flatMap(b => [...b.upper, ...b.lower])].filter(valid);
     const span = (pts: Point[], d: number) => pts.length ? Math.max(...pts.map(p => p[d])) - Math.min(...pts.map(p => p[d])) : 0;
     const sx = span(core, 0), sy = span(core, 1);
@@ -75,7 +76,8 @@
       if (core.length > 1 && (span(poly, 0) > Math.max(sx, 1e-12) || span(poly, 1) > Math.max(sy, 1e-12))) return [];
       return poly;
     });
-    const points = core.length ? [...core, ...ellipses] : guides.flatMap(g => [...g.path, ...(g.point ? [g.point] : [])]).filter(valid);
+    if (!core.length && emptyBounds) return emptyBounds;
+    const points = [...core, ...ellipses];
     const extent = (dim: number, log: boolean): [
       number,
       number
@@ -97,8 +99,9 @@
     return { x: extent(0, logX), y: extent(1, logY) };
   });
   const bounds = $derived(viewport ?? fullBounds);
+  const guides = $derived(guidesForBounds?.(bounds) ?? []);
   function zoom(factor: number, anchor: Point = [0.5, 0.5]) {
-    viewport = zoomBounds(bounds, factor, anchor);
+    viewport = zoomBounds(bounds, factor, anchor, zoomAxis);
   }
 
   $effect(() => {
@@ -419,6 +422,11 @@
     {#each tools as t (t.id)}
       <button class="chip" aria-pressed={tool === t.id} title={t.title} onclick={() => tool = t.id}>{t.label}</button>
     {/each}
+    <label class="zoom-axis">Zoom
+      <select aria-label="Concordia zoom axes" title="Axes affected by the zoom buttons and scroll wheel" bind:value={zoomAxis}>
+        <option value="both">Both axes</option><option value="x">X only</option><option value="y">Y only</option>
+      </select>
+    </label>
     <button class="chip zoom" aria-label="Zoom in" title="Zoom in about the center" onclick={() => zoom(0.67)}>+</button>
     <button class="chip zoom" aria-label="Zoom out" title="Zoom out about the center" onclick={() => zoom(1.5)}>−</button>
     <button class="chip" title="Fit all visible spots" onclick={() => viewport = null}>Fit all</button>
@@ -438,6 +446,7 @@
   .navigation {gap:4px;}
   .navigation .chip {font-size:0.74rem;padding:3px 7px;}
   .zoom {min-width:27px;}
+  .zoom-axis select {font-size:0.72rem;padding:2px 4px;}
   .canvas { position:absolute; inset:0; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 12px; padding:4px; overflow-wrap:anywhere; }
   .legend span { display:inline-flex; gap:5px; align-items:center; }

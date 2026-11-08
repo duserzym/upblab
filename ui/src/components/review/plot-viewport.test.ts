@@ -10,6 +10,11 @@ describe('Concordia navigation', () => {
     expect(zoomBounds(initial, 0.5, [0.2, 0.75])).toEqual({ x: [1, 6], y: [7.5, 17.5] });
   });
 
+  it('zooms one axis while keeping the other range fixed', () => {
+    expect(zoomBounds(initial, 0.5, [0.2, 0.75], 'x')).toEqual({ x: [1, 6], y: [0, 20] });
+    expect(zoomBounds(initial, 0.5, [0.2, 0.75], 'y')).toEqual({ x: [0, 10], y: [7.5, 17.5] });
+  });
+
   it('pans with the drag, accounting for the upward data y axis', () => {
     expect(panBounds(initial, 0.2, 0.25)).toEqual({ x: [-2, 8], y: [5, 25] });
   });
