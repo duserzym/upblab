@@ -1,12 +1,11 @@
 <!--
-  Sign-in and account dialog, opened from the account button in the tab bar.
+  Sign-in dialog, opened from the account button in the tab bar.
   The shell signs in once (plan decision 5); every module tab gets the token
   through @lab/bridge. While open, the shell hides the native module webviews
   (they paint over the shell page otherwise).
 -->
 <script lang="ts">
   import { identity, type Provider, type Providers } from '../lib/identity.svelte';
-  import { isDesktop } from '../lib/platform';
 
   let username = $state('');
   let password = $state('');
@@ -15,7 +14,6 @@
   let input = $state<HTMLInputElement>();
 
   const server = $derived(identity.target?.server ?? '');
-  const account = $derived(identity.account);
 
   // Each time the dialog opens signed out: ask which methods the server offers.
   $effect(() => {
@@ -44,13 +42,6 @@
     await identity.beginProvider(p);
   }
 
-  async function signOut() {
-    busy = true;
-    await identity.logout();
-    busy = false;
-    close();
-  }
-
   function onKey(e: KeyboardEvent) {
     if (identity.dialog && e.key === 'Escape') close();
   }
@@ -58,64 +49,43 @@
 
 <svelte:window onkeydown={onKey} />
 
-{#if identity.dialog}
+{#if identity.dialog && !identity.signedIn}
   <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && close()}>
     <div class="glass panel dialog stack" role="dialog" aria-modal="true" aria-labelledby="account-title">
-      {#if identity.signedIn}
-        <h2 id="account-title">{identity.label}</h2>
-        <dl class="grid-kv">
-          {#if account}
-            <dt>User name</dt><dd class="mono">{account.username}</dd>
-            {#if account.email}<dt>Email</dt><dd>{account.email}</dd>{/if}
-            <dt>Role</dt><dd>{account.is_admin ? 'administrator' : account.is_lab_staff ? 'lab staff' : 'member'}</dd>
-          {/if}
-          <dt>Server</dt><dd class="mono small">{server}</dd>
-          {#if identity.state.offline}<dt>Status</dt><dd class="faint">signed in; the server is not answering right now</dd>{/if}
-        </dl>
-        <p class="faint small">
-          The Sessions and Images tabs use this sign-in.{isDesktop ? ' The token is kept in the system keychain.' : ''}
-        </p>
-        <div class="row">
-          <button class="btn" onclick={close}>Close</button>
-          <span class="spacer"></span>
-          <button class="btn danger" disabled={busy} onclick={signOut}>Sign out</button>
+      <h2 id="account-title">Sign in to laicpmsdb</h2>
+      <p class="muted small mono">{server || 'no server configured'}</p>
+      {#if identity.pending}
+        <div class="stack tight">
+          <div class="row"><span class="spinner" aria-hidden="true"></span><strong>Finish signing in in your browser</strong></div>
+          <p class="faint small">
+            {identity.pending.provider === 'orcid' ? 'ORCID' : 'Google'} sends you back to UPb Lab when you are done.
+          </p>
+          <div class="row"><button class="btn" onclick={() => (identity.pending = null)}>Cancel</button></div>
         </div>
       {:else}
-        <h2 id="account-title">Sign in to laicpmsdb</h2>
-        <p class="muted small mono">{server || 'no server configured'}</p>
-        {#if identity.pending}
-          <div class="stack tight">
-            <div class="row"><span class="spinner" aria-hidden="true"></span><strong>Finish signing in in your browser</strong></div>
-            <p class="faint small">
-              {identity.pending.provider === 'orcid' ? 'ORCID' : 'Google'} sends you back to UPb Lab when you are done.
-            </p>
-            <div class="row"><button class="btn" onclick={() => (identity.pending = null)}>Cancel</button></div>
+        <form class="stack" onsubmit={submit}>
+          <label class="field">
+            User name
+            <input bind:this={input} type="text" autocomplete="username" autocapitalize="off" spellcheck="false" bind:value={username} />
+          </label>
+          <label class="field">
+            Password
+            <input type="password" autocomplete="current-password" bind:value={password} />
+          </label>
+          {#if identity.error}<p class="error small">{identity.error}</p>{/if}
+          <div class="row">
+            <button class="btn" type="button" onclick={close}>Cancel</button>
+            <span class="spacer"></span>
+            <button class="btn primary" type="submit" disabled={busy || !username.trim() || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
           </div>
-        {:else}
-          <form class="stack" onsubmit={submit}>
-            <label class="field">
-              User name
-              <input bind:this={input} type="text" autocomplete="username" autocapitalize="off" spellcheck="false" bind:value={username} />
-            </label>
-            <label class="field">
-              Password
-              <input type="password" autocomplete="current-password" bind:value={password} />
-            </label>
-            {#if identity.error}<p class="error small">{identity.error}</p>{/if}
-            <div class="row">
-              <button class="btn" type="button" onclick={close}>Cancel</button>
-              <span class="spacer"></span>
-              <button class="btn primary" type="submit" disabled={busy || !username.trim() || !password}>{busy ? 'Signing in…' : 'Sign in'}</button>
-            </div>
-          </form>
-          {#if providers?.orcid || providers?.google}
-            <div class="row or"><span class="faint small">or</span></div>
-            <div class="row">
-              {#if providers.orcid}<button class="btn" onclick={() => browser('orcid')}>Sign in with ORCID</button>{/if}
-              {#if providers.google}<button class="btn" onclick={() => browser('google')}>Sign in with Google</button>{/if}
-            </div>
-            <p class="faint small">Opens your web browser; it returns to UPb Lab through a <code>laicpmsdb://</code> link.</p>
-          {/if}
+        </form>
+        {#if providers?.orcid || providers?.google}
+          <div class="row or"><span class="faint small">or</span></div>
+          <div class="row">
+            {#if providers.orcid}<button class="btn" onclick={() => browser('orcid')}>Sign in with ORCID</button>{/if}
+            {#if providers.google}<button class="btn" onclick={() => browser('google')}>Sign in with Google</button>{/if}
+          </div>
+          <p class="faint small">Opens your web browser; it returns to UPb Lab through a <code>laicpmsdb://</code> link.</p>
         {/if}
       {/if}
     </div>
@@ -137,5 +107,4 @@
   .dialog p { margin: 0; }
   .tight { gap: var(--space-2); }
   .or { justify-content: center; }
-  .btn.danger { color: var(--danger); }
 </style>

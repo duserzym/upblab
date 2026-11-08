@@ -19,6 +19,21 @@ export function sessionsShown(rows: SessionRow[], query: string, sort: Sort): Se
     r => [r.session.session_key, r.session.material, r.session.analyst, r.session.instrument?.name].join(' '), r => r.session.started_at);
 }
 
+export function mineralKey(material: string) {
+  return material.trim().toLowerCase() || 'unspecified';
+}
+
+export function sessionsByMineral(rows: SessionRow[]) {
+  const groups = new Map<string, SessionRow[]>();
+  for (const row of rows) {
+    const mineral = mineralKey(row.session.material);
+    const group = groups.get(mineral);
+    if (group) group.push(row);
+    else groups.set(mineral, [row]);
+  }
+  return [...groups].sort(([a], [b]) => a.localeCompare(b));
+}
+
 /** Mounts have no creation date in the list API; UUIDv7 preserves creation order. */
 export function newestMounts(rows: MountOut[]): MountOut[] {
   return rows.every(r => /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(r.id))
@@ -45,8 +60,10 @@ export function runStatus(row: SessionRow): { tone: 'ok' | 'warning' | 'text-fai
 export function kindSegments(count: number, maximum: number, counts?: Record<string, number> | null) {
   const width = maximum > 0 ? Math.min(100, Math.max(0, count) / maximum * 100) : 0;
   const entries = Object.entries(counts ?? {}).filter(([, n]) => Number.isFinite(n) && n > 0);
-  const total = entries.reduce((sum, [, n]) => sum + n, 0);
-  if (!total) return [{ kind: 'sample', count, x: 0, width }];
+  const classified = entries.reduce((sum, [, n]) => sum + n, 0);
+  if (classified < count) entries.push(['unclassified', count - classified]);
+  const total = Math.max(count, classified);
+  if (!total) return [];
   let x = 0;
   return entries.map(([kind, n]) => {
     const segment = { kind, count: n, x, width: width * n / total };
@@ -54,8 +71,14 @@ export function kindSegments(count: number, maximum: number, counts?: Record<str
     return segment;
   });
 }
-const kinds = new Set(['sample', 'primary_standard', 'secondary_standard', 'blank', 'tune']);
-export const kindColor = (kind: string) => kinds.has(kind) ? `var(--kind-${kind})` : 'var(--text-faint)';
+export const spotKinds = [
+  ['sample', 'Sample'], ['primary_standard', 'Primary standard'],
+  ['secondary_standard', 'Secondary standard'], ['blank', 'Blank'], ['tune', 'Tune'],
+  ['unclassified', 'Unclassified'],
+] as const;
+export const kindLabel = (kind: string) => spotKinds.find(([key]) => key === kind)?.[1] ?? kind.replaceAll('_', ' ');
+export const kindColor = (kind: string) =>
+  spotKinds.some(([key]) => key === kind && key !== 'unclassified') ? `var(--kind-${kind})` : 'var(--text-faint)';
 
 /** Only bundle-relative image files; never let a manifest redirect the access token. */
 export function thumbnailPaths(body: unknown): string[] {

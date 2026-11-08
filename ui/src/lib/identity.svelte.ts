@@ -189,7 +189,7 @@ class Identity {
   /** The server the shell currently signs in to; null until known. */
   target = $state<AuthTarget | null>(null);
   checking = $state(false);
-  /** The sign-in / account dialog is open. */
+  /** The sign-in dialog is open. */
   dialog = $state(false);
   /** Last sign-in problem, for the dialog. */
   error = $state('');

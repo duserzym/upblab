@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atlasFileUrl, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsShown, thumbnailPaths } from './home';
+import { atlasFileUrl, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsByMineral, sessionsShown, thumbnailPaths } from './home';
 import type { MountRow, RunOut, SessionRow } from './overview.svelte';
 
 const run: RunOut = { id: 'r', session_id: 's', pipeline_name: 'UPbRPy', pipeline_version: '0.1', status: 'completed', started_at: '2026-11-05', completed_at: '2026-11-05', upbrpy_version: '0.1', is_preferred_for_session: true, run_by: null, result_count: 2 };
@@ -15,6 +15,16 @@ describe('Home filtering and sorting', () => {
     expect(sessionsShown(rows, '', 'oldest').map(r => r.session.session_key)).toEqual(['B', 'A', 'C']);
     expect(sessionsShown(rows, '', 'za').map(r => r.session.session_key)).toEqual(['C', 'B', 'A']);
     expect(rows[0].session.session_key).toBe('B');
+  });
+  it('groups mineral names case-insensitively and preserves the chosen order within a mineral', () => {
+    const rutile = session('R', null);
+    rutile.session.material = ' Rutile ';
+    const older = session('Old', '2025-01-01');
+    older.session.material = 'Zircon';
+    const newer = session('New', '2026-11-05');
+    expect(sessionsByMineral(sessionsShown([older, rutile, newer], '', 'newest'))).toEqual([
+      ['rutile', [rutile]], ['zircon', [newer, older]],
+    ]);
   });
   it('takes recent UUIDv7 mounts before the detail limit instead of the API label order', () => {
     const first = { ...mount('A').mount, id: '01900000-0000-7000-8000-000000000000' };
@@ -45,10 +55,15 @@ describe('Home spot bars', () => {
     expect(kindSegments(20, 40, { sample: 15, primary_standard: 5 })).toEqual([
       { kind: 'sample', count: 15, x: 0, width: 37.5 }, { kind: 'primary_standard', count: 5, x: 37.5, width: 12.5 },
     ]);
-    expect(kindSegments(10, 40)[0].width).toBe(25);
-    expect(kindSegments(0, 0)[0].width).toBe(0);
+    expect(kindSegments(0, 0)).toEqual([]);
     expect(kindSegments(10, 10, { sample: -1, blank: 0 })[0].width).toBe(100);
     expect(kindColor('other')).toBe('var(--text-faint)');
+  });
+  it('shows unknown counts without labeling them as samples or inflating known categories', () => {
+    expect(kindSegments(10, 40)).toEqual([{ kind: 'unclassified', count: 10, x: 0, width: 25 }]);
+    expect(kindSegments(20, 40, { sample: 15 })).toEqual([
+      { kind: 'sample', count: 15, x: 0, width: 37.5 }, { kind: 'unclassified', count: 5, x: 37.5, width: 12.5 },
+    ]);
   });
 });
 describe('Home atlas thumbnails', () => {

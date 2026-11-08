@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { untrack } from 'svelte';
   import UploadCard from '../components/UploadCard.svelte';
   import { upload } from '../lib/upload.svelte';
   import { identity } from '../lib/identity.svelte';
@@ -7,8 +6,9 @@
   import Toolbar from '../components/home/Toolbar.svelte';
   import Icon from '../components/home/Icon.svelte';
   import SessionCard from '../components/home/SessionCard.svelte';
+  import MineralIcon from '../components/home/MineralIcon.svelte';
   import MountCard from '../components/home/MountCard.svelte';
-  import { sessionsShown, mountsShown, type Sort } from '../lib/home';
+  import { sessionsShown, sessionsByMineral, mountsShown, spotKinds, kindColor, type Sort } from '../lib/home';
   import { overview } from '../lib/overview.svelte';
   import { isDesktop, pickPaths, probe, studioStatus, type StudioStatus } from '../lib/platform';
   import { fromFileList } from '../lib/drop';
@@ -33,6 +33,8 @@
   let sessionQuery = $state(''), mountQuery = $state(''), atlasQuery = $state('');
   let sessionSort = $state<Sort>('newest'), mountSort = $state<Sort>('newest'), atlasSort = $state<Sort>('newest');
   const sessions = $derived(sessionsShown(overview.sessions, sessionQuery, sessionSort));
+  let groupSessions = $state(false);
+  const mineralGroups = $derived(groupSessions ? sessionsByMineral(sessions) : []);
   const mounts = $derived(mountsShown(overview.mounts, mountQuery, mountSort));
   const atlases = $derived(mountsShown(overview.mounts, atlasQuery, atlasSort, true));
   const atlasCount = $derived(overview.mounts.filter(r => r.atlas && r.atlas !== 'error').length);
@@ -71,15 +73,6 @@
     const url = shell.homeUrl('sessions');
     if (!shell.local) void probe(url).then((r) => (server = r.reachable));
     void studioStatus(shell.studioConfig).then((s) => (studio = s));
-  });
-
-  // Sessions, runs and atlases: reload when Home opens or the account changes.
-  $effect(() => {
-    if (!active || !settings.loaded) return;
-    void identity.revision;
-    void identity.target?.server;
-    if (identity.checking) return;
-    untrack(() => void overview.load());
   });
 
   $effect(() => {
@@ -161,7 +154,11 @@
     </div>
 
     <section class="board-section stack" aria-label="Sessions">
-      <Toolbar section="Sessions" bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} loaded={overview.sessions.length} refresh={identity.signedIn ? refresh : undefined} showAll={overview.sessions.length < overview.totalSessions ? showAll : undefined} busy={overview.refreshing} />
+      <Toolbar section="Sessions" bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} loaded={overview.sessions.length} refresh={identity.signedIn ? refresh : undefined} showAll={overview.sessions.length < overview.totalSessions ? showAll : undefined} busy={overview.refreshing}>
+        {#snippet options()}
+          <button class="btn small group-button" aria-pressed={groupSessions} onclick={() => groupSessions = !groupSessions}>Group by mineral</button>
+        {/snippet}
+      </Toolbar>
       {#if overview.state === 'idle' || (overview.state === 'loading' && overview.sessions.length === 0)}
         <p class="faint small">{identity.target ? 'Loading sessions…' : shell.local ? 'Open Sessions or Review to start the local database.' : 'No laicpmsdb server configured.'}</p>
       {:else if overview.state === 'signed-out'}
@@ -177,10 +174,33 @@
       {:else if overview.sessions.length === 0}
         <p class="muted small">No sessions yet. Upload a laser session in the <button class="linkish" onclick={() => shell.show('sessions')}>Sessions</button> tab.</p>
       {:else}
-        <div class="tile-grid" data-testid="session-grid">
-          {#each sessions as row (row.session.id)}<SessionCard {row} {maximum} />{/each}
-        </div>
-        {#if sessions.length === 0}<p class="muted small">No sessions match this search.</p>{/if}
+        {#if sessions.length}
+          <div class="row spot-key small muted" aria-label="Spot bar legend">
+            <strong>Spot mix</strong>
+            {#each spotKinds as [kind, label] (kind)}
+              <span><i style:background={kindColor(kind)} aria-hidden="true"></i>{label}</span>
+            {/each}
+            <span class="faint">Bar length relative to the largest shown session</span>
+          </div>
+          <div class="stack session-groups" data-testid="session-grid">
+            {#if groupSessions}
+              {#each mineralGroups as [mineral, rows] (mineral)}
+                <section class="stack mineral-group" aria-label={mineral}>
+                  <h3 class="row"><MineralIcon {mineral} /><span>{mineral}</span><span class="muted small">{rows.length}</span></h3>
+                  <div class="tile-grid">
+                    {#each rows as row (row.session.id)}<SessionCard {row} {maximum} />{/each}
+                  </div>
+                </section>
+              {/each}
+            {:else}
+              <div class="tile-grid">
+                {#each sessions as row (row.session.id)}<SessionCard {row} {maximum} />{/each}
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <p class="muted small">No sessions match this search.</p>
+        {/if}
       {/if}
     </section>
 
@@ -264,6 +284,12 @@
   .upload-expansion[hidden] { display: none; }
   .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(22.3rem, 100%), 1fr)); gap: var(--space-2); min-width: 0; }
   .tile-grid > :global(.panel) { margin-top: 0; }
+  .group-button[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+  .spot-key { flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+  .spot-key span { display: inline-flex; align-items: center; gap: var(--space-1); }
+  .spot-key i { width: 0.65rem; height: 0.45rem; border-radius: 2px; }
+  .session-groups, .mineral-group { gap: var(--space-2); }
+  .mineral-group h3 { margin: 0; gap: var(--space-1); text-transform: capitalize; }
   .grow { flex: 1; min-width: 0; margin: 0; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; }
   .linkish:hover { text-decoration: underline; }

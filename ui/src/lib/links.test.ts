@@ -18,6 +18,15 @@ describe('resolve: plan section 4.4 table', () => {
     expect(resolve(`laicpmsdb://session/${A}`)).toMatchObject({ tab: 'sessions', route: `/app/sessions/${A}` });
   });
 
+  it('opens the sharing panel only for the supported session query', () => {
+    const sharing = resolve(`laicpmsdb://session/${A}?panel=sharing&extra=ignored`);
+    expect(sharing).toMatchObject({ tab: 'sessions', route: `/app/sessions/${A}?panel=sharing` });
+    expect(moduleUrl('sessions', `/app/sessions/${A}?panel=sharing`, { server: 'http://h', atlas: '' })).toBe(
+      `http://h/app/#/sessions/${A}?panel=sharing`,
+    );
+    expect(resolve(`laicpmsdb://session/${A}?panel=other`)).toMatchObject({ route: `/app/sessions/${A}` });
+  });
+
   it('laicpmsdb sample -> Sessions tab', () => {
     expect(resolve(`laicpmsdb://sample/${A}`)).toMatchObject({ tab: 'sessions', route: `/app/samples/${A}` });
   });

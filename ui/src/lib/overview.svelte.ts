@@ -63,6 +63,15 @@ export interface SessionRow {
   preferred: RunOut | null;
   latest: RunOut | null;
   kindCounts?: Record<string, number> | null;
+  access?: { role: 'Owner' | 'Admin' | 'Editor' | 'Viewer'; owner: string | null; canShare: boolean };
+}
+
+interface SessionDetail {
+  kind_counts?: Record<string, number>;
+  owner?: string | null;
+  is_owner?: boolean;
+  can_share?: boolean;
+  can_edit?: boolean;
 }
 
 export interface MountRow {
@@ -187,11 +196,16 @@ class Overview {
 
   private async sessionRow(session: SessionOut): Promise<SessionRow> {
     const path = `/v1/sessions/${encodeURIComponent(session.id)}`;
-    const [runs, detail] = await Promise.allSettled([identity.get(path + '/reductions'), identity.get(path)]);
-    const counts = detail.status === 'fulfilled' && detail.value.status === 200
-      ? (detail.value.body as { kind_counts?: Record<string, number> } | null)?.kind_counts ?? null : null;
+    const [runs, detail] = await Promise.allSettled([identity.get(path + '/reductions'), identity.get<SessionDetail>(path)]);
+    const info = detail.status === 'fulfilled' && detail.value.status === 200 ? detail.value.body : null;
+    const access: SessionRow['access'] = typeof info?.is_owner === 'boolean'
+      ? {
+        role: info.is_owner ? 'Owner' : info.can_share ? 'Admin' : info.can_edit ? 'Editor' : 'Viewer',
+        owner: info.owner ?? null,
+        canShare: info.can_share === true,
+      } : undefined;
     return {
-      session, kindCounts: counts,
+      session, kindCounts: info?.kind_counts ?? null, access,
       ...(runs.status === 'fulfilled' && isList<RunOut>(runs.value)
         ? summariseRuns(runs.value.body) : { runs: null, preferred: null, latest: null }),
     };

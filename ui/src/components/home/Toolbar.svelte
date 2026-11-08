@@ -1,7 +1,8 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import type { Sort } from '../../lib/home';
-  let { section, query = $bindable(''), sort = $bindable<Sort>('newest'), count, total, loaded, refresh, showAll, busy = false }:
-    { section: string; query?: string; sort?: Sort; count: number; total: number; loaded: number; refresh?: () => void; showAll?: () => void; busy?: boolean } = $props();
+  let { section, query = $bindable(''), sort = $bindable<Sort>('newest'), count, total, loaded, refresh, showAll, busy = false, options }:
+    { section: string; query?: string; sort?: Sort; count: number; total: number; loaded: number; refresh?: () => void; showAll?: () => void; busy?: boolean; options?: Snippet } = $props();
 </script>
 <div class="toolbar row">
   <h2>{section}</h2>
@@ -12,6 +13,7 @@
     <option value="newest">Newest</option><option value="oldest">Oldest</option>
     <option value="az">Name A-Z</option><option value="za">Name Z-A</option>
   </select>
+  {@render options?.()}
   {#if showAll}<button class="btn small" disabled={busy} onclick={showAll}>Show all</button>{/if}
   {#if refresh}<button class="btn small" disabled={busy} onclick={refresh}>{busy ? 'Refreshing…' : 'Refresh'}</button>{/if}
 </div>
@@ -19,7 +21,7 @@
   <p class="faint small scope">Latest {loaded} of {total} · searching the latest {loaded}; Show all to search all {total}.</p>
 {/if}
 <style>
-  .toolbar { gap: var(--space-2); min-width: 0; }
+  .toolbar { flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
   h2 { margin: 0; }
   input { width: 12rem; max-width: 100%; padding: var(--space-1) var(--space-2); font-size: 0.85rem; }
   select { padding: var(--space-1) var(--space-2); font-size: 0.85rem; }

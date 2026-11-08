@@ -96,7 +96,8 @@ export function resolve(input: string): Resolution {
         mount: 'mounts',
       };
       if (parts.length === 2 && kind in routes) {
-        return { kind: 'tab', tab: 'sessions', route: `/app/${routes[kind]}/${id}`, url };
+        const panel = kind === 'session' && u.searchParams.get('panel') === 'sharing' ? '?panel=sharing' : '';
+        return { kind: 'tab', tab: 'sessions', route: `/app/${routes[kind]}/${id}${panel}`, url };
       }
       // Query links: only the one known parameter is passed on, re-encoded.
       const queries: Record<string, string> = { ingest: 'path', search: 'label' };

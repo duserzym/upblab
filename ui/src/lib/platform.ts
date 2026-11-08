@@ -177,6 +177,10 @@ export interface Account {
   username: string;
   display_name?: string;
   email?: string;
+  affiliation?: string;
+  orcid?: string;
+  sign_in_methods?: string[];
+  groups?: { id: string; name: string; description: string }[];
   is_lab_staff?: boolean;
   is_admin?: boolean;
   [field: string]: unknown;

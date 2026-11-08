@@ -7,7 +7,7 @@ import { identity } from './identity.svelte';
 import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
 
-export type View = TabId | 'settings';
+export type View = TabId | 'settings' | 'account';
 
 /** Placeholder while the local service starts (its usual port). */
 const LOCAL_PENDING = 'http://127.0.0.1:8000';
@@ -136,7 +136,7 @@ class Shell {
 
   show(view: View) {
     this.view = view;
-    if (view !== 'settings' && settings.loaded && settings.lastTab !== view) void settings.update({ lastTab: view });
+    if (view !== 'settings' && view !== 'account' && settings.loaded && settings.lastTab !== view) void settings.update({ lastTab: view });
   }
 
   async loadModules() {

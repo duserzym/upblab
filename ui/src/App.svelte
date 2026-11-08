@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import Home from './routes/Home.svelte';
+  import Account from './routes/Account.svelte';
+  import { overview } from './lib/overview.svelte';
   import Images from './routes/Images.svelte';
   import Sessions from './routes/Sessions.svelte';
   import Reduce from './routes/Reduce.svelte';
@@ -40,6 +42,15 @@
     if (!settings.loaded || firstRun) return;
     const t = shell.identityTarget;
     if (t) void identity.restore(t);
+  });
+
+  // Home and Account use the same session inventory, scoped to the active sign-in.
+  $effect(() => {
+    if ((shell.view !== 'home' && shell.view !== 'account') || !settings.loaded) return;
+    void identity.revision;
+    void identity.target?.server;
+    if (identity.checking) return;
+    untrack(() => void overview.load());
   });
 
   // Native module webviews paint over the shell page: hide them under the dialog.
@@ -156,8 +167,9 @@
       <button
         class="tab account"
         class:signed-in={identity.signedIn}
-        title={identity.signedIn ? `Signed in to ${identity.target.server}` : `Sign in to ${identity.target.server}`}
-        onclick={() => (identity.dialog = true)}
+        aria-pressed={identity.signedIn ? shell.view === 'account' : undefined}
+        title={identity.signedIn ? 'Open your account' : `Sign in to ${identity.target.server}`}
+        onclick={() => identity.signedIn ? shell.show('account') : (identity.dialog = true)}
       >
         {#if identity.signedIn}<span class="dot" style="background: {identity.state.offline ? 'var(--warning)' : 'var(--ok)'}"></span>{identity.label}{:else}Sign in{/if}
       </button>
@@ -193,6 +205,7 @@
       </Review>
       <Reduce active={shell.view === 'reduce'} />
       <Settings active={shell.view === 'settings'} />
+      {#if shell.view === 'account'}<Account />{/if}
     {/if}
   </main>
   <AccountDialog />
