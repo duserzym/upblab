@@ -165,3 +165,12 @@ test('Show all expands the inventory and makes the remaining sessions searchable
   await expect(section).toContainText('4 of 14');
   await expect(section.getByRole('button', { name: 'Show all', exact: true })).toHaveCount(0);
 });
+
+// SCREENSHOTS=1: the Home board with the demo inventory, for docs/screenshots.
+if (process.env.SCREENSHOTS) for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
+  test(`screenshot home ${width}`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height });
+    await home(page, true);
+    await page.screenshot({ path: `${process.env.SCREENSHOTS_DIR ?? 'test-results'}/home-${width}-${info.project.name}.png` });
+  });
+}

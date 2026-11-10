@@ -89,13 +89,55 @@
   }
 
   const color = (ok: boolean | null) => (ok === null ? 'var(--text-faint)' : ok ? 'var(--ok)' : 'var(--danger)');
+
+  // The three parts of the pipeline, as one line in the header: where each tab gets its
+  // data or program, and whether it answers. The pill says the short state; the tooltip and
+  // the accessible name say all of it. A click opens the tab, which explains a problem.
+  type Pill = { tab: 'sessions' | 'images' | 'reduce'; name: string; module: string; ok: boolean | null; state: string; detail: string };
+  const host = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  const pills = $derived.by((): Pill[] => {
+    const sessionsPill: Pill = shell.local
+      ? {
+          tab: 'sessions', name: 'Sessions', module: 'laicpmsdb', ok: localOk,
+          state: local?.phase === 'ready' ? 'This computer' : `This computer · ${localLine}`,
+          detail: [
+            `PostgreSQL ${local?.postgres.running ? `running on 127.0.0.1:${local.postgres.port}` : 'stopped'}${local?.postgres.source ? ` (${local.postgres.source})` : ''}`,
+            `Service ${local?.service.running ? `${local.phase === 'ready' ? 'ready' : 'starting'} on 127.0.0.1:${local.service.port}` : 'stopped'}${local?.service.source ? ` (${local.service.source === 'dev' ? 'development checkout' : `bundle ${local.service.version ?? ''}`})` : ''}`,
+          ].join(' · '),
+        }
+      : {
+          tab: 'sessions', name: 'Sessions', module: 'laicpmsdb', ok: server,
+          state: server === false ? `${host(settings.serverUrl)} unreachable` : host(settings.serverUrl) || 'no server',
+          detail: `${settings.serverUrl} · ${server === null ? 'checking…' : server ? 'server reachable' : 'server unreachable'}`,
+        };
+    const studioState = !isDesktop ? 'desktop app only' : studio === null ? 'checking…' : studio.found ? (studio.kind === 'checkout' ? 'development checkout' : 'installed') : 'not found';
+    return [
+      sessionsPill,
+      {
+        tab: 'images', name: 'Images', module: 'grainatlas', ok: shell.atlas ? true : null,
+        state: shell.atlas ? `build ${shell.atlas.version}` : 'no build pinned yet',
+        detail: shell.atlas ? `build ${shell.atlas.version} (${shell.atlas.source})` : 'no build pinned yet',
+      },
+      {
+        tab: 'reduce', name: 'Reduce', module: 'UPbRPy Studio', ok: isDesktop && studio ? studio.found : null,
+        state: studioState, detail: [studioState, studio?.path].filter(Boolean).join(' · '),
+      },
+    ];
+  });
 </script>
 
 <section class="view scroll" class:hidden={!active}>
   <div class="page stack board">
-    <header class="row intro">
+    <header class="intro">
       <h1>UPb Lab</h1>
-      <p class="muted small">Images, sessions, stored results and reduction in one window.</p>
+      <p class="muted small hint">Drop a folder or files anywhere in this window, or start below.</p>
+      <div class="pills" role="group" aria-label="Pipeline status" data-testid="status-pills">
+        {#each pills as p (p.tab)}
+          <button class="pill" class:problem={p.ok === false} title={`${p.name} · ${p.module}: ${p.detail}`} aria-label={`${p.name} · ${p.module}: ${p.detail}`} onclick={() => shell.show(p.tab)}>
+            <span class="dot" style="background: {color(p.ok)}"></span><strong>{p.name}</strong><span class="state">{p.state}</span>
+          </button>
+        {/each}
+      </div>
     </header>
 
     <div class="action-tiles" data-testid="open-panel">
@@ -122,36 +164,6 @@
       <input bind:this={folderInput} aria-label="Open folder" type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
       <input bind:this={filesInput} aria-label="Open files" type="file" multiple hidden onchange={() => chosen(filesInput)} />
     {/if}
-
-    <div class="cards">
-      {#if shell.local}
-        <button class="glass panel card-btn" onclick={() => shell.show('sessions')}>
-          <span class="row"><span class="dot" style="background: {color(localOk)}"></span><h3>Sessions · laicpmsdb</h3></span>
-          <span class="small">This computer · {localLine}</span>
-          <dl class="grid-kv small">
-            <dt>PostgreSQL</dt>
-            <dd>{local?.postgres.running ? `running on 127.0.0.1:${local.postgres.port}` : 'stopped'}{local?.postgres.source ? ` (${local.postgres.source})` : ''}</dd>
-            <dt>Service</dt>
-            <dd>{local?.service.running ? `${local.phase === 'ready' ? 'ready' : 'starting'} on 127.0.0.1:${local.service.port}` : 'stopped'}{local?.service.source ? ` (${local.service.source === 'dev' ? 'development checkout' : `bundle ${local.service.version ?? ''}`})` : ''}</dd>
-          </dl>
-        </button>
-      {:else}
-        <button class="glass panel card-btn" onclick={() => shell.show('sessions')}>
-          <span class="row"><span class="dot" style="background: {color(server)}"></span><h3>Sessions · laicpmsdb</h3></span>
-          <span class="muted small mono">{settings.serverUrl}</span>
-          <span class="small">{server === null ? 'checking…' : server ? 'server reachable' : 'server unreachable'}</span>
-        </button>
-      {/if}
-      <button class="glass panel card-btn" onclick={() => shell.show('images')}>
-        <span class="row"><span class="dot" style="background: {color(shell.atlas ? true : null)}"></span><h3>Images · grainatlas</h3></span>
-        <span class="small">{shell.atlas ? `build ${shell.atlas.version} (${shell.atlas.source})` : 'no build pinned yet'}</span>
-      </button>
-      <button class="glass panel card-btn" onclick={() => shell.show('reduce')}>
-        <span class="row"><span class="dot" style="background: {color(isDesktop && studio ? studio.found : null)}"></span><h3>Reduce · UPbRPy Studio</h3></span>
-        <span class="small">{!isDesktop ? 'desktop app only' : studio === null ? 'checking…' : studio.found ? (studio.kind === 'checkout' ? 'development checkout' : 'installed') : 'not found'}</span>
-        {#if studio?.path}<span class="muted small mono">{studio.path}</span>{/if}
-      </button>
-    </div>
 
     <section class="board-section stack" aria-label="Sessions">
       <Toolbar section="Sessions" bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} loaded={overview.sessions.length} refresh={identity.signedIn ? refresh : undefined} showAll={overview.sessions.length < overview.totalSessions ? showAll : undefined} busy={overview.refreshing}>
@@ -262,8 +274,16 @@
 
 <style>
   .board { width: 100%; max-width: none; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-6); }
-  .intro { gap: var(--space-3); }
+  .intro { display: flex; align-items: center; gap: var(--space-1) var(--space-3); flex-wrap: wrap; min-width: 0; }
   h1 { font-size: 1.25rem; }
+  .hint { flex: 1 1 12rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pills { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin-left: auto; min-width: 0; }
+  .pill { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 100%; min-width: 0; padding: 0.15rem var(--space-3) 0.15rem var(--space-2); border-radius: 999px; border: 1px solid var(--glass-edge); background: var(--glass); color: var(--text); font-size: 0.8rem; cursor: pointer; }
+  .pill:hover { border-color: var(--accent); }
+  .pill .dot { width: 0.5rem; height: 0.5rem; }
+  .pill .state { color: var(--text-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 16rem; }
+  .pill.problem { border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+  .pill.problem .state { color: var(--danger); }
   p { margin: 0; }
   .action-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
   .action-tile { display: flex; gap: var(--space-3); align-items: center; text-align: left; padding: var(--space-3); min-width: 0; cursor: pointer; color: var(--text); }
@@ -271,13 +291,7 @@
   .action-tile span { min-width: 0; }
   .action-tile strong { display: block; font-size: 0.88rem; }
   .action-tile small { display: block; font-size: 0.74rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .action-tiles > :global(.panel), .cards > :global(.panel) { margin-top: 0; }
-  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
-  .card-btn { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); padding: var(--space-2) var(--space-3); text-align: left; cursor: pointer; min-width: 0; }
-  .card-btn > :global(*) { max-width: 100%; overflow-wrap: anywhere; }
-  .card-btn .row { gap: var(--space-2); }
-  .card-btn:hover { border-color: var(--accent); }
-  .card-btn .grid-kv { margin: 0; }
+  .action-tiles > :global(.panel) { margin-top: 0; }
   .board-section { min-width: 0; gap: var(--space-2); }
   /* The 22.3rem minimum fits four cards in Home's real 1440px content box,
      three at 1280px and two at 1024px, including the tab's scrollbar. */
