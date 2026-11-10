@@ -8,7 +8,9 @@
 //                  verify its SHA-256 against the lock, extract it
 //   local          copy a development build (path relative to the lock file)
 //                  and record a tree hash; used when there is no url yet, or
-//                  with --prefer local
+//                  with --prefer local. When the build lies in a git checkout,
+//                  its HEAD commit and whether the checkout had uncommitted
+//                  changes are recorded too (`commit`, `dirty`).
 //
 // Per service (`"kind": "service"`, the laicpmsdb service bundle of ADR-0003):
 //   platforms.<platform>.url + sha256
@@ -147,6 +149,14 @@ async function fetchService(m, { lockDir, platform, strict, log }) {
   }
 }
 
+/** HEAD commit of the git checkout holding `dir`, and whether it has uncommitted changes; {} outside git. */
+export function gitState(dir) {
+  const head = spawnSync('git', ['-C', dir, 'rev-parse', 'HEAD'], { stdio: 'pipe', encoding: 'utf8' });
+  if (head.status !== 0 || !/^[0-9a-f]{40}$/.test(head.stdout.trim())) return {};
+  const status = spawnSync('git', ['-C', dir, 'status', '--porcelain', '--untracked-files=no'], { stdio: 'pipe', encoding: 'utf8' });
+  return { commit: head.stdout.trim(), dirty: status.status === 0 ? status.stdout.trim().length > 0 : null };
+}
+
 /**
  * @param {{ lock?: string, out?: string, prefer?: 'local'|'release', strict?: boolean, platform?: string, log?: (m: string) => void }} opts
  * @returns {Promise<{ modules: object[], services: object[], skipped: string[] }>}
@@ -193,7 +203,7 @@ export async function fetchModules(opts = {}) {
           continue;
         }
         fs.cpSync(src, staged, { recursive: true });
-        record = { source: 'local', sha256: treeHash(staged), hashKind: 'tree', from: m.local };
+        record = { source: 'local', sha256: treeHash(staged), hashKind: 'tree', from: m.local, ...gitState(src) };
       } else if (hasRelease) {
         const data = await download(m.url);
         const got = sha256(data);
@@ -219,7 +229,8 @@ export async function fetchModules(opts = {}) {
       }
       replaceDir(staged, target);
       installed.push({ name: m.name, version: String(m.version ?? '0.0.0'), entry, ...record });
-      log(`ok    ${m.name} ${m.version} (${record.source}, sha256 ${record.sha256.slice(0, 12)}…)`);
+      const at = record.commit ? `, ${record.commit.slice(0, 7)}${record.dirty ? ' with uncommitted changes' : ''}` : '';
+      log(`ok    ${m.name} ${m.version} (${record.source}${at}, sha256 ${record.sha256.slice(0, 12)}…)`);
     } finally {
       fs.rmSync(staged, { recursive: true, force: true });
     }

@@ -185,7 +185,13 @@ build has no bundled service.
 `ui/public/modules/`, checking each release archive's SHA-256. grainatlas has
 no release yet, so the lock points at its local development build
 (`../grainatlas/ui/dist`); build that in the grainatlas repository, run
-`make fetch-modules` here and restart `make dev`.
+`make fetch-modules` here and restart `make dev`. For a local build,
+`ui/public/modules/manifest.json` records the commit of the checkout it was
+copied from and whether that checkout had uncommitted changes; Settings,
+Updates, "In this build" shows it (for example `local build of f9ca787`), so a
+bundle says which grainatlas it carries. To bundle a build from another
+checkout (a clean worktree), build the shell from an upblab checkout whose
+sibling `grainatlas` folder (a symlink is fine) is that checkout.
 
 ## Updates
 

@@ -65,6 +65,32 @@ test('copies a local development build and records its tree hash', async () => {
   assert.equal(modules[0].source, 'local');
   assert.equal(modules[0].sha256, treeHash(f.build));
   assert.ok(fs.existsSync(path.join(f.out, 'grainatlas', 'index.html')));
+  assert.equal(modules[0].commit, undefined); // the fixture is not in a git checkout
+});
+
+test('a local build in a git checkout records its commit and whether it was dirty', async () => {
+  const f = fixture();
+  const git = (...args) => {
+    const r = spawnSync('git', ['-C', f.dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.trim();
+  };
+  git('init', '-q');
+  git('add', 'build');
+  git('commit', '-q', '-m', 'build');
+  const head = git('rev-parse', 'HEAD');
+  const lock = writeLock(f.dir, [{ name: 'grainatlas', version: '0.0.0-dev', url: null, sha256: null, local: 'build/dist' }]);
+  git('add', 'modules.lock.json');
+  git('commit', '-q', '-m', 'lock');
+  const clean = (await fetchModules({ lock, out: f.out, ...quiet })).modules[0];
+  assert.equal(clean.commit, git('rev-parse', 'HEAD'));
+  assert.notEqual(clean.commit, head);
+  assert.equal(clean.dirty, false);
+  fs.writeFileSync(path.join(f.build, 'index.html'), '<!doctype html><title>edited</title>');
+  const dirty = (await fetchModules({ lock, out: f.out, ...quiet })).modules[0];
+  assert.equal(dirty.dirty, true);
+  const manifest = JSON.parse(fs.readFileSync(path.join(f.out, 'manifest.json'), 'utf8'));
+  assert.equal(manifest.modules[0].commit, clean.commit);
 });
 
 test('--prefer local uses the local build even when a release is pinned', async () => {

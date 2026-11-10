@@ -6,6 +6,9 @@ export interface ModuleVersion {
   name: string;
   version: string;
   source: 'release' | 'local';
+  /** Git commit of a local build's checkout (fetch-modules), and whether it had uncommitted changes. */
+  commit?: string;
+  dirty?: boolean | null;
 }
 export interface BuildVersions {
   shell: string;
@@ -24,9 +27,10 @@ export async function moduleVersions(): Promise<ModuleVersion[]> {
   try {
     const response = await fetch('./modules/manifest.json', { cache: 'no-store' });
     if (!response.ok) return [];
-    const data = await response.json() as { modules?: { name: string; version: string; source: string }[] };
+    const data = await response.json() as { modules?: { name: string; version: string; source: string; commit?: unknown; dirty?: unknown }[] };
     return (Array.isArray(data.modules) ? data.modules : []).map((m) => ({
       name: m.name, version: m.version, source: m.source === 'release' || /^https?:\/\//.test(m.source) ? 'release' : 'local',
+      ...(typeof m.commit === 'string' && /^[0-9a-f]{40}$/.test(m.commit) ? { commit: m.commit, dirty: typeof m.dirty === 'boolean' ? m.dirty : null } : {}),
     }));
   } catch { return []; }
 }

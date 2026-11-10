@@ -75,7 +75,7 @@
 <table class="data" aria-label="In this build">
   <tbody>
     {#each versions?.modules ?? [] as module (module.name)}
-      <tr><th scope="row">{module.name}</th><td>{module.version} ({module.source === 'release' ? 'release' : 'local build'})</td></tr>
+      <tr><th scope="row">{module.name}</th><td>{module.version} ({module.source === 'release' ? 'release' : 'local build'}{module.commit ? ` of ${module.commit.slice(0, 7)}${module.dirty ? ' with uncommitted changes' : ''}` : ''})</td></tr>
     {/each}
     {#if !versions?.modules.some((m) => m.name === 'grainatlas')}<tr><th scope="row">grainatlas</th><td>not bundled</td></tr>{/if}
     <tr><th scope="row">laicpmsdb service</th><td>{versions?.service ?? 'not bundled'}</td></tr>
