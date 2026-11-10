@@ -60,3 +60,34 @@ tests, 85 Rust tests (two existing ignored), 120 Chromium/WebKit checks,
 Svelte checks, and the macOS app build. The new bundle's display name is
 UPb Lab, its identifier remains `edu.umn.upbstudio`, and its ad hoc signature
 passed verification. The Windows installer was not rebuilt on this Mac.
+
+## Round 2 measurement, 2026-11-10
+
+Release build of 82ceb97 on an M4 Pro (24 GB) with isolated settings,
+`UPBSTUDIO_VAULT=memory` (no keychain), Lab server mode pointed at a copy of
+the lab database served on a spare port. Physical footprint of the shell and
+the WebKit helpers it started. No shell code changed in this round; ac55758
+(Home pills) landed afterwards and was not measured separately.
+
+| workload | 2026-11-06 | 2026-11-10 |
+| --- | --- | --- |
+| first window | 235-242 ms | 219-271 ms |
+| Home, idle | 96 MB | 91-93 MB, idle CPU 0.0-0.05 % |
+| Images and Sessions both created (Images waiting for its package, Sessions at sign-in) | Images alone +260 MB | 427 MB: shell 90, three WebContent 75 + 61 + 27, GPU 154 |
+| Images with four apatite projects as tabs, all stitched (the grainatlas web build in Chromium, the same wasm workers the Images tab runs) | one project 3,990 MB (Demo_S_150X) | 1.45 GB after one tab, 2.5 GB after two, 4.5 GB after three, 6.7 GB after four; 6.69 GB after switching through every tab and area and 30 s idle |
+
+The second row was reached without clicking: the shell started on Images with
+a project path, then a second launch with a Qtegra CSV path was forwarded by
+the single-instance plugin and opened Sessions.
+
+The four-tab Images figure is the largest remaining cost of the shell. Each
+grainatlas tab owns a wasm worker whose memory keeps its stitch high-water
+mark (about 1.5-2.2 GB per apatite project) for as long as the tab exists;
+freeing Rust buffers inside the worker does not return it. The grainatlas
+desktop app now shares one image budget across tabs, but that cannot apply
+to wasm workers. Options, all needing design: terminate the worker of a
+hidden tab and rebuild it from the package and project when shown again
+(30-66 s of re-stitching per tab today), stitch in a short-lived worker and
+hand only the base pyramid to the tab's worker, or one worker shared by all
+tabs. Item 2 of the remaining work above (releasing hidden modules' caches)
+would not reach this memory.
