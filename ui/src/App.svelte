@@ -14,6 +14,7 @@
   import { startScheduler } from './lib/updater.svelte';
   import AccountDialog from './components/AccountDialog.svelte';
   import { identity } from './lib/identity.svelte';
+  import { canManagePeople } from './lib/people';
   import { localService } from './lib/localService.svelte';
   import { listenForLinks } from './lib/incoming';
   import { fromDataTransfer } from './lib/drop';
@@ -22,13 +23,25 @@
   import { shell, type View } from './lib/shell.svelte';
   import { desktopModules, isDesktop, logWarn } from './lib/platform';
 
-  const tabs: { id: View; label: string; hint: string }[] = [
+  const fixedTabs: { id: View; label: string; hint: string }[] = [
     { id: 'home', label: 'Home', hint: 'Overview and links' },
     { id: 'images', label: 'Images', hint: 'grainatlas' },
     { id: 'sessions', label: 'Sessions', hint: 'laicpmsdb' },
     { id: 'review', label: 'Review', hint: 'Results with their images' },
     { id: 'reduce', label: 'Reduce', hint: 'UPbRPy Studio' },
   ];
+
+  // Never carry rights from an old server while the new sign-in is being read.
+  const peopleAllowed = $derived(canManagePeople(identity.state) &&
+    !!shell.identityTarget && identity.target?.key === shell.identityTarget.key &&
+    identity.target?.server === shell.identityTarget.server);
+  const tabs = $derived(peopleAllowed
+    ? [...fixedTabs, { id: 'people' as const, label: 'People & access', hint: 'Accounts, groups and access (lab staff)' }]
+    : fixedTabs);
+
+  $effect(() => {
+    if (shell.view === 'people' && !peopleAllowed) shell.show('home');
+  });
 
   const reviewSplit = $derived(shell.view === 'review' && settings.reviewSplit);
   let updatesOpen = $state(false);
@@ -42,7 +55,7 @@
   $effect(() => {
     if (!settings.loaded || firstRun) return;
     const t = shell.identityTarget;
-    if (t) void identity.restore(t);
+    if (t) untrack(() => void identity.restore(t));
   });
 
   // Home and Account use the same session inventory, scoped to the active sign-in.
@@ -73,7 +86,7 @@
   // Images and Home work without starting the local database processes.
   $effect(() => {
     if (isDesktop && settings.loaded && localService.initialised && !firstRun &&
-        settings.mode === 'local' && (shell.view === 'sessions' || shell.view === 'review')) {
+        settings.mode === 'local' && (shell.view === 'sessions' || shell.view === 'review' || shell.view === 'people')) {
       void localService.ensureStarted().catch((err) =>
         logWarn(`[local-service] could not start: ${String(err)}`));
     }
@@ -84,7 +97,7 @@
     if (isDesktop) await publishTheme(settings.effectiveTheme);
     startScheduler();
     const last = settings.lastTab as View;
-    if (tabs.some((t) => t.id === last)) shell.view = last;
+    if (fixedTabs.some((t) => t.id === last)) shell.view = last;
     if (isDesktop) {
       await localService.init();
     }
@@ -102,7 +115,7 @@
       if (firstRun || identity.dialog) return;
       if (id.startsWith('tab:')) shell.show(id.slice(4) as View);
       else if (id === 'settings') shell.show('settings');
-      else if (id === 'module:reload' && (shell.view === 'images' || shell.view === 'sessions')) {
+      else if (id === 'module:reload' && (shell.view === 'images' || shell.view === 'sessions' || shell.view === 'people')) {
         void desktopModules.reload(shell.view);
       }
     });
@@ -114,9 +127,9 @@
     const mod = e.metaKey || e.ctrlKey;
     if (!mod) return;
     const n = Number(e.key);
-    if (n >= 1 && n <= tabs.length) {
+    if (n >= 1 && n <= fixedTabs.length) {
       e.preventDefault();
-      shell.show(tabs[n - 1].id);
+      shell.show(fixedTabs[n - 1].id);
     } else if (e.key === ',') {
       e.preventDefault();
       shell.show('settings');
@@ -154,7 +167,7 @@
           role="tab"
           class="tab"
           aria-selected={shell.view === t.id}
-          title="{t.hint} (Ctrl/⌘ {i + 1})"
+          title={i < fixedTabs.length ? `${t.hint} (Ctrl/⌘ ${i + 1})` : t.hint}
           onclick={() => shell.show(t.id)}>{t.label}</button
         >
       {/each}
@@ -199,6 +212,10 @@
     {:else if settings.loaded && (settings.mode !== '' || !isDesktop)}
       <Home active={shell.view === 'home'} />
       <Sessions active={shell.view === 'sessions'} />
+      {#if peopleAllowed}
+        <Sessions module="people" title="People & access" active={shell.view === 'people'}
+          unreachable="The People & access tab shows laicpmsdb’s accounts, groups and access page from" />
+      {/if}
       <Review active={shell.view === 'review'} imagesOnly={shell.view === 'images'} split={reviewSplit}>
         {#snippet images(active, layoutKey)}
           <Images {active} {layoutKey} />

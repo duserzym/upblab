@@ -1,7 +1,7 @@
 //! UPb Lab desktop host.
 //!
 //! One window (`main`) holding the shell webview (`shell`, the Svelte UI) and
-//! one child webview per module tab (`module-images`, `module-sessions`),
+//! one child webview per module tab (`module-images`, `module-sessions`, `module-people`),
 //! laid over the area the shell reserves for them (ADR-0002). The host owns
 //! no scientific data: it positions webviews, forwards @lab/bridge calls and
 //! deep links to the shell, probes the laicpmsdb server, launches UPbRPy

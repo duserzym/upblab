@@ -54,7 +54,7 @@ describe('opener (desktop)', () => {
     settings.serverUrl = 'http://localhost:8000';
     settings.mode = 'server';
     shell.view = 'home';
-    shell.targets = { images: null, sessions: null };
+    shell.targets = { images: null, sessions: null, people: null };
   });
 
   it('a TM4000 package goes to Images and is offered to grainatlas, never asking', async () => {

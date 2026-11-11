@@ -17,7 +17,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::bridge::{forward_open, module_name, theme_script, ThemeState};
 use crate::{MAIN_WINDOW, SCHEMES};
 
-const MODULES: [&str; 2] = ["images", "sessions"];
+const MODULES: [&str; 3] = ["images", "sessions", "people"];
 
 /// Remote origins already granted the bridge commands.
 #[derive(Default)]
@@ -297,6 +297,7 @@ mod tests {
     fn labels_only_for_known_tabs() {
         assert_eq!(label("images").unwrap(), "module-images");
         assert_eq!(label("sessions").unwrap(), "module-sessions");
+        assert_eq!(label("people").unwrap(), "module-people");
         assert!(label("shell").is_err());
         assert!(label("../x").is_err());
     }
@@ -329,6 +330,7 @@ mod tests {
     fn marker_names_the_module() {
         assert!(marker_script("images", "dark").contains("\"grainatlas\""));
         assert!(marker_script("sessions", "light").contains("\"laicpmsdb\""));
+        assert!(marker_script("people", "light").contains("\"laicpmsdb\""));
         let script = marker_script("images", "dark");
         assert!(script.contains("v: 3, minor: 1, theme: \"dark\""));
         assert!(script.contains("new MutationObserver"));

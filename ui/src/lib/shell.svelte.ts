@@ -95,7 +95,7 @@ class Shell {
   view = $state<View>('home');
   modules = $state<InstalledModule[]>([]);
   links = $state<LinkRecord[]>([]);
-  targets = $state<Record<ModuleTab, ModuleTarget | null>>({ images: null, sessions: null });
+  targets = $state<Record<ModuleTab, ModuleTarget | null>>({ images: null, sessions: null, people: null });
   studio = $state<StudioRequest | null>(null);
   /** Overlays in the shell (dialogs) must hide native module webviews, which always paint on top. */
   overlay = $state(false);
@@ -136,7 +136,7 @@ class Shell {
 
   show(view: View) {
     this.view = view;
-    if (view !== 'settings' && view !== 'account' && settings.loaded && settings.lastTab !== view) void settings.update({ lastTab: view });
+    if (view !== 'settings' && view !== 'account' && view !== 'people' && settings.loaded && settings.lastTab !== view) void settings.update({ lastTab: view });
   }
 
   async loadModules() {

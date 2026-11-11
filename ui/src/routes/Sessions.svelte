@@ -7,13 +7,23 @@
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
 
-  let { active }: { active: boolean } = $props();
+  let {
+    active,
+    module = 'sessions',
+    title = 'laicpmsdb',
+    unreachable = 'The Sessions tab shows the laicpmsdb web app from',
+  }: {
+    active: boolean;
+    module?: 'sessions' | 'people';
+    title?: string;
+    unreachable?: string;
+  } = $props();
 
   type Status = 'checking' | 'reachable' | 'unreachable';
   let status = $state<Status>('checking');
   let error = $state('');
   let checkedAt = $state<Date | null>(null);
-  const appUrl = $derived(shell.homeUrl('sessions'));
+  const appUrl = $derived(shell.homeUrl(module));
 
   async function check(url: string) {
     const r = await probe(url);
@@ -51,12 +61,12 @@
 <section class="view" class:hidden={!active}>
   {#if local}
     {#if localReady}
-      <ModuleSurface module="sessions" title="laicpmsdb" home={appUrl} target={shell.targets.sessions} {active} />
+      <ModuleSurface {module} {title} home={appUrl} target={shell.targets[module]} {active} />
     {:else}
       <div class="center"><LocalStatusPanel /></div>
     {/if}
   {:else if status === 'reachable'}
-    <ModuleSurface module="sessions" title="laicpmsdb" home={appUrl} target={shell.targets.sessions} {active} />
+    <ModuleSurface {module} {title} home={appUrl} target={shell.targets[module]} {active} />
   {:else}
     <div class="center">
       <div class="glass panel card stack">
@@ -66,7 +76,7 @@
         {:else}
           <div class="row"><span class="dot" style="background: var(--danger)"></span><h2>laicpmsdb server unreachable</h2></div>
           <p class="muted">
-            The Sessions tab shows the laicpmsdb web app from <code>{appUrl}</code>, but nothing answered there.
+            {unreachable} <code>{appUrl}</code>, but nothing answered there.
           </p>
           {#if error}<p class="faint small mono">{error}</p>{/if}
           <ul class="muted small">

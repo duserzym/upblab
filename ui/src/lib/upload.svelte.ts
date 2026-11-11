@@ -1,6 +1,5 @@
 // Home watches the handoff; the modules alone read and ingest the files.
-import type { ModuleTab } from './links';
-import type { WebSet } from './drop';
+import type { FileTab, WebSet } from './drop';
 import { identity } from './identity.svelte';
 import { MODULE_OF, opener, type OpenProgress } from './opener.svelte';
 import { desktopFiles } from './platform';
@@ -40,7 +39,7 @@ export class Upload {
   private packagePath = '';
   private unsubscribe: () => void;
 
-  constructor(readonly target: ModuleTab) {
+  constructor(readonly target: FileTab) {
     this.unsubscribe = opener.observe(event => this.progress(event));
   }
 

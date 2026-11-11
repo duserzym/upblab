@@ -18,6 +18,13 @@ sweep and reduced result.
 | Sessions | laicpmsdb | `/app/` in a native webview, from a lab server or from the laicpmsdb the app runs on this computer |
 | Review | the shell | stored results by session or mount with sample chips; Concordia, a multi-panel geochemistry board with mineral presets, depth profiles and spot details linked to Images |
 | Reduce | UPbRPy Studio | launched as its own application with a `upbr://` link and a one-time sign-in code |
+| People & access | laicpmsdb | `/app/#/people` in its own module webview, after Reduce, for accounts allowed to manage people |
+
+People & access is visible only while signed in and online, as decided by
+laicpmsdb’s `can_manage_people` account field (falling back to `is_lab_staff`
+on older servers). laicpmsdb enforces access to the page and its management
+API. This tab has no numbered shortcut and is never restored on restart;
+losing permission while viewing it returns to Home.
 
 Status: roadmap phases 0 and 1 done, phase 2b (ADR-0003, "This computer"
 mode) implemented on the shell side: the app bundles PostgreSQL 17, runs

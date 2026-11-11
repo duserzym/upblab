@@ -37,7 +37,7 @@ struct NotifyPayload<'a> {
 pub fn module_name(webview_label: &str) -> &str {
     match webview_label {
         "module-images" => "grainatlas",
-        "module-sessions" => "laicpmsdb",
+        "module-sessions" | "module-people" => "laicpmsdb",
         other => other,
     }
 }
@@ -164,7 +164,7 @@ pub fn module_theme<R: Runtime>(
             .set_theme(Some(native))
             .map_err(|err| err.to_string())?;
     }
-    for label in ["module-images", "module-sessions"] {
+    for label in ["module-images", "module-sessions", "module-people"] {
         if let Some(webview) = app.get_webview(label) {
             if let Err(err) = webview.eval(&script) {
                 log::warn!("could not publish theme to {label}: {err}");
@@ -310,6 +310,13 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    #[test]
+    fn module_labels_name_their_hosted_app() {
+        assert_eq!(module_name("module-images"), "grainatlas");
+        assert_eq!(module_name("module-sessions"), "laicpmsdb");
+        assert_eq!(module_name("module-people"), "laicpmsdb");
+        assert_eq!(module_name("shell"), "shell");
+    }
     #[test]
     fn themes_accept_only_resolved_values() {
         let state = ThemeState::default();

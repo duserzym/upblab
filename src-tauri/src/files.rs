@@ -688,6 +688,8 @@ mod tests {
     #[test]
     fn labels_for_known_tabs_only() {
         assert_eq!(module_label("images").unwrap(), "module-images");
+        assert_eq!(module_label("sessions").unwrap(), "module-sessions");
+        assert!(module_label("people").is_err()); // not a file-drop target
         assert!(module_label("shell").is_err());
     }
 }

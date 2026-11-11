@@ -182,6 +182,7 @@ export interface Account {
   sign_in_methods?: string[];
   groups?: { id: string; name: string; description: string }[];
   is_lab_staff?: boolean;
+  can_manage_people?: boolean;
   is_admin?: boolean;
   [field: string]: unknown;
 }

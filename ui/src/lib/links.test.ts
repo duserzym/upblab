@@ -142,6 +142,17 @@ describe('moduleUrl', () => {
     );
   });
 
+  it('maps People routes through the same server hash router', () => {
+    expect(moduleUrl('people', '/app/people?group=demo', {
+      ...bases, server: 'https://lab.example/db/', theme: 'dark',
+    })).toBe('https://lab.example/db/app/?theme=dark#/people?group=demo');
+  });
+
+  it('keeps incoming laicpmsdb links in Sessions and adds no people deep link', () => {
+    expect(resolve(`laicpmsdb://session/${A}`)).toMatchObject({ tab: 'sessions' });
+    expect(resolve('laicpmsdb://people')).toMatchObject({ kind: 'refused' });
+  });
+
   it('maps grainatlas routes onto the bundled build', () => {
     expect(moduleUrl('images', `/atlas/?project=${A}&spot=${B}`, bases)).toBe(
       `tauri://localhost/modules/grainatlas/index.html?server=http%3A%2F%2Flocalhost%3A8000&project=${A}&spot=${B}`,
@@ -162,7 +173,13 @@ describe('moduleUrl', () => {
 
   it('gives module home URLs', () => {
     expect(moduleHome('sessions', bases)).toBe('http://localhost:8000/app/');
+    expect(moduleHome('people', bases)).toBe('http://localhost:8000/app/#/people');
     expect(moduleHome('images', bases)).toBe('tauri://localhost/modules/grainatlas/index.html');
+  });
+
+  it.each(['light', 'dark'] as const)('gives People a themed home with a server prefix (%s)', (theme) => {
+    expect(moduleHome('people', { ...bases, server: 'https://lab.example/db/', theme }))
+      .toBe(`https://lab.example/db/app/?theme=${theme}#/people`);
   });
 });
 

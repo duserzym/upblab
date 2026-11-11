@@ -18,8 +18,8 @@
 //
 // Anything else is refused; the caller logs the refusal.
 
-export type TabId = 'home' | 'images' | 'sessions' | 'review' | 'reduce';
-export type ModuleTab = 'images' | 'sessions';
+export type TabId = 'home' | 'images' | 'sessions' | 'review' | 'reduce' | 'people';
+export type ModuleTab = 'images' | 'sessions' | 'people';
 
 export const SCHEMES = ['laicpmsdb', 'grainatlas', 'upbr'] as const;
 export type Scheme = (typeof SCHEMES)[number];
@@ -154,6 +154,7 @@ function joinBase(base: string, rest: string): string {
 
 /** Entry URL of a module tab with no particular route. */
 export function moduleHome(tab: ModuleTab, bases: ModuleBases): string {
+  if (tab === 'people') return moduleUrl(tab, '/app/people', bases);
   return withTheme(tab === 'sessions' ? joinBase(bases.server, '/app/') : joinBase(bases.atlas, 'index.html'), bases.theme);
 }
 
@@ -167,7 +168,7 @@ export function moduleUrl(tab: ModuleTab, route: string, bases: ModuleBases): st
 }
 
 function routeUrl(tab: ModuleTab, route: string, bases: ModuleBases): string {
-  if (tab === 'sessions') {
+  if (tab === 'sessions' || tab === 'people') {
     const rest = route.replace(/^\/app\/?/, '');
     return joinBase(bases.server, '/app/') + (rest ? `#/${rest}` : '');
   }

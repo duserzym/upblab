@@ -51,6 +51,18 @@ describe('shell.handleLink', () => {
     expect(shell.targets.images?.url).toContain('project=p&spot=s');
   });
 
+  it('does not persist People as the last workspace tab', () => {
+    settings.loaded = true;
+    settings.lastTab = 'review';
+    const update = vi.spyOn(settings, 'update');
+    shell.show('people');
+    expect(shell.view).toBe('people');
+    expect(settings.lastTab).toBe('review');
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+    settings.loaded = false;
+  });
+
   it('switches to Sessions with the hash route of an acquisition', async () => {
     expect(await shell.handleLink(`laicpmsdb://acquisition/${A}`, 'os')).toBe(true);
     expect(shell.view).toBe('sessions');

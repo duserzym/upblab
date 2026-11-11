@@ -95,4 +95,9 @@ describe('module upload outcomes', () => {
     onModuleEvent(seen, 'sessions');
     expect(opener.seen).toHaveBeenCalledWith('laicpmsdb', seen);
   });
+
+  it('names People notifications as laicpmsdb', () => {
+    onModuleEvent({ type: 'lab.people.changed' }, 'people');
+    expect(platform.logInfo).toHaveBeenCalledWith('[bridge] laicpmsdb: {"type":"lab.people.changed"}');
+  });
 });

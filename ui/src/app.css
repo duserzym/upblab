@@ -24,9 +24,9 @@ body { min-height: 0; overflow: hidden; }
   user-select: none;
   -webkit-user-select: none;
 }
-.brand { font-weight: 650; letter-spacing: -0.01em; padding: 0 var(--space-2); display: inline-flex; align-items: center; gap: var(--space-2); }
+.brand { font-weight: 650; letter-spacing: -0.01em; padding: 0 var(--space-2); display: inline-flex; align-items: center; gap: var(--space-2); flex: none; white-space: nowrap; }
 .brand .mark { width: 22px; height: 22px; flex: none; }
-.tabs { display: flex; gap: var(--space-1); }
+.tabs { display: flex; gap: var(--space-1); flex: none; }
 .tab {
   border: 1px solid transparent;
   background: transparent;
@@ -35,6 +35,7 @@ body { min-height: 0; overflow: hidden; }
   border-radius: 999px;
   cursor: pointer;
   font-weight: 550;
+  white-space: nowrap;
   transition: background var(--motion), color var(--motion), border-color var(--motion);
 }
 .tab:hover { color: var(--text); background: var(--row-hover); }
@@ -44,7 +45,7 @@ body { min-height: 0; overflow: hidden; }
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .tab.icon { display: inline-grid; place-items: center; padding: 0.35rem; }
-.tab.account { display: inline-flex; align-items: center; gap: var(--space-2); max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab.account { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab.account:not(.signed-in) { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text); }
 
 .content {

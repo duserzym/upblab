@@ -85,7 +85,8 @@
   });
 
   onDestroy(() => {
-    if (isDesktop && shown) void desktopModules.hide(module);
+    // Hide after any queued open, including when permission removes this surface.
+    if (isDesktop) queue(() => desktopModules.hide(module));
     unregisterFrame(module);
   });
 
@@ -150,7 +151,7 @@
   <iframe
     class="surface"
     bind:this={iframe}
-    name={frameName(module)}
+    name={frameName(module === 'people' ? 'laicpmsdb' : module)}
     {src}
     {title}
     referrerpolicy="same-origin"

@@ -16,7 +16,9 @@
 // Images and CSVs in one set: the larger group wins, images on a tie.
 
 import type { OpenFilesKind } from '@lab/bridge';
-import type { ModuleTab } from './links';
+
+/** Only these module tabs accept dropped or uploaded files. */
+export type FileTab = 'images' | 'sessions';
 
 export interface DropRoot {
   /** Last path segment: the folder or file name. */
@@ -43,7 +45,7 @@ export interface DropPick {
 
 export type Routed =
   | {
-      target: ModuleTab;
+      target: FileTab;
       kind: OpenFilesKind;
       /** A name for the set: the folder, the zip, or the files' common stem. */
       name: string;

@@ -10,19 +10,18 @@
 //            postMessage and gets them by structured clone (lib/incoming.ts)
 
 import type { OpenFilesTransfer } from '@lab/bridge';
-import { classify, expandOpened, formatBytes, type Routed, type WebSet } from './drop';
-import type { ModuleTab } from './links';
+import { classify, expandOpened, formatBytes, type FileTab, type Routed, type WebSet } from './drop';
 import { desktopFiles, isDesktop, logInfo, logWarn } from './platform';
 import { shell } from './shell.svelte';
 
-export const MODULE_OF: Record<ModuleTab, string> = { images: 'grainatlas', sessions: 'laicpmsdb' };
-const TAB_OF: Record<string, ModuleTab> = { grainatlas: 'images', laicpmsdb: 'sessions', images: 'images', sessions: 'sessions' };
+export const MODULE_OF: Record<FileTab, string> = { images: 'grainatlas', sessions: 'laicpmsdb' };
+const TAB_OF: Record<string, FileTab> = { grainatlas: 'images', laicpmsdb: 'sessions', images: 'images', sessions: 'sessions' };
 
 /** How long a module has to take its files before Home says it does not read open-files yet. */
 export const TAKE_TIMEOUT_MS = 10_000;
 
 export type OpenProgress =
-  | { type: 'listed'; from: string; routed: Extract<Routed, { target: ModuleTab }> }
+  | { type: 'listed'; from: string; routed: Extract<Routed, { target: FileTab }> }
   | { type: 'offered'; from: string; id: string }
   | { type: 'taken'; id: string; module: string; files: number; bytes: number }
   | { type: 'error'; from: string; reason: string }
@@ -34,7 +33,7 @@ export interface OpenStatus {
   state: 'busy' | 'offered' | 'taken' | 'refused' | 'failed';
 }
 
-function describe(r: Extract<Routed, { target: ModuleTab }>): string {
+function describe(r: Extract<Routed, { target: FileTab }>): string {
   const kinds: Record<string, string> = {
     package: 'TM4000 package',
     area: 'area folder',
@@ -54,7 +53,7 @@ class Opener {
   /** The latest open, for Home. */
   status = $state<OpenStatus | null>(null);
   /** Web delivery: files waiting for a module iframe. */
-  private web: Partial<Record<ModuleTab, OpenFilesTransfer>> = {};
+  private web: Partial<Record<FileTab, OpenFilesTransfer>> = {};
   private waiting = new Map<string, { module: string; what: string; from: string; timer: ReturnType<typeof setTimeout> }>();
   // A webview can take a nudged offer before files_offer returns to the shell.
   private earlyTaken = new Map<string, { module: string; files: number; bytes: number }>();
@@ -69,14 +68,14 @@ class Opener {
     this.report({ type: 'outcome', module, event });
     shell.note(String(event.name ?? 'images'), module, String(event.outcome ?? ''));
   }
-  private destination(r: Routed, want?: ModuleTab): Routed {
+  private destination(r: Routed, want?: FileTab): Routed {
     if (!want || !r.target || r.target === want) return r;
     return { target: null, reason: want === 'sessions'
       ? 'This button takes a Rich CSV, per-spot export folder, zip, or a Rich CSV and its per-spot folder.'
       : 'This button takes an SEM package folder or a .grainatlas project folder.' };
   }
   /** Web delivery: nudge a module iframe (set by lib/incoming.ts). */
-  pushFrame: ((tab: ModuleTab) => void) | null = null;
+  pushFrame: ((tab: FileTab) => void) | null = null;
 
   private refuse(what: string, from: string, reason: string) {
     this.status = { what, outcome: reason, state: 'refused' };
@@ -94,13 +93,13 @@ class Opener {
   }
 
   /** Show the tab; Sessions opens its ingest route (desktop with the path, `laicpmsdb://ingest?path=`). */
-  private route(r: Extract<Routed, { target: ModuleTab }>, from: string) {
+  private route(r: Extract<Routed, { target: FileTab }>, from: string) {
     if (r.target === 'images') shell.show('images');
     else if (isDesktop && r.path) void shell.handleLink(`laicpmsdb://ingest?path=${encodeURIComponent(r.path)}`, from);
     else shell.go('sessions', '/app/ingest');
   }
 
-  private offered(id: string, r: Extract<Routed, { target: ModuleTab }>, what: string, from: string) {
+  private offered(id: string, r: Extract<Routed, { target: FileTab }>, what: string, from: string) {
     const module = MODULE_OF[r.target];
     const outcome = `${r.target === 'images' ? 'Images' : 'Sessions'}: ${describe(r)} handed to ${module}`;
     this.status = { what, outcome, state: 'offered' };
@@ -124,7 +123,7 @@ class Opener {
   }
 
   /** Desktop: paths from a drop, the OS or the Open dialog. */
-  async openPaths(paths: string[], from: string, want?: ModuleTab): Promise<Routed> {
+  async openPaths(paths: string[], from: string, want?: FileTab): Promise<Routed> {
     const list = expandOpened(paths);
     const what = list.length <= 1 ? (list[0] ?? '') : `${list[0]} and ${list.length - 1} more`;
     if (!list.length) return { target: null, reason: 'nothing to open' };
@@ -158,7 +157,7 @@ class Opener {
   }
 
   /** Web delivery: files dropped on the shell page or chosen in Home. */
-  openWebFiles(set: WebSet, from: string, want?: ModuleTab): Routed {
+  openWebFiles(set: WebSet, from: string, want?: FileTab): Routed {
     const what = set.roots.length <= 1 ? (set.roots[0]?.name ?? '') : `${set.roots[0].name} and ${set.roots.length - 1} more`;
     const r = this.destination(classify(set.roots, set.entries), want);
     if (!r.target) {

@@ -228,12 +228,12 @@ class Identity {
     if (this.restoring === id) return;
     this.restoring = id;
     const switched = this.target?.key !== target.key || this.target?.server !== target.server;
+    if (switched) this.changed(SIGNED_OUT);
     this.target = target;
     this.checking = true;
     try {
       const next = await this.backend.restore(target);
       if (this.restoring !== id) return; // superseded
-      if (switched) this.state = SIGNED_OUT;
       this.changed(next);
       if (next.error && !next.signedIn) this.error = next.error;
     } catch (err) {
