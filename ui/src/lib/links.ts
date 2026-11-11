@@ -9,6 +9,8 @@
 //   laicpmsdb://mount/<id>                -> Sessions, /app/mounts/<id> (the mount page with its atlas)
 //   laicpmsdb://ingest?path=<folder>      -> Sessions, /app/ingest?path=<folder> (desktop: the ingest dialog)
 //   laicpmsdb://search?label=<label>      -> Sessions, /app/search?label=<label>
+//   laicpmsdb://data-model[/<table>[/<column>]] -> Sessions, /app/data-model[/…] (laicpmsdb's Data Model tab)
+//   laicpmsdb://method-code/<CODE>        -> Sessions, /app/method-codes/<CODE> (laicpmsdb's Method Codes tab)
 //   grainatlas://project/<id>             -> Images,   /atlas/?project=<id>
 //   grainatlas://project/<id>/spot/<id>   -> Images,   /atlas/?project=<id>&spot=<id>
 //   upbr://session/<id>?server=&code=     -> launch UPbRPy Studio in database mode (docs/WORKFLOW.md 4)
@@ -88,6 +90,18 @@ export function resolve(input: string): Resolution {
         }
         if (!code || !/^[A-Za-z0-9._~-]{1,512}$/.test(code)) return refuse(url, 'sign-in callback without a valid code');
         return { kind: 'auth', code, url };
+      }
+      // Data model and method code pages: table and column names, and codes, have
+      // their own strict shapes (laicpmsdb docs/data_model_and_method_codes.md).
+      if (kind === 'data-model' && parts.length <= 3) {
+        const names = parts.slice(1);
+        if (names.some((p) => !/^[a-z_][a-z0-9_]{0,62}$/.test(p))) return refuse(url, 'invalid table or column name');
+        return { kind: 'tab', tab: 'sessions', route: ['/app/data-model', ...names].join('/'), url };
+      }
+      if (kind === 'method-code' && parts.length === 2) {
+        const code = id.toUpperCase();
+        if (!/^[A-Z]{2}(-[A-Z0-9]{1,16}){0,3}$/.test(code)) return refuse(url, 'invalid method code');
+        return { kind: 'tab', tab: 'sessions', route: `/app/method-codes/${code}`, url };
       }
       const routes: Record<string, string> = {
         acquisition: 'acquisitions',

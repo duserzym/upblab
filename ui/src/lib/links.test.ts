@@ -220,3 +220,28 @@ describe('live theme URL handling', () => {
     expect(withoutTheme('/atlas/')).toBe('/atlas/');
   });
 });
+
+describe('resolve: laicpmsdb data model and method codes', () => {
+  it('data model overview, table and column -> Sessions tab', () => {
+    expect(resolve('laicpmsdb://data-model')).toMatchObject({ kind: 'tab', tab: 'sessions', route: '/app/data-model' });
+    expect(resolve('laicpmsdb://data-model/acquisition')).toMatchObject({ route: '/app/data-model/acquisition' });
+    expect(resolve('laicpmsdb://data-model/acquisition/started_at')).toMatchObject({
+      route: '/app/data-model/acquisition/started_at',
+    });
+    expect(moduleUrl('sessions', '/app/data-model/acquisition/started_at', { server: 'http://h', atlas: '' })).toBe(
+      'http://h/app/#/data-model/acquisition/started_at',
+    );
+  });
+
+  it('method code -> Sessions tab, upper-cased', () => {
+    expect(resolve('laicpmsdb://method-code/rd-dh-poly')).toMatchObject({ tab: 'sessions', route: '/app/method-codes/RD-DH-POLY' });
+  });
+
+  it('refuses malformed names and codes', () => {
+    expect(resolve('laicpmsdb://data-model/Acquisition')).toMatchObject({ kind: 'refused' });
+    expect(resolve('laicpmsdb://data-model/a/b/c')).toMatchObject({ kind: 'refused' });
+    expect(resolve('laicpmsdb://data-model/acquisition/started_at%3Fx')).toMatchObject({ kind: 'refused' });
+    expect(resolve('laicpmsdb://method-code/R')).toMatchObject({ kind: 'refused' });
+    expect(resolve('laicpmsdb://method-code/RD-DH-POLY-X-Y')).toMatchObject({ kind: 'refused' });
+  });
+});
