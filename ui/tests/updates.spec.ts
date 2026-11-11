@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function openPreview(page: Page, theme: 'light' | 'dark', state: string) {
   await page.addInitScript((theme) => {
-    localStorage.setItem('upbstudio.settings', JSON.stringify({ theme, themeChosen: true, mode: 'server', lastTab: 'home' }));
+    localStorage.setItem('upbstudio.settings', JSON.stringify({ theme, themeChosen: true, mode: 'server', lastTab: 'home', updateAuto: false }));
   }, theme);
   await page.route('**/modules/manifest.json', (route) => route.fulfill({ json: { modules: [
     { name: 'grainatlas', version: '0.11.0-test', source: 'local', sha256: 'invented', entry: 'modules/grainatlas/index.html' },
@@ -12,7 +12,7 @@ async function openPreview(page: Page, theme: 'light' | 'dark', state: string) {
   await page.goto(`./?update-preview=${state}`);
 }
 async function insideViewport(page: Page) {
-  for (const selector of ['[data-testid="version-chip"]', 'header .account', 'header button[aria-label="Settings"]']) {
+  for (const selector of ['[data-testid="check-updates"]', 'header .account', 'header button[aria-label="Settings"]']) {
     const box = await page.locator(selector).boundingBox();
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -28,17 +28,21 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     test(`updates ready ${theme} ${width}x${height}`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await openPreview(page, theme, 'ready');
-      const chip = page.getByTestId('version-chip');
-      await expect(chip).toHaveText('Update ready, restart');
-      await expect(page.locator('header').getByTestId('version-chip')).toBeVisible();
-      expect((await chip.boundingBox())!.width).toBeLessThanOrEqual(200);
+      const button = page.getByTestId('check-updates');
+      await expect(button).toHaveAttribute('data-badge', 'true');
+      await expect(page.locator('header').getByTestId('check-updates')).toBeVisible();
+      expect((await button.boundingBox())!.width).toBeLessThanOrEqual(36);
+      await button.click();
+      const popover = page.getByTestId('check-updates-popover');
+      await expect(popover).toContainText('v0.2.0 is ready');
+      await expect(popover.getByRole('button', { name: 'Restart to update' })).toBeVisible();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await insideViewport(page);
       if (process.env.SCREENSHOTS === '1') {
         await mkdir('../docs/screenshots', { recursive: true });
         await page.screenshot({ path: `../docs/screenshots/updates-ready-${theme}-${width}x${height}.png` });
       }
-      await chip.click();
+      await popover.getByRole('link', { name: 'Update settings…' }).click();
       const panel = page.getByTestId('updates-panel');
       await expect(panel).toBeInViewport({ ratio: 1 });
       await expect(panel).toContainText('ready to install');
@@ -49,13 +53,20 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await insideViewport(page);
       if (process.env.SCREENSHOTS === '1') await page.screenshot({ path: `../docs/screenshots/updates-panel-${theme}-${width}x${height}.png` });
     });
-    for (const [state, text] of [['available', 'Update available'], ['none', 'Up to date']]) {
+    for (const [state, text] of [['available', 'Update available: v0.2.0'], ['none', 'Up to date (v0.1.0)']]) {
       test(`updates ${state} ${theme} ${width}x${height}`, async ({ page }) => {
         await page.setViewportSize({ width, height });
         await openPreview(page, theme, state);
-        await expect(page.getByTestId('version-chip')).toHaveText(text);
+        const button = page.getByTestId('check-updates');
+        await button.click();
+        await expect(page.getByTestId('check-updates-popover')).toContainText(text);
         await insideViewport(page);
-        if (state === 'none') await expect(page.getByTestId('version-chip')).toHaveText('v0.1.0', { timeout: 7000 });
+        if (state === 'none') {
+          // The result stays in the popover after the old chip's five-second feedback expires.
+          await page.waitForTimeout(5100);
+          await expect(page.getByTestId('check-updates-popover')).toContainText(text);
+          await expect(button).not.toHaveAttribute('data-badge');
+        }
       });
     }
   }

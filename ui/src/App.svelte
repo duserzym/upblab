@@ -10,7 +10,7 @@
   import Review from './routes/Review.svelte';
   import Settings from './routes/Settings.svelte';
   import FirstRun from './components/FirstRun.svelte';
-  import VersionChip from './components/VersionChip.svelte';
+  import CheckUpdatesButton from './components/CheckUpdatesButton.svelte';
   import { startScheduler } from './lib/updater.svelte';
   import AccountDialog from './components/AccountDialog.svelte';
   import { identity } from './lib/identity.svelte';
@@ -31,6 +31,7 @@
   ];
 
   const reviewSplit = $derived(shell.view === 'review' && settings.reviewSplit);
+  let updatesOpen = $state(false);
 
   // Desktop with no mode stored yet: the first-run wizard (ADR-0003).
   // Waits for the host's status, which says whether "This computer" can run.
@@ -53,9 +54,9 @@
     untrack(() => void overview.load());
   });
 
-  // Native module webviews paint over the shell page: hide them under the dialog.
+  // Native module webviews paint over the shell page: hide them under shell overlays.
   $effect(() => {
-    shell.overlay = identity.dialog;
+    shell.overlay = identity.dialog || updatesOpen;
   });
 
   // Serialise updates so a rapid switch cannot leave the host on an older theme.
@@ -159,7 +160,7 @@
       {/each}
     </div>
     <span class="spacer"></span>
-    <VersionChip />
+    <CheckUpdatesButton onopenchange={(open) => { updatesOpen = open; }} />
     {#if opener.dragging}
       <span class="drop-hint" role="status">Drop to open: images go to Images, Qtegra exports to Sessions</span>
     {/if}

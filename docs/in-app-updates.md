@@ -2,8 +2,8 @@
 
 Every app of the lab workflow updates itself the way repohub and CodexBar do:
 a quiet check in the background, a download when allowed, and one "Update
-ready, restart now" action. The version chip is always visible in the header,
-and a click there opens the Updates panel. The last section describes the
+ready, restart now" action. The update icon is always visible in the header,
+and a click checks for updates and opens a popover. The last section describes the
 UPb Lab implementation.
 
 ## Mechanism (Tauri apps)
@@ -19,8 +19,8 @@ UPb Lab implementation.
   downloaded bytes and restarts the app.
 - The page checks 8 seconds after launch and every 6 hours. With
   "Download updates automatically" on (the default), an available update is
-  downloaded quietly and the chip turns into "Update ready, restart". With it
-  off, the chip says "Update available" and the panel offers Download.
+  downloaded quietly and the icon gains a dot when ready. With it off, the
+  icon gains a dot when an update is available and the popover offers Download.
 - Channels: **Stable** reads `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`,
   which GitHub resolves to the newest published, non-pre-release release.
   **Beta** lists the repository's releases through the GitHub API, skips
@@ -29,18 +29,23 @@ UPb Lab implementation.
   channel receives it.
 - Hosted inside UPb Lab (the `@lab/bridge` transport is `tauri` or
   `postMessage`), a module never runs its own updater: the shell updates
-  itself and the modules it pins in `modules.lock.json`. The chip is hidden
+  itself and the modules it pins in `modules.lock.json`. The module's update button is hidden
   there; the shell's own Updates panel lists the module versions.
-- The static web build (no Tauri) shows the version chip but cannot update
-  itself; the panel says so and links to the releases page.
+- The static web build (no Tauri) shows the update icon but cannot update
+  itself; the popover explains that its server supplies the version.
 
 ## What the user sees
 
-- **Version chip**: a small pill in the header of the window on
-  every screen: `v1.2.3`. It becomes `Update available` or
-  `Update ready, restart` with a dot when there is something to do, shows a
-  spinner while checking or downloading, and `Check failed` after an error.
-  Clicking it opens Settings > Updates.
+- **Check for updates**: a circular arrow beside the account and Settings
+  buttons. The tooltip and popover show the current version. Clicking checks
+  immediately and opens an anchored popover with the result and any Download,
+  Restart to update or download-page action. A running check or download is
+  reused. The arrow rotates while busy unless reduced motion is preferred.
+  An accent dot marks an available or ready update, including unsupported
+  installs with a known release. A standards warning uses a warning-coloured
+  dot and adds its message to the popover. Escape, an outside click or a
+  second button click closes it. The Update settings link opens Settings >
+  Updates. Bundled module versions appear here when the manifest is present.
 - **Settings > Updates**: current version, the last check time and result,
   **Check now**, **Download** (when automatic downloads are off), **Restart to
   update** (when the download is done), "Download updates automatically",
@@ -85,14 +90,18 @@ them as workflow artifacts without publishing a release; it is the dry run.
 
 ## Checks in the repository
 
-- Unit tests cover version comparison, channel selection and the update state
-  machine (`updates.test.*`).
+- Unit tests cover version comparison, channel selection, the update state
+  machine, friendly errors and the button presentation (`updates.test.*`).
 - Browser tests check the ready panel and the ready, available and up-to-date
-  chip at 1440 x 900 and 1280 x 800, light and dark. The page honours
-  `?update-preview=ready|available|downloading|error|none|unsupported` outside
-  Tauri.
-- With `SCREENSHOTS=1`, browser tests save screenshots of the chip and panel
-  in `docs/screenshots/`.
+  popover at 1440 x 900 and 1280 x 800, light and dark. Button tests also
+  cover 1512 x 982 and the minimum 1024 x 640 window. The page honours
+  `?update-preview=idle|checking|ready|available|downloading|error|none|unsupported`
+  outside Tauri. Manual checks restore the scenario after 600 ms; checking
+  stays busy indefinitely and downloading continues without another check.
+- With `SCREENSHOTS=1`, browser tests save screenshots of the icon, popover
+  and panel in `docs/screenshots/`. The button tests write
+  `check-updates-idle.png` and `check-updates-available.png` at 1512 x 982;
+  `SHOT_DIR` overrides their output directory.
 
 ## UPb Lab specifics
 
@@ -100,14 +109,14 @@ them as workflow artifacts without publishing a release; it is the dry run.
   side `ui/src/lib/updates.ts` (pure logic, `updates.test.ts` next to it),
   `ui/src/lib/updater.svelte.ts` (scheduler and Tauri calls),
   `ui/src/lib/versions.ts` (what the build contains),
-  `ui/src/components/VersionChip.svelte` and the Updates panel in
+  `ui/src/components/CheckUpdatesButton.svelte` and the Updates panel in
   `ui/src/routes/Settings.svelte`.
 - The app command ACL requires `permissions/updates.toml` and
   `capabilities/updates.json` under `src-tauri/`, scoped only to the shell
   webview. No updater plugin JavaScript permissions are granted.
-- The chip sits in the header bar, right of the tabs: on the desktop the
-  module webviews cover the content area, so a bottom-right chip on the shell
-  page would be hidden under them.
+- The icon replaces the version chip in the header bar, right of the tabs.
+  On the desktop the module webviews cover the content area, so opening the
+  popover hides those views through the same overlay flag as the account dialog.
 - Settings > Updates also lists what this build contains: the grainatlas web
   build pinned in `modules.lock.json` (release or local build), the laicpmsdb
   service bundle, and the UPbRPy Studio found on this computer. The modules

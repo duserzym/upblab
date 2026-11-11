@@ -7,6 +7,7 @@ export interface FakeOptions {
   /** Stored settings (plugin-store); mode '' shows the first-run wizard. */
   store: Record<string, unknown>;
   fixtures?: Record<string, unknown>;
+  standards?: { warning: boolean; message: string; changed: string[] };
   signedIn?: boolean;
   sessionPaths?: string[];
   folderPaths?: string[];
@@ -73,6 +74,8 @@ export function installFakeTauri(opts: FakeOptions) {
           return { reachable: true };
         case 'studio_status':
           return { found: false, path: null, error: 'UPbRPy Studio is not installed' };
+        case 'standards_check':
+          return opts.standards ?? null;
         case 'auth_restore':
           return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { username: 'demo', display_name: 'Demo analyst' } : null, offline: false };
         case 'module_theme':

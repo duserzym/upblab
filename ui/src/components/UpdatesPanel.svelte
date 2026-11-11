@@ -5,7 +5,7 @@
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
   import { check, checkStandards, download, install, updater, updatePreview } from '../lib/updater.svelte';
-  import { RELEASES_PAGE } from '../lib/updates';
+  import { friendlyUpdateError, RELEASES_PAGE } from '../lib/updates';
   import { collectVersions, type BuildVersions } from '../lib/versions';
 
   const standardsPage = 'https://github.com/duserzym/upb-standards';
@@ -20,7 +20,7 @@
       : status.kind === 'downloading' ? `Downloading ${status.info.version}${status.pct === null ? '…' : ` · ${status.pct}%`}`
       : status.kind === 'ready' ? `Version ${status.info.version} is ready to install`
       : status.kind === 'installing' ? 'Installing and restarting…'
-      : status.kind === 'error' ? `Update check failed: ${status.message}`
+      : status.kind === 'error' ? friendlyUpdateError(status.message)
       : status.kind === 'unsupported' ? `${status.reason}${status.info ? ` Version ${status.info.version} is available.` : ''}`
       : 'Checks run automatically in the background.',
   );

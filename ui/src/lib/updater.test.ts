@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { UpdateInfo } from './updates';
 const mocks = vi.hoisted(() => ({
+  desktop: true,
   invoke: vi.fn(), listen: vi.fn(), off: vi.fn(),
   settings: { updateChannel: 'stable', updateAuto: true, updateLastCheck: 0, update: vi.fn() },
 }));
-vi.mock('./platform', () => ({ isDesktop: true }));
+vi.mock('./platform', () => ({ get isDesktop() { return mocks.desktop; } }));
 vi.mock('./settings.svelte', () => ({ settings: mocks.settings }));
 vi.mock('./versions', () => ({ shellVersion: async () => '0.1.0' }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: mocks.invoke }));
@@ -13,6 +14,7 @@ const info: UpdateInfo = { version: '0.2.0', currentVersion: '0.1.0', notes: nul
 beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
+  mocks.desktop = true;
   mocks.settings.updateChannel = 'stable';
   mocks.settings.updateAuto = true;
   mocks.settings.updateLastCheck = 0;
@@ -45,12 +47,58 @@ it('retains the available state when automatic downloads are disabled', async ()
   expect(runtime.updater.status).toEqual({ kind: 'available', info });
   expect(mocks.invoke).not.toHaveBeenCalledWith('update_download', undefined);
 });
-it('formats an unconfigured key error and records the check time', async () => {
+it('preserves the diagnostic, records friendly feedback and the check time', async () => {
   mocks.invoke.mockRejectedValue(new Error('Updater public key is not configured'));
   const runtime = await import('./updater.svelte');
   await runtime.check(true);
-  expect(runtime.updater.status).toEqual({ kind: 'error', message: 'Updates are not configured for this build yet' });
+  expect(runtime.updater.status).toEqual({ kind: 'error', message: 'Error: Updater public key is not configured' });
+  expect(runtime.updater.lastResult).toBe('Updates are not configured for this build yet.');
   expect(mocks.settings.updateLastCheck).toBeGreaterThan(0);
+});
+it.each(['idle', 'none', 'available', 'downloading', 'ready', 'error', 'unsupported'])(
+  'a manual preview check restores the %s scenario after 600 ms', async (scenario) => {
+    mocks.desktop = false;
+    vi.stubGlobal('location', { search: `?update-preview=${scenario}` });
+    const runtime = await import('./updater.svelte');
+    const initial = runtime.updater.status;
+    const pending = runtime.check(true);
+    if (scenario === 'downloading') {
+      await pending;
+      expect(runtime.updater.status).toEqual(initial);
+    } else {
+      expect(runtime.updater.status.kind).toBe('checking');
+      await vi.advanceTimersByTimeAsync(599);
+      expect(runtime.updater.status.kind).toBe('checking');
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(runtime.updater.status.kind).toBe(scenario === 'idle' ? 'none' : scenario);
+    }
+    expect(mocks.invoke).not.toHaveBeenCalled();
+  },
+);
+it('keeps the checking preview busy indefinitely without issuing another check', async () => {
+  mocks.desktop = false;
+  vi.stubGlobal('location', { search: '?update-preview=checking' });
+  const runtime = await import('./updater.svelte');
+  await runtime.check(true);
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(runtime.updater.status).toEqual({ kind: 'checking' });
+  expect(mocks.settings.update).not.toHaveBeenCalled();
+  expect(mocks.invoke).not.toHaveBeenCalled();
+});
+it('opening during a background check does not start another request', async () => {
+  let resolveCheck!: (value: UpdateInfo) => void;
+  mocks.settings.updateAuto = false;
+  mocks.invoke.mockImplementation(async (command) => command === 'update_check'
+    ? new Promise<UpdateInfo>((resolve) => { resolveCheck = resolve; }) : command === 'update_supported');
+  const runtime = await import('./updater.svelte');
+  const background = runtime.check();
+  await vi.advanceTimersByTimeAsync(0);
+  await runtime.check(true);
+  expect(mocks.invoke.mock.calls.filter(([command]) => command === 'update_check')).toHaveLength(1);
+  resolveCheck(info);
+  await background;
+  expect(runtime.updater.status).toEqual({ kind: 'available', info });
 });
 it('shows manual up-to-date feedback for five seconds', async () => {
   mocks.invoke.mockImplementation(async (command) => command === 'update_supported' ? true : null);

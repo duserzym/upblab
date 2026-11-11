@@ -1,16 +1,18 @@
 import { isDesktop } from './platform';
 import { settings } from './settings.svelte';
 import { shellVersion } from './versions';
-import { pickEndpoint, STABLE_ENDPOINT, transition, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
+import { checkButtonView, pickEndpoint, STABLE_ENDPOINT, transition, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
 
 const WEB_REASON = 'Updates come with the desktop app; the web page is always the version its server serves.';
 const INSTALL_REASON = 'Install UPb Lab to receive in-app updates on this computer.';
 const previewName = !isDesktop && typeof location !== 'undefined'
   ? new URLSearchParams(location.search).get('update-preview') : null;
-export const updatePreview = ['none', 'available', 'downloading', 'ready', 'error', 'unsupported'].includes(previewName ?? '');
+export const updatePreview = ['idle', 'checking', 'none', 'available', 'downloading', 'ready', 'error', 'unsupported'].includes(previewName ?? '');
 const fake: UpdateInfo = { version: '0.2.0', currentVersion: '0.1.0', notes: 'Review tab, faster module switching', date: null, ready: false };
 function previewStatus(): UpdateStatus {
   switch (previewName) {
+    case 'idle': return { kind: 'idle' };
+    case 'checking': return { kind: 'checking' };
     case 'none': return { kind: 'none', checkedAt: Date.now() };
     case 'available': return { kind: 'available', info: fake };
     case 'downloading': return { kind: 'downloading', info: fake, pct: 43 };
@@ -39,10 +41,9 @@ function showChecked() {
 if (previewName === 'none') showChecked();
 function send(event: UpdateEvent) { updater.status = transition(updater.status, event); }
 function fail(error: unknown) {
-  const raw = String(error);
-  const message = /pubkey|public key|base64|decode/i.test(raw) ? 'Updates are not configured for this build yet' : raw;
+  const message = String(error);
   send({ type: 'failed', message });
-  updater.lastResult = `Update check failed: ${message}`;
+  updater.lastResult = checkButtonView(updater.status, updater.version).text;
 }
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   return (await import('@tauri-apps/api/core')).invoke<T>(command, args);
@@ -84,8 +85,16 @@ export async function check(manual = false): Promise<void> {
   updater.justChecked = false;
   try {
     await settings.update({ updateLastCheck: Date.now() });
-    if (!updatePreview) updater.supported = await invoke<boolean>('update_supported');
-    const info = updatePreview ? null : await invoke<UpdateInfo | null>('update_check', { endpoint: await endpoint() });
+    if (updatePreview) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 600));
+      updater.status = previewName === 'idle' ? { kind: 'none', checkedAt: Date.now() } : previewStatus();
+      updater.lastResult = checkButtonView(updater.status, updater.version).text;
+      await settings.update({ updateLastCheck: Date.now() });
+      if (updater.status.kind === 'none' && manual) showChecked();
+      return;
+    }
+    updater.supported = await invoke<boolean>('update_supported');
+    const info = await invoke<UpdateInfo | null>('update_check', { endpoint: await endpoint() });
     const checkedAt = Date.now();
     await settings.update({ updateLastCheck: checkedAt });
     updater.lastResult = info ? `Version ${info.version} ${info.ready ? 'is ready to install' : 'is available'}` : "You're up to date";
