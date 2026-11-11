@@ -59,3 +59,19 @@ it, the supervisor does. Write or update the spec files when the brief asks.
 - Rust: `cargo fmt`, clippy-clean, unit tests in the same file.
 - Prose in docs: plain sentences, no marketing, no emoji, numbers with units.
 - Say in your final message what you did not finish or could not verify.
+
+## After a major update
+
+Rust and PyInstaller builds fill the disk quickly. Once the work is pushed and
+any app built from it is installed in `/Applications` and smoke-tested:
+
+1. Note free space (`df -h /`).
+2. Run `make clean-build`. It removes `src-tauri/target/` (Rust and Tauri builds, `.app` and `.dmg` bundles). It keeps `bridge/dist` (grainatlas builds against it), `ui/dist`, `ui/public/modules` and `node_modules` (`make clean` removes those too). It stops if a build
+   is still writing there, and prints free space before and after.
+3. Remove the worktrees and build checkouts you created for this work
+   (`git worktree remove`, then `git branch -d` for merged branches).
+4. Keep installed apps and review artifacts (screenshots, previews, print
+   files, COMMIT notes in `~/Github/lab-builds`). Never touch another
+   session's worktree, scratchpad or running build, project data or
+   databases.
+5. Report free space before and after.

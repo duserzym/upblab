@@ -60,6 +60,13 @@ clean: ## Remove build outputs (keeps node_modules)
 	rm -rf ui/dist bridge/dist ui/public/modules
 	cargo clean --manifest-path src-tauri/Cargo.toml
 
+.PHONY: clean-build
+clean-build: ## After a major update: remove src-tauri/target only (keeps bridge/dist, ui/dist, modules, node_modules)
+	@if pgrep -f "$(CURDIR)/src-tauri/target/" >/dev/null; then echo "A build is writing to $(CURDIR)/src-tauri/target; not cleaning."; exit 1; fi
+	@df -h / | awk 'NR==2 {print "Free on /: " $$4 " (before)"}'
+	rm -rf ./src-tauri/target
+	@df -h / | awk 'NR==2 {print "Free on /: " $$4 " (after)"}'
+
 .PHONY: updater-setup
 updater-setup: ## Generate the updater signing key and configure the repository (owner only)
 	$(PNPM) updater:setup
