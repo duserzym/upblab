@@ -30,7 +30,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     test.beforeEach(async ({ page }) => { await page.setViewportSize({ width, height }); await openReview(page); });
     test('stored results, plots and image selections stay within the window', async ({ page }) => {
       expect(await problems(page, 'Review')).toEqual([]);
-      await expect(page.locator('[data-spot-key]')).toHaveCount(12);
+      await expect(page.locator('[data-spot-key]')).toHaveCount(8);
       await page.locator('[data-spot-key="acq-2"]').click();
       await expect.poll(async () => (await calls(page)).filter(([c]) => c === 'module_command').pop()?.[1]).toMatchObject({ module: 'images', command: { type: 'focus-spot', project: 'project-demo', spot: 'atlas-2', server: 'http://localhost:8000', via: 'review' } });
       await expect(page.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -54,7 +54,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
       await expect(page.getByLabel('Depth profile axis')).toBeVisible();
       expect(await problems(page, 'Depth profile')).toEqual([]);
-      await page.getByRole('button', {name:'Standard Demo reference',exact:true}).click();
+      await page.getByRole('button', {name:'Standard Demo reference',exact:true}).click({ modifiers: ['Alt'] });
       await expect(page.locator('[data-spot-key]')).toHaveCount(4);
       await page.getByRole('checkbox', {name:'Show Reference_1 in Review',exact:true}).click();
       await expect(page.getByRole('checkbox', {name:'Show Standards in Review',exact:true})).toHaveAttribute('aria-checked', 'mixed');
@@ -62,7 +62,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(page.getByRole('checkbox', {name:'Show Reference_1 in Review',exact:true})).toBeChecked();
       await page.getByRole('button', {name:'Choose review scope',exact:true}).click();
       await page.getByLabel('Review scope', { exact: true }).selectOption('mount:mount-demo');
-      await expect(page.locator('[data-spot-key]')).toHaveCount(13);
+      await expect(page.locator('[data-spot-key]')).toHaveCount(9);
       await page.getByLabel('Filter spots').fill('Zircon_13');
       await page.locator('[data-spot-key="spot-unmeasured"]').click();
       await expect(page.getByTestId('review-details')).toContainText('not measured yet');
@@ -173,8 +173,8 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     });
     test('sample chips filter all points and rows; shared hover does not command Images', async ({ page }) => {
       const plots = page.getByTestId('review-plot');
-      await expect(plots.first()).toHaveAttribute('data-point-count', '12');
-      await page.getByRole('button', { name: 'Sample Sample A', exact: true }).click();
+      await expect(plots.first()).toHaveAttribute('data-point-count', '8');
+      await page.getByRole('button', { name: 'Sample Sample B', exact: true }).click();
       await expect(plots.first()).toHaveAttribute('data-point-count', '4');
       await expect(page.locator('[data-spot-key]')).toHaveCount(4);
       await expect(page.locator('[data-point-key][data-sample="Sample B"]')).toHaveCount(0);
@@ -186,13 +186,13 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       expect((await calls(page)).filter(([c]) => c === 'module_command')).toHaveLength(before);
       await page.getByRole('button', { name: 'Sample Sample B', exact: true }).click({ modifiers: ['ControlOrMeta'] });
       await expect(plots.first()).toHaveAttribute('data-point-count', '8');
-      await page.getByRole('button', { name: 'Clear', exact: true }).click();
+      await page.getByRole('button', { name: 'None', exact: true }).click();
       await expect(plots.first()).toHaveAttribute('data-point-count', '0');
       await expect(page.locator('[data-spot-key]')).toHaveCount(0);
       await expect(page.getByTestId('geochem-board')).toContainText('No samples shown');
       await page.getByRole('button', { name: 'All', exact: true }).click();
       await expect(plots.first()).toHaveAttribute('data-point-count', '12');
-      await page.getByRole('button', { name: 'Sample Sample B', exact: true }).click();
+      await page.getByRole('button', { name: 'Sample Sample B', exact: true }).click({ modifiers: ['Alt'] });
       await emit(page, 'atlas-1');
       await expect(page.getByRole('treeitem', { name: 'Zircon_1', exact: true })).toHaveAttribute('aria-selected', 'true');
     });
@@ -211,6 +211,143 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     });
   });
 }
+
+test('sample toggles combine tree, concordia and image overlays; Alt solos by mouse and keyboard', async ({ page, browserName }) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await openReview(page);
+  const a = page.getByRole('button', { name: 'Sample Sample A', exact: true });
+  const b = page.getByRole('button', { name: 'Sample Sample B', exact: true });
+  const standard = page.getByRole('button', { name: 'Standard Demo reference', exact: true });
+  const all = page.getByRole('button', { name: 'All', exact: true });
+  const none = page.getByRole('button', { name: 'None', exact: true });
+  await expect(a).toHaveAttribute('aria-pressed', 'true');
+  await expect(b).toHaveAttribute('aria-pressed', 'true');
+  await expect(standard).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'All standards', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(all).toHaveAttribute('aria-pressed', 'false');
+  await none.click();
+  await expect(none).toHaveAttribute('aria-pressed', 'true');
+  await expect(a).toHaveAttribute('aria-pressed', 'false');
+  await expect(b).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('[data-spot-key]')).toHaveCount(0);
+
+  // All group and sample toggles are ordinary Tab stops; the only buttons are skipped.
+  // macOS WebKit moves focus to buttons with Option-Tab (Safari's default), so use that there.
+  const tab = browserName === 'webkit' ? 'Alt+Tab' : 'Tab';
+  await none.focus();
+  await page.keyboard.press(tab);
+  await expect(page.getByRole('button', { name: 'All samples', exact: true })).toBeFocused();
+  await page.keyboard.press(tab);
+  await expect(a).toBeFocused();
+  await page.keyboard.press(tab);
+  await expect(b).toBeFocused();
+  await page.keyboard.press(tab);
+  await expect(page.getByRole('button', { name: 'All standards', exact: true })).toBeFocused();
+  await page.keyboard.press(tab);
+  await expect(standard).toBeFocused();
+  await a.click();
+  await expect(page.getByRole('button', { name: 'All samples', exact: true })).toHaveAttribute('aria-pressed', 'mixed');
+  await b.click();
+  await expect(a).toHaveAttribute('aria-pressed', 'true');
+  await expect(b).toHaveAttribute('aria-pressed', 'true');
+  await expect(none).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: 'All samples', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('review-details').getByRole('heading', { name: 'Zircon_1', exact: true })).toBeVisible();
+
+  const plot = page.getByTestId('review-plot');
+  const expectSamples = async (names: string[], ids: number[]) => {
+    await expect(page.locator('[data-spot-key]')).toHaveCount(ids.length);
+    for (const id of ids) await expect(page.locator(`[data-spot-key="acq-${id}"]`)).toBeVisible();
+    for (const name of ['Sample A', 'Sample B', 'Demo reference'])
+      await expect(plot.locator(`[data-point-key][data-sample="${name}"]`)).toHaveCount(names.includes(name) ? 4 : 0);
+    await expect(page.getByLabel('Sample legend').locator('span')).toHaveText(names);
+  };
+  await expectSamples(['Sample A', 'Sample B'], [1, 2, 3, 4, 5, 6, 7, 8]);
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+  const lastReviewCommand = async () => (await calls(page)).filter(([c, args]) =>
+    c === 'module_command' && (args?.command as { type?: string })?.type === 'review-spots').pop()?.[1]?.command;
+  const expectImages = async (ids: number[], colorCount: number) => {
+    const spots = ids.map(id => `atlas-${id}`);
+    await expect.poll(async () => {
+      const command = await lastReviewCommand() as { projects: Record<string, string[]>; colors: Record<string, Record<string, string>> } | undefined;
+      const colors = command?.colors?.['project-demo'] ?? {};
+      return {
+        spots: command?.projects['project-demo'], colored: Object.keys(colors),
+        distinct: new Set(Object.values(colors)).size,
+        valid: Object.values(colors).every(color => /^#[0-9a-f]{6}$/i.test(color)),
+      };
+    }).toEqual({ spots, colored: spots, distinct: colorCount, valid: true });
+  };
+  await expectImages([1, 2, 3, 4, 5, 6, 7, 8], 2);
+  expect(await problems(page, 'Combined samples')).toEqual([]);
+  await a.click({ modifiers: ['Alt'] });
+  await expect(a).toHaveAttribute('aria-pressed', 'true');
+  await expect(b).toHaveAttribute('aria-pressed', 'false');
+  await expectSamples(['Sample A'], [1, 2, 3, 4]);
+  await expectImages([1, 2, 3, 4], 1);
+  await b.focus();
+  await b.press('Alt+Enter');
+  await expect(a).toHaveAttribute('aria-pressed', 'false');
+  await expect(b).toHaveAttribute('aria-pressed', 'true');
+  await expectSamples(['Sample B'], [5, 6, 7, 8]);
+  await expectImages([5, 6, 7, 8], 1);
+  await expect(page.getByTestId('review-details').getByRole('heading', { name: 'Zircon_5', exact: true })).toBeVisible();
+  await a.focus();
+  await a.press('Alt+Space');
+  await expectSamples(['Sample A'], [1, 2, 3, 4]);
+  await expectImages([1, 2, 3, 4], 1);
+});
+
+test('group toggles, ranges and Escape preserve display filters by scope and grouping mode', async ({ page }) => {
+  await openReview(page);
+  const a = page.getByRole('button', { name: 'Sample Sample A', exact: true });
+  const b = page.getByRole('button', { name: 'Sample Sample B', exact: true });
+  const samples = page.getByRole('button', { name: 'All samples', exact: true });
+  const standards = page.getByRole('button', { name: 'All standards', exact: true });
+  const spots = page.locator('[data-spot-key]');
+  await samples.click();
+  await expect(spots).toHaveCount(0);
+  await samples.click();
+  await expect(spots).toHaveCount(8);
+  await standards.click();
+  await expect(spots).toHaveCount(12);
+  await standards.click();
+  await a.click();
+  await b.click({ modifiers: ['Shift'] });
+  await expect(spots).toHaveCount(0);
+  await b.click({ modifiers: ['Shift'] });
+  await expect(spots).toHaveCount(8);
+  await page.getByRole('tree', { name: 'Result spots', exact: true }).press('Escape');
+  await expect(spots).toHaveCount(8);
+  await page.getByRole('tree', { name: 'Result spots', exact: true }).press('ControlOrMeta+a');
+  await expect(spots).toHaveCount(12);
+  await page.getByRole('button', { name: 'None', exact: true }).click();
+  await page.getByRole('tree', { name: 'Result spots', exact: true }).press('Escape');
+  await expect(spots).toHaveCount(0);
+
+  const grouping = page.getByRole('checkbox', { name: 'Group unregistered by spot name', exact: true });
+  await grouping.uncheck();
+  await expect(spots).toHaveCount(8);
+  await b.click();
+  await grouping.check();
+  await expect(spots).toHaveCount(0);
+  await grouping.uncheck();
+  await expect(spots).toHaveCount(4);
+  await a.hover();
+  await page.getByRole('button', { name: 'Show only Sample A', exact: true }).click();
+  await expect(a).toHaveAttribute('aria-pressed', 'true');
+  await expect(b).toHaveAttribute('aria-pressed', 'false');
+  const choose = async (scope: string) => {
+    await page.getByRole('button', { name: 'Choose review scope', exact: true }).click();
+    await page.getByLabel('Review scope', { exact: true }).selectOption(scope);
+  };
+  await choose('mount:mount-demo');
+  await expect(spots).toHaveCount(9);
+  await choose(`session:${session.id}`);
+  await expect(spots).toHaveCount(4);
+  await expect(a).toHaveAttribute('aria-pressed', 'true');
+  await expect(b).toHaveAttribute('aria-pressed', 'false');
+});
 
 test('Review has no sideways overflow at the minimum window or in compact split mode', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 640 });
