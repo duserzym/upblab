@@ -228,6 +228,26 @@ fn valid_command(command: &Value) -> bool {
                             spots.len() <= 10000 && spots.iter().all(|spot| valid_id(Some(spot)))
                         })
                 })
+        }) && command.get("colors").is_none_or(|colors| {
+            colors.as_object().is_some_and(|projects| {
+                projects.len() <= 64
+                    && projects.iter().all(|(project, spots)| {
+                        valid_id(Some(&Value::String(project.clone())))
+                            && spots.as_object().is_some_and(|spots| {
+                                spots.len() <= 10000
+                                    && spots.iter().all(|(spot, color)| {
+                                        valid_id(Some(&Value::String(spot.clone())))
+                                            && color.as_str().is_some_and(|color| {
+                                                color.len() == 7
+                                                    && color.starts_with('#')
+                                                    && color.as_bytes()[1..]
+                                                        .iter()
+                                                        .all(u8::is_ascii_hexdigit)
+                                            })
+                                    })
+                            })
+                    })
+            })
         }) && command.get("focus").is_none_or(|focus| {
             focus.as_object().is_some_and(|focus| {
                 let mut focus = focus.clone();
@@ -414,6 +434,61 @@ mod tests {
             command["server"] = Value::Null;
             assert!(!valid_command(&command));
         }
+    }
+
+    #[test]
+    fn review_spots_validate_optional_colors_and_limits() {
+        let mut command = json!({"type": "review-spots", "projects": {"p": ["s"]}});
+        assert!(valid_command(&command));
+        command["future"] = json!(true);
+        command["colors"] = json!({"p": {"s": "#aB12fF"}});
+        command["focus"] = json!({"project": "p", "spot": "s"});
+        assert!(valid_command(&command));
+        for colors in [
+            Value::Null,
+            json!([]),
+            json!({"bad/id": {"s": "#123456"}}),
+            json!({"p": []}),
+            json!({"p": null}),
+            json!({"p": {"bad/id": "#123456"}}),
+        ] {
+            command["colors"] = colors;
+            assert!(!valid_command(&command));
+        }
+        for color in [
+            "red",
+            "123456",
+            "#123",
+            "#1234567",
+            "#gg1234",
+            "#12345\n",
+            "#123456\n",
+            "#é1234",
+        ] {
+            command["colors"] = json!({"p": {"s": color}});
+            assert!(!valid_command(&command));
+        }
+        command["colors"] = json!({"p": {"s": 123456}});
+        assert!(!valid_command(&command));
+        command["colors"] = json!({});
+        assert!(valid_command(&command));
+        let mut projects = serde_json::Map::new();
+        for i in 0..64 {
+            projects.insert(format!("p{i}"), json!({}));
+        }
+        command["colors"] = Value::Object(projects.clone());
+        assert!(valid_command(&command));
+        projects.insert("extra".into(), json!({}));
+        command["colors"] = Value::Object(projects);
+        assert!(!valid_command(&command));
+        let mut spots = serde_json::Map::new();
+        for i in 0..10000 {
+            spots.insert(format!("s{i}"), json!("#123456"));
+        }
+        command["colors"] = json!({"p": spots});
+        assert!(valid_command(&command));
+        command["colors"]["p"]["extra"] = json!("#123456");
+        assert!(!valid_command(&command));
     }
 
     #[test]

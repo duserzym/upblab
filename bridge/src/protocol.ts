@@ -110,6 +110,8 @@ export interface ReviewSpotsCommand {
   type: 'review-spots';
   /** Each listed atlas shows only these spots. Unlisted atlases keep their full overlays. */
   projects: Record<string, string[]>;
+  /** Optional sample colours for visible overlays: project -> atlas spot id -> #rrggbb. */
+  colors?: Record<string, Record<string, string>>;
   focus?: Omit<FocusSpotCommand, 'type'>;
 }
 
@@ -150,6 +152,14 @@ export function isBridgeCommand(x: unknown): x is BridgeCommand {
     const projects = Object.entries(c.projects);
     if (projects.length > 64 || !projects.every(([project, spots]) =>
       isId(project) && Array.isArray(spots) && spots.length <= 10000 && spots.every(isId))) return false;
+    if (c.colors !== undefined) {
+      if (!c.colors || typeof c.colors !== 'object' || Array.isArray(c.colors)) return false;
+      const colors = Object.entries(c.colors);
+      if (colors.length > 64 || !colors.every(([project, spots]) =>
+        isId(project) && !!spots && typeof spots === 'object' && !Array.isArray(spots) &&
+        Object.keys(spots).length <= 10000 && Object.entries(spots).every(([spot, color]) =>
+          isId(spot) && typeof color === 'string' && color.length === 7 && /^#[0-9a-fA-F]{6}$/.test(color)))) return false;
+    }
     return c.focus === undefined || (!!c.focus && typeof c.focus === 'object' &&
       isBridgeCommand({ ...c.focus, type: 'focus-spot' }));
   }

@@ -18,6 +18,23 @@ import {
 } from '../src/index';
 import { createFrameHost, frameName, pushOpenFiles, pushCommand, pushTheme } from '../src/host';
 
+it('validates optional review overlay colours while accepting older commands and unknown fields', () => {
+  const command = { type: 'review-spots', projects: { p: ['s'] } };
+  expect(isBridgeCommand(command)).toBe(true);
+  expect(isBridgeCommand({ ...command, colors: { p: { s: '#aB12fF' } }, future: true })).toBe(true);
+  expect(isBridgeCommand({ ...command, colors: {} })).toBe(true);
+  for (const colors of [null, [], { 'bad/id': {} }, { p: [] }, { p: null }, { p: { 'bad/id': '#123456' } }])
+    expect(isBridgeCommand({ ...command, colors })).toBe(false);
+  for (const color of ['red', '123456', '#123', '#1234567', '#gg1234', '#12345\n', '#123456\n', '#é1234', 123456, null])
+    expect(isBridgeCommand({ ...command, colors: { p: { s: color } } })).toBe(false);
+  const projects = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`p${i}`, {}]));
+  expect(isBridgeCommand({ ...command, colors: projects })).toBe(true);
+  expect(isBridgeCommand({ ...command, colors: { ...projects, extra: {} } })).toBe(false);
+  const spots = Object.fromEntries(Array.from({ length: 10000 }, (_, i) => [`s${i}`, '#123456']));
+  expect(isBridgeCommand({ ...command, colors: { p: spots } })).toBe(true);
+  expect(isBridgeCommand({ ...command, colors: { p: { ...spots, extra: '#123456' } } })).toBe(false);
+});
+
 describe('detectTransport', () => {
   it('is none without a window', () => {
     expect(detectTransport(undefined)).toBe('none');
