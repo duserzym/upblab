@@ -323,9 +323,13 @@ when GrainAtlas reports unsynced changes or drafts. Quitting never depends on
 the UI: the Rust shell waits at most 2 s for the UI to answer, and a second
 Cmd+Q quits at once, including while the prompt is open or sync is pending.
 Once the UI answers that it is prompting, the user may take as long as needed
-to decide. A forced quit loses nothing because GrainAtlas persists drafts as
-they are edited: unsynced changes stay as drafts and appear again on Home and
-in GrainAtlas.
+to decide. A forced quit loses at most a drag still in progress: GrainAtlas
+persists every committed edit at once (each undo checkpoint writes the project
+and its sync draft to the webview's storage; a spot move, resize or brush
+stroke commits when the pointer is released), so unsynced changes stay as
+drafts and appear again on Home and in GrainAtlas. Nothing is written in
+read-only view, while a project loads, or while its "Unsaved changes found"
+prompt is open.
 
 Protocol v4 retains every v3 operation, including v3.1 theme behavior; it does
 not require version equality. Older modules ignore unknown commands and the

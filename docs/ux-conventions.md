@@ -23,9 +23,11 @@ sign-in) and to give them the whole area under the tab bar.
 The desktop quit guard is an L3 dialog. Quitting never depends on the UI: the
 Rust shell waits at most 2 s for its answer, and a second Cmd+Q quits at once,
 even while the prompt is open or sync is pending. Once the UI answers that
-the prompt is open, there is no decision timeout. A forced quit loses nothing
-because GrainAtlas persists drafts as they are edited; unsynced changes stay
-as drafts and appear again on Home and in GrainAtlas.
+the prompt is open, there is no decision timeout. A forced quit loses at most a drag still
+in progress: GrainAtlas persists every committed edit at once (each undo
+checkpoint writes the project and its sync draft to the webview's storage; a
+spot move, resize or brush stroke commits when the pointer is released), so
+unsynced changes stay as drafts and appear again on Home and in GrainAtlas.
 
 ## What the modules still adopt
 
