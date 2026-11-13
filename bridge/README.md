@@ -238,7 +238,7 @@ await notify({
 await notify({ type: ATLAS_EVENTS.drafts, drafts });
 await notify({
   type: ATLAS_EVENTS.synced, project, mount, revision, atlasVersion,
-  changed: { spots: 1, grains: 0, labels: 0, pixels: false }, at,
+  changed: { spots: 1, grains: 3, labels: 0, pixels: false }, at, // a one-grain split
 });
 
 // Shell notify consumer: each helper returns a normalised typed value or null.
@@ -268,7 +268,7 @@ to `atlas_version`, the mount's current published bundle (integer or null).
 | --- | --- |
 | `lab.atlas.status` (`ATLAS_EVENTS.status`) | `{ type, project, mount: string \| null, name, mode: 'view' \| 'edit', state, revision: number \| null, atlasVersion: number \| null, changes: AtlasChanges \| null, syncedAt: string \| null }`. Send after open and whenever status changes. `revision` must be null when `mount` is null. `state` is `'checking'`, `'unregistered'`, `'in-sync'`, `'local-changes'`, `'server-newer'`, `'both-changed'` or `'offline'`. `'checking'` means the server lookup is in flight immediately after open. |
 | `lab.atlas.drafts` (`ATLAS_EVENTS.drafts`) | `{ type, drafts: [{ project, name, mount: string \| null, baseRevision: number \| null, changes: AtlasChanges, updatedAt: string }] }`, at most 500 entries. Send the full list of every tracked hosted draft with unsynced changes at start-up and whenever it changes, including an empty list when cleared. Standalone app drafts use separate storage and are not reported. |
-| `lab.atlas.synced` (`ATLAS_EVENTS.synced`) | `{ type, project, mount, revision: number, atlasVersion: number \| null, changed: AtlasChanges, at: string }`. Send after any successful sync or update-from-database. `mount` and `revision` are required and non-null. |
+| `lab.atlas.synced` (`ATLAS_EVENTS.synced`) | `{ type, project, mount, revision: number, atlasVersion: number \| null, changed: AtlasChanges, at: string }`. Send after any successful sync or update-from-database. `mount` and `revision` are required and non-null. `changed` counts the elements this sync wrote (from laicpmsdb's `SyncOut.applied`): spots created + updated + deleted; grains created + adopted + updated + retired; labels created + updated + retired. A one-grain split reads `{ spots: 1, grains: 3, labels: 0, pixels: false }`. When the same action also publishes new images, a second notice follows with zero counts, `pixels: true` and the new `atlasVersion`; notices are snapshots, newest wins. The shell does not use `changed`: it refreshes on `mount` + `revision`, and on `atlasVersion` for images. |
 
 | Shell → module command | Payload and when to send |
 | --- | --- |
