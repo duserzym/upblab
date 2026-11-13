@@ -36,6 +36,11 @@ const quitRequest = (page: Page) => page.evaluate(() =>
   (window as unknown as { __quitRequest: () => Promise<void> }).__quitRequest());
 const quitCalls = async (page: Page, command: 'quit_answer' | 'quit_confirm' | 'quit_cancel') =>
   (await calls(page)).filter(([name]) => name === command).map(([, args]) => args);
+const needsConfirmation = {
+  ok: false, code: 'needs-confirmation',
+  confirm: { retireGrains: 1, grainsTotal: 40, deleteSpots: 12, spotsTotal: 100 },
+};
+const confirmationNote = 'Needs your confirmation: this retires 1 of 40 grains and deletes 12 spots';
 
 for (const [width, height] of [[1440, 900], [1280, 800]]) {
   test.describe(`Atlas sync ${width} × ${height}`, () => {
@@ -132,6 +137,70 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await complete(page, 'discard-draft');
       await expect(section.getByRole('status')).toHaveText('Draft discarded');
     });
+
+    test('Sync and leave hands bulk confirmation to visible Images without leaving', async ({ page }) => {
+      await openAtlas(page);
+      await emit(page, status);
+      await tab(page, 'Home').click();
+      await page.getByRole('button', { name: 'Sync and leave' }).click();
+      await complete(page, 'leave-edit', needsConfirmation);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByText('Hidden while a dialog is open', { exact: true })).toHaveCount(0);
+      await expect(page.getByTestId('atlas-status-strip').getByRole('status')).toHaveText(confirmationNote);
+      await expect.poll(() => commands(page)).toContainEqual(expect.objectContaining({
+        type: 'set-mode', id: expect.any(String), project: status.project, mode: 'edit',
+      }));
+      // A failed edit acknowledgement only logs; the shell must stay open with its note.
+      await complete(page, 'set-mode', { ok: false, code: 'failed' });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByTestId('atlas-status-strip').getByRole('status')).toHaveText(confirmationNote);
+    });
+
+    test('Sync and quit cancels the watchdog and hands bulk confirmation to Images', async ({ page }) => {
+      await openAtlas(page, 'home');
+      await emit(page, status);
+      await quitRequest(page);
+      await page.getByRole('button', { name: 'Sync and quit' }).click();
+      await complete(page, 'leave-edit', needsConfirmation);
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      expect(await quitCalls(page, 'quit_cancel')).toEqual([{ id: 1 }]);
+      expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
+      expect(await quitCalls(page, 'quit_answer')).toEqual([{ id: 1, answer: 'prompting' }]);
+      await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByText('Hidden while a dialog is open', { exact: true })).toHaveCount(0);
+      await expect(page.getByTestId('atlas-status-strip').getByRole('status')).toHaveText(confirmationNote);
+      await expect.poll(() => commands(page)).toContainEqual(expect.objectContaining({
+        type: 'set-mode', id: expect.any(String), project: status.project, mode: 'edit',
+      }));
+      await complete(page, 'set-mode');
+      expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
+    });
+
+    for (const sameProject of [true, false]) {
+      test(`Home bulk confirmation opens Images with ${sameProject ? 'set-mode' : 'open-project'}`, async ({ page }) => {
+        await openAtlas(page, 'home');
+        await emit(page, { ...status, project: sameProject ? status.project : 'other-project' });
+        await emit(page, drafts);
+        const section = page.getByRole('region', { name: 'Changes not yet in the database' });
+        await section.getByRole('button', { name: 'Sync', exact: true }).click();
+        await complete(page, 'sync-draft', needsConfirmation);
+        await expect(section.getByRole('status')).toHaveText('Needs your confirmation: retires 1 of 40 grains, deletes 12 spots');
+        await expect(tab(page, 'Home')).toHaveAttribute('aria-selected', 'true');
+        expect(await commands(page)).not.toContainEqual(expect.objectContaining({ type: 'set-mode' }));
+        expect(await commands(page)).not.toContainEqual(expect.objectContaining({ type: 'open-project' }));
+        await expect.poll(() => problems(page, 'Home bulk confirmation')).toEqual([]);
+        await section.getByRole('button', { name: 'Open in Images' }).click();
+        await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
+        const type = sameProject ? 'set-mode' : 'open-project';
+        await expect.poll(() => commands(page)).toContainEqual(expect.objectContaining({
+          type, id: expect.any(String), project: status.project, mode: 'edit',
+        }));
+        await complete(page, type);
+        await expect(page.getByRole('dialog')).toHaveCount(0);
+      });
+    }
   });
 }
 

@@ -787,4 +787,23 @@ describe('v4 command completion', () => {
     ]) expect(commandResult({ ...result, ...patch })).toBeNull();
     for (const event of [null, [], {}, 'result']) expect(commandResult(event)).toBeNull();
   });
+  it('requires and normalises bulk confirmation counts only for needs-confirmation', () => {
+    const confirm = { retireGrains: 1, grainsTotal: 40, deleteSpots: 12, spotsTotal: 100 };
+    for (const command of ['leave-edit', 'sync-draft']) {
+      const result = { type: ATLAS_EVENTS.commandResult, id: 'sync-1', command, ok: false, code: 'needs-confirmation', confirm };
+      expect(commandResult({ ...result, future: true, confirm: { ...confirm, future: true } })).toEqual(result);
+      expect(commandResult({ ...result, confirm: { retireGrains: 0, grainsTotal: 0, deleteSpots: 0, spotsTotal: 0 } })).not.toBeNull();
+      expect(commandResult({ ...result, confirm: { retireGrains: 40, grainsTotal: 40, deleteSpots: 100, spotsTotal: 100 } })).not.toBeNull();
+      for (const value of [undefined, null, [], {}, 'counts']) expect(commandResult({ ...result, confirm: value })).toBeNull();
+      for (const key of Object.keys(confirm)) {
+        for (const value of [undefined, null, -1, 1.5, '1', true, NaN, Infinity])
+          expect(commandResult({ ...result, confirm: { ...confirm, [key]: value } })).toBeNull();
+      }
+      expect(commandResult({ ...result, confirm: { ...confirm, retireGrains: 41 } })).toBeNull();
+      expect(commandResult({ ...result, confirm: { ...confirm, deleteSpots: 101 } })).toBeNull();
+      expect(commandResult({ ...result, ok: true, code: undefined })).toBeNull();
+      for (const code of ['offline', 'conflict', 'unauthorized', 'not-found', 'failed'])
+        expect(commandResult({ ...result, code })).toBeNull();
+    }
+  });
 });

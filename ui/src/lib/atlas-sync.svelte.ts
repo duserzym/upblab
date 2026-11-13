@@ -1,5 +1,7 @@
-import { createAtlasRequests, requestTimeout, type AtlasRequest } from './atlas-requests';
-import { atlasStatus, atlasDrafts, atlasSynced, type AtlasStatusEvent, type AtlasDraft, type AtlasSyncedEvent, type AtlasChanges } from '@lab/bridge';
+import { tick } from 'svelte';
+import { confirmationSummary, createAtlasRequests, requestTimeout, resultReason, type AtlasRequest } from './atlas-requests';
+import { logWarn } from './platform';
+import { atlasStatus, atlasDrafts, atlasSynced, type AtlasStatusEvent, type AtlasDraft, type AtlasSyncedEvent, type AtlasChanges, type AtlasSyncConfirmation } from '@lab/bridge';
 
 export function changeCounts(changes: AtlasChanges | null): string {
   if (!changes) return '';
@@ -41,6 +43,19 @@ class AtlasSync {
     const testMs = import.meta.env.DEV && typeof location !== 'undefined'
       ? Number(new URLSearchParams(location.search).get('atlas-command-timeout')) : 0;
     return this.requests.request(command, Number.isFinite(testMs) && testMs > 0 ? testMs : timeoutMs);
+  }
+  async openForConfirmation(project: string, confirm: AtlasSyncConfirmation, openIfDifferent = false) {
+    const { shell } = await import('./shell.svelte');
+    await shell.show('images');
+    this.note = `Needs your confirmation: this ${confirmationSummary(confirm)}`;
+    // Restore the module surface after the shell dialog closes before handing off.
+    await tick();
+    const result = await this.request({
+      type: openIfDifferent && this.status?.project !== project ? 'open-project' : 'set-mode',
+      project, mode: 'edit',
+    }, 10_000);
+    if ('timeout' in result || !result.ok)
+      await logWarn(`[atlas] opening bulk sync confirmation: ${resultReason(result, 10)}`);
   }
   snapshot = $state(0);
   leave = $state<{ status: AtlasStatusEvent } | null>(null);

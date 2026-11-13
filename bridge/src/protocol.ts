@@ -176,7 +176,13 @@ export interface AtlasSyncedEvent extends BridgeEvent {
 }
 
 export type AtlasCommandName = 'open-project' | 'set-mode' | 'leave-edit' | 'sync-draft' | 'discard-draft';
-export type AtlasResultCode = 'offline' | 'conflict' | 'unauthorized' | 'not-found' | 'failed';
+export type AtlasResultCode = 'offline' | 'conflict' | 'unauthorized' | 'not-found' | 'failed' | 'needs-confirmation';
+export interface AtlasSyncConfirmation {
+  retireGrains: number;
+  grainsTotal: number;
+  deleteSpots: number;
+  spotsTotal: number;
+}
 export type CommandResult = {
   type: typeof ATLAS_EVENTS.commandResult;
   id: string;
@@ -184,7 +190,11 @@ export type CommandResult = {
   project?: string;
   mount?: string | null;
   revision?: number | null;
-} & ({ ok: true; code?: never; error?: never } | { ok: false; code: AtlasResultCode; error?: string });
+} & (
+  { ok: true; code?: never; error?: never; confirm?: never } |
+  { ok: false; code: Exclude<AtlasResultCode, 'needs-confirmation'>; error?: string; confirm?: never } |
+  { ok: false; code: 'needs-confirmation'; error?: string; confirm: AtlasSyncConfirmation }
+);
 
 export interface OpenProjectCommand {
   /** Optional completion acknowledgement id (1–64 ASCII letters, digits, _ or -). */
@@ -325,9 +335,19 @@ export function commandResult(event: unknown): CommandResult | null {
       (event.mount !== undefined && event.mount !== null && !isId(event.mount)) ||
       (event.revision !== undefined && event.revision !== null && !isCount(event.revision))) return null;
   if (event.ok ? event.code !== undefined || event.error !== undefined :
-      !['offline', 'conflict', 'unauthorized', 'not-found', 'failed'].includes(event.code as string) ||
+      !['offline', 'conflict', 'unauthorized', 'not-found', 'failed', 'needs-confirmation'].includes(event.code as string) ||
       (event.error !== undefined && (typeof event.error !== 'string' || event.error.length > 300))) return null;
+  let confirm: AtlasSyncConfirmation | undefined;
+  if (event.code === 'needs-confirmation') {
+    const c = event.confirm;
+    if (!isRecord(c) || !isCount(c.retireGrains) || !isCount(c.grainsTotal) ||
+        !isCount(c.deleteSpots) || !isCount(c.spotsTotal) ||
+        c.retireGrains > c.grainsTotal || c.deleteSpots > c.spotsTotal) return null;
+    confirm = { retireGrains: c.retireGrains, grainsTotal: c.grainsTotal,
+      deleteSpots: c.deleteSpots, spotsTotal: c.spotsTotal };
+  } else if (event.confirm !== undefined) return null;
   return { type: ATLAS_EVENTS.commandResult, id: event.id, command: event.command, ok: event.ok,
+    ...(confirm === undefined ? {} : { confirm }),
     ...(event.code === undefined ? {} : { code: event.code }),
     ...(event.error === undefined ? {} : { error: event.error }),
     ...(event.project === undefined ? {} : { project: event.project }),

@@ -62,10 +62,14 @@
     busy = true; error = '';
     progress = decision === 'sync' ? 'Syncing…' : 'Keeping drafts… If there is no reply in 10 s, UPb Lab will quit. Drafts already stored by the module stay.';
     if (quit.status && (decision === 'sync' || quit.status.mode === 'edit')) {
-      const result = await atlasSync.request({ type: 'leave-edit', project: quit.status.project, decision });
+      const project = quit.status.project;
+      const result = await atlasSync.request({ type: 'leave-edit', project, decision });
       if (decision === 'sync' && ('timeout' in result || !result.ok)) {
         busy = false; progress = '';
-        if (!('timeout' in result) && result.code === 'conflict') {
+        if (!('timeout' in result) && result.code === 'needs-confirmation') {
+          await stay();
+          if (!quit) void atlasSync.openForConfirmation(project, result.confirm);
+        } else if (!('timeout' in result) && result.code === 'conflict') {
           atlasSync.note = CONFLICT_NOTE;
           await stay();
           // Review differences belongs to GrainAtlas; show its surface directly.

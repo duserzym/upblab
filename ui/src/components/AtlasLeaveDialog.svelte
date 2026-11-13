@@ -13,7 +13,10 @@
     if (atlasSync.leave !== leave) return;
     busy = false;
     if (!('timeout' in result) && result.ok) atlasSync.finishLeave(decision);
-    else if (!('timeout' in result) && result.code === 'conflict') {
+    else if (!('timeout' in result) && result.code === 'needs-confirmation') {
+      atlasSync.finishLeave(null);
+      void atlasSync.openForConfirmation(leave.status.project, result.confirm);
+    } else if (!('timeout' in result) && result.code === 'conflict') {
       atlasSync.note = CONFLICT_NOTE; atlasSync.finishLeave(null);
     } else {
       const action = decision === 'sync' ? 'Sync' : decision === 'keep-draft' ? 'Keeping draft' : 'Discard';

@@ -1,11 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createAtlasRequests, requestTimeout, resultReason } from './atlas-requests';
+import { confirmationSummary, createAtlasRequests, requestTimeout, resultReason } from './atlas-requests';
 import type { AtlasRequest } from './atlas-requests';
 
 const command = { type: 'sync-draft', project: 'p' } as const;
 const reply = (id: string, extra = {}) => ({ type: 'lab.command.result', id, command: 'sync-draft', ok: true, ...extra });
 afterEach(() => vi.useRealTimers());
 describe('identified Atlas requests', () => {
+  it('passes confirmation counts through and releases the queue for an edit request', async () => {
+    const send = vi.fn(async (_command: AtlasRequest) => true);
+    const requests = createAtlasRequests(send, () => true);
+    const first = requests.request(command);
+    const next = requests.request({ type: 'set-mode', project: 'p', mode: 'edit' });
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    const confirm = { retireGrains: 1, grainsTotal: 40, deleteSpots: 12, spotsTotal: 100 };
+    const result = reply(send.mock.calls[0][0].id!, { ok: false, code: 'needs-confirmation', confirm });
+    requests.receive({ ...result, confirm: undefined });
+    requests.receive(result);
+    expect(await first).toEqual(result);
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    requests.receive(reply(send.mock.calls[1][0].id!, { command: 'set-mode' }));
+    expect(await next).toMatchObject({ ok: true, command: 'set-mode' });
+  });
   it('waits for the matching id and command, ignores invalid and duplicate replies', async () => {
     const send = vi.fn(async (_command: AtlasRequest) => false);
     const requests = createAtlasRequests(send, () => true);
@@ -78,5 +93,21 @@ describe('identified Atlas requests', () => {
     expect(requestTimeout({ type: 'set-mode', project: 'p', mode: 'edit' })).toBe(10_000);
     expect(resultReason({ timeout: true }, 60)).toBe('no reply in 60 s');
     expect(resultReason({ type: 'lab.command.result', id: 'a', command: 'sync-draft', ok: false, code: 'offline', error: 'Server unreachable' }, 10)).toBe('Server unreachable');
+  });
+});
+
+describe('bulk confirmation wording', () => {
+  it.each([
+    [1, 40, 12, 'retires 1 of 40 grains and deletes 12 spots'],
+    [1, 1, 1, 'retires 1 of 1 grain and deletes 1 spot'],
+    [4, 40, 0, 'retires 4 of 40 grains'],
+    [0, 40, 1, 'deletes 1 spot'],
+    [0, 0, 0, ''],
+  ])('omits zero clauses and pluralises counts (%s, %s, %s)', (retireGrains, grainsTotal, deleteSpots, sentence) => {
+    expect(confirmationSummary({ retireGrains, grainsTotal, deleteSpots, spotsTotal: 100 })).toBe(sentence);
+  });
+  it('uses a comma for the Home row', () => {
+    expect(confirmationSummary({ retireGrains: 1, grainsTotal: 40, deleteSpots: 12, spotsTotal: 100 }, ', '))
+      .toBe('retires 1 of 40 grains, deletes 12 spots');
   });
 });

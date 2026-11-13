@@ -1,14 +1,14 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import type { AtlasDraft } from '@lab/bridge';
+  import type { AtlasDraft, AtlasSyncConfirmation } from '@lab/bridge';
   import { atlasSync, changeCounts } from '../../lib/atlas-sync.svelte';
   import { overview } from '../../lib/overview.svelte';
-  import { resultReason } from '../../lib/atlas-requests';
+  import { confirmationSummary, resultReason } from '../../lib/atlas-requests';
   import { openOverlay, closeOverlay } from '../../lib/overlays.svelte';
   let confirm = $state<AtlasDraft | null>(null);
   let cancel = $state<HTMLButtonElement>();
   let pending = $state<Record<string, boolean>>({});
-  let results = $state<Record<string, { name: string; message: string }>>({});
+  let results = $state<Record<string, { name: string; message: string; confirm?: AtlasSyncConfirmation }>>({});
   const busy = $derived(Object.values(pending).some(Boolean));
   $effect.pre(() => { if (confirm) openOverlay('atlas-discard'); else closeOverlay('atlas-discard'); });
   $effect(() => { if (confirm) queueMicrotask(() => cancel?.focus()); });
@@ -20,6 +20,11 @@
     delete results[draft.project];
     const result = await atlasSync.request({ type, project: draft.project });
     pending = {};
+    if (!('timeout' in result) && result.code === 'needs-confirmation') {
+      results[draft.project] = { name: draft.name,
+        message: `Needs your confirmation: ${confirmationSummary(result.confirm, ', ')}`, confirm: result.confirm };
+      return;
+    }
     const message = 'timeout' in result || !result.ok
       ? !('timeout' in result) && result.code === 'conflict'
         ? 'Both changed: open it in Images to review the differences'
@@ -53,12 +58,18 @@
           <span class="faint small">changed {changed(draft.updatedAt)}</span>
           {#if results[draft.project]}<span class="small" role="status">{results[draft.project].message}</span>{/if}
         </div>
+        {#if results[draft.project]?.confirm}
+          <button class="btn small" disabled={busy} onclick={() => atlasSync.openForConfirmation(draft.project, results[draft.project].confirm!, true)}>Open in Images</button>
+        {/if}
         <button class="btn small" disabled={busy} onclick={() => command('sync-draft', draft)}>Sync</button>
         <button class="btn small" disabled={busy} onclick={() => confirm = draft}>Discard</button>
       </div>
     {/each}
     {#each Object.entries(results).filter(([project]) => !atlasSync.drafts.some(draft => draft.project === project)) as [project, result] (project)}
       <p class="small" role="status">{result.name}: {result.message}</p>
+      {#if result.confirm}
+        <button class="btn small" disabled={busy} onclick={() => atlasSync.openForConfirmation(project, result.confirm!, true)}>Open in Images</button>
+      {/if}
     {/each}
   </section>
 {/if}
@@ -77,7 +88,7 @@
 {/if}
 <style>
   .board-section { min-width: 0; gap: var(--space-2); }
-  .draft-row { display: flex; align-items: center; gap: var(--space-2); margin-top: 0; padding: var(--space-2) var(--space-3); min-width: 0; }
+  .draft-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: 0; padding: var(--space-2) var(--space-3); min-width: 0; }
   .description { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); align-items: baseline; }
   strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .description span { overflow-wrap: anywhere; }

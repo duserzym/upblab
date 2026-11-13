@@ -274,7 +274,7 @@ to `atlas_version`, the mount's current published bundle (integer or null).
 | --- | --- |
 | `open-project` | `{ type, id?: string, project, server?: string, mode?: 'view' \| 'edit', revision?: number }`. Open a project, optionally at a revision. `server` follows `focus-spot`: an HTTP or HTTPS URL of at most 2048 characters, with no whitespace or control characters. |
 | `set-mode` | `{ type, id?: string, project, mode: 'view' \| 'edit' }`. Request a mode change in the project. |
-| `leave-edit` | `{ type, id?: string, project, decision: 'sync' \| 'keep-draft' \| 'discard' }`. Send after the shell's own leave guard has asked the user. The module acts without asking again and keeps a one-step undo snapshot in memory after discard. |
+| `leave-edit` | `{ type, id?: string, project, decision: 'sync' \| 'keep-draft' \| 'discard' }`. Send after the shell's own leave guard has asked the user. The module acts without asking again unless sync needs bulk confirmation, and keeps a one-step undo snapshot in memory after discard. |
 | `sync-draft` | `{ type, id?: string, project }`. Sync a hosted draft from the shell Home list. |
 | `discard-draft` | `{ type, id?: string, project }`. Discard a hosted draft from Home after confirmation in a shell dialog. |
 | `report-status` | `{ type }`. Request that GrainAtlas re-send both `lab.atlas.status` and `lab.atlas.drafts`, for example when a shell consumer needs current snapshots. |
@@ -288,14 +288,18 @@ through `notify` after the action has really finished:
 ```ts
 { type: 'lab.command.result', id,
   command: 'open-project' | 'set-mode' | 'leave-edit' | 'sync-draft' | 'discard-draft',
-  ok: boolean, code?: 'offline' | 'conflict' | 'unauthorized' | 'not-found' | 'failed',
-  error?: string, project?: string, mount?: string | null, revision?: number | null }
+  ok: boolean, code?: 'offline' | 'conflict' | 'unauthorized' | 'not-found' | 'failed' | 'needs-confirmation',
+  error?: string, project?: string, mount?: string | null, revision?: number | null,
+  confirm?: { retireGrains: number, grainsTotal: number, deleteSpots: number, spotsTotal: number } }
 ```
 
 `commandResult(event)` returns a normalised result or null. Failure requires
 `code`; success must carry neither `code` nor `error`. The optional user-facing
 `error` is at most 300 characters. Project and mount use the existing id rule;
 revision is a non-negative integer or null. Unknown fields are ignored.
+`confirm` is required with `ok: false, code: 'needs-confirmation'` and forbidden
+with any other result. Its four counts are non-negative integers;
+`retireGrains <= grainsTotal` and `deleteSpots <= spotsTotal`.
 
 For `leave-edit` with `sync` and for `sync-draft`, success means the server
 confirmed the sync and the draft is cleared. For `keep-draft`, it means the
@@ -304,6 +308,24 @@ draft is persisted; discard finishes after removal. `open-project` and
 An offline lookup is still `ok: true`, with `state: 'offline'` in the status
 event. On a conflict (HTTP 409 / “Both changed”), the module opens its own
 Review differences, remains in edit, and returns `ok: false, code: 'conflict'`.
+
+laicpmsdb refuses a sync that retires more than `max(3, 10%)` of a mount's
+grains or deletes more than `max(3, 10%)` of its spots unless `confirm_bulk`
+follows a user confirmation naming the counts. Grains are only retired;
+spots are only deleted. For shell-started syncs (`leave-edit` with `sync`,
+including quit, or `sync-draft`), the module returns `needs-confirmation`
+with counts learned from a dry run. Nothing has been written and the module
+does not prompt over the shell's dialog. The shell closes its own dialog,
+cancels leaving or quitting (on desktop, `quit_cancel`), shows Images with
+the module surface visible, and sends an identified `set-mode` edit request
+for that project, waiting up to 10 s and only logging failure. The module
+then immediately shows its own confirmation, holding the sync it started:
+Agree syncs with `confirm_bulk`; Cancel keeps the draft and the chip says
+"Needs confirmation". The module's own Sync button prompts directly.
+
+Home instead shows the counts and an "Open in Images" button. That button
+shows Images and sends the edit request; if the latest status names another
+project, it sends `open-project` with the row's project and `mode: 'edit'`.
 
 The shell serialises identified requests to Images, waiting for a matching
 result or timeout before sending the next request. Sync waits up to 60 s;

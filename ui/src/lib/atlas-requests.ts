@@ -1,8 +1,14 @@
-import { commandResult, type AtlasCommandName, type BridgeCommand, type CommandResult } from '@lab/bridge';
+import { commandResult, type AtlasCommandName, type AtlasSyncConfirmation, type BridgeCommand, type CommandResult } from '@lab/bridge';
 
 export type AtlasRequest = Extract<BridgeCommand, { type: AtlasCommandName }>;
 export type RequestResult = CommandResult | { timeout: true };
 export const CONFLICT_NOTE = 'Both changed: review the differences in GrainAtlas';
+export function confirmationSummary(confirm: AtlasSyncConfirmation, separator = ' and '): string {
+  return [
+    confirm.retireGrains ? `retires ${confirm.retireGrains} of ${confirm.grainsTotal} grain${confirm.grainsTotal === 1 ? '' : 's'}` : '',
+    confirm.deleteSpots ? `deletes ${confirm.deleteSpots} spot${confirm.deleteSpots === 1 ? '' : 's'}` : '',
+  ].filter(Boolean).join(separator);
+}
 export function requestTimeout(command: AtlasRequest): number {
   return command.type === 'sync-draft' || command.type === 'leave-edit' && command.decision === 'sync' ? 60_000 : 10_000;
 }

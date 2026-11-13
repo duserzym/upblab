@@ -1,8 +1,14 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { atlasSync, changeCounts, needsLeaveGuard, refreshDecision, statusLabel } from './atlas-sync.svelte';
 import { atlasStatusFixture, atlasDraftsFixture, atlasSyncedFixture } from '../../tests/fixtures/atlas-sync';
+import { shell } from './shell.svelte';
+import { logWarn } from './platform';
 
-beforeEach(() => { atlasSync.v4 = false; atlasSync.status = null; atlasSync.drafts = []; atlasSync.lastSynced = null; atlasSync.finishLeave(null); });
+vi.mock('./shell.svelte', () => ({ shell: { show: vi.fn(async () => true) } }));
+vi.mock('./platform', () => ({ logWarn: vi.fn(async () => {}) }));
+
+beforeEach(() => { atlasSync.v4 = false; atlasSync.status = null; atlasSync.drafts = []; atlasSync.lastSynced = null; atlasSync.note = ''; atlasSync.finishLeave(null); });
+afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); });
 describe('Atlas snapshots and presentation', () => {
   it('adopts only valid v4 events and replaces snapshots', () => {
     atlasSync.receive({ type: 'lab.atlas.status' });
@@ -55,5 +61,32 @@ describe('Atlas snapshots and presentation', () => {
     expect(refreshDecision('other', state, [])).toEqual({ review: false, home: false });
     expect(refreshDecision('m', { ...state, state: 'loading' }, [])).toEqual({ review: false, home: false });
     expect(refreshDecision('m', { state: 'ready', scope: { kind: 'mount', id: 'm' }, rows: [] }, [])).toEqual({ review: true, home: false });
+  });
+  it.each([
+    [false, 'another-project', 'set-mode'],
+    [true, atlasStatusFixture.project, 'set-mode'],
+    [true, 'another-project', 'open-project'],
+    [true, null, 'open-project'],
+  ] as const)('shows Images and requests edit with a 10 s timeout (Home: %s, current: %s)', async (home, current, type) => {
+    atlasSync.status = current ? { ...atlasStatusFixture, project: current } : null;
+    const request = vi.spyOn(atlasSync, 'request').mockResolvedValue({
+      type: 'lab.command.result', id: 'edit-1', command: type, ok: true,
+    });
+    await atlasSync.openForConfirmation(atlasStatusFixture.project,
+      { retireGrains: 1, grainsTotal: 40, deleteSpots: 12, spotsTotal: 100 }, home);
+    expect(shell.show).toHaveBeenCalledWith('images');
+    expect(request).toHaveBeenCalledExactlyOnceWith({ type, project: atlasStatusFixture.project, mode: 'edit' }, 10_000);
+    expect(atlasSync.note).toBe('Needs your confirmation: this retires 1 of 40 grains and deletes 12 spots');
+    expect(logWarn).not.toHaveBeenCalled();
+  });
+  it.each([
+    { timeout: true } as const,
+    { type: 'lab.command.result', id: 'edit-1', command: 'set-mode', ok: false, code: 'failed' } as const,
+  ])('only logs an unsuccessful edit handoff (%j)', async result => {
+    vi.spyOn(atlasSync, 'request').mockResolvedValue(result);
+    await atlasSync.openForConfirmation('p', { retireGrains: 0, grainsTotal: 40, deleteSpots: 1, spotsTotal: 100 });
+    expect(logWarn).toHaveBeenCalledOnce();
+    expect(atlasSync.note).toBe('Needs your confirmation: this deletes 1 spot');
+    expect(shell.show).toHaveBeenCalledExactlyOnceWith('images');
   });
 });
