@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { containedPopover } from '../../lib/contained-popover';
   import Plot from './Plot.svelte';
   import { color } from './plot-data';
   import { review } from '../../lib/review.svelte';
   import { depthColumnLabel, groupDepthColumns, number, profileAxes, profileColumns } from '../../lib/review-data';
   import type { Point } from '../../lib/concordia';
 
+  let channelAnchor = $state<HTMLButtonElement>();
   let chosen = $state<string[] | null>(null);
   let x = $state('signal_relative_time');
   let search = $state('');
@@ -56,10 +58,10 @@
     <label>Against <select aria-label="Depth profile axis" value={xKey} onchange={e => x = e.currentTarget.value}>
       {#each axes as c}<option value={c}>{axisLabel(c)}</option>{/each}
     </select></label>
-    <button class="chip" popovertarget="depth-channel-picker">Channels ({visible.length})</button>
+    <button class="chip" popovertarget="depth-channel-picker" bind:this={channelAnchor}>Channels ({visible.length})</button>
     <span class="faint small">Stored sweeps and uncertainty bands</span>
   </div>
-  <div id="depth-channel-picker" class="channel-picker" popover="auto" role="group" aria-label="Depth profile channels">
+  <div id="depth-channel-picker" class="channel-picker" use:containedPopover={{anchor: () => channelAnchor, w: 420, h: 460}} popover="auto" role="group" aria-label="Depth profile channels">
     <div class="picker-heading">
       <strong>Depth profile channels</strong>
       <button class="chip" aria-label="Close channel picker" popovertarget="depth-channel-picker" popovertargetaction="hide">×</button>

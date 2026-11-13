@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { containedPopover } from '../lib/contained-popover';
   import type { Snippet } from 'svelte';
   import { settings } from '../lib/settings.svelte';
   import { dock, edgeAt, gap, geometry, panes, readLayout, resize, type Edge, type Layout, type Pane, type Rect } from '../lib/review-layout';
@@ -10,6 +11,7 @@
 
   const title = { spots: 'Spots', plots: 'Age & plots', details: 'Spot metadata', images: 'SEM images' };
   const edges: Edge[] = ['left', 'right', 'top', 'bottom'];
+  let imagesMenu = $state(false);
   let surface = $state<HTMLDivElement>();
   let width = $state(0), height = $state(0);
   let draft = $state.raw<Layout>();
@@ -18,6 +20,22 @@
   const layout = $derived(draft ?? readLayout(split ? settings.reviewDockSplit : settings.reviewDockSolo, split, settings.reviewDataWidth));
   const { tiles, dividers } = $derived(geometry(layout, width, height));
   const empty = { x: 0, y: 0, width: 0, height: 0 };
+
+  function closeImagesMenu(restore = false) {
+    imagesMenu = false;
+    if (restore) surface?.querySelector<HTMLButtonElement>('[aria-label="Move SEM images"]')?.focus();
+  }
+  function menuKey(event: KeyboardEvent) {
+    if (imagesMenu && event.key === 'Escape') {
+      event.preventDefault();
+      closeImagesMenu(true);
+    }
+  }
+  function menuOutside(event: PointerEvent) {
+    const target = event.target as Element;
+    if (!target.closest('#dock-images, [aria-label="Move SEM images"]')) closeImagesMenu();
+  }
+  $effect(() => { if (!active || !split || imagesOnly || !ready) imagesMenu = false; });
 
   export function reset() {
     void settings.update(split ? { reviewDockSplit: '', reviewDataWidth: 50 } : { reviewDockSolo: '' });
@@ -97,33 +115,49 @@
   }
 </script>
 
+{#snippet destinations(pane: Pane)}
+  <span class="muted small">Dock {title[pane]} next to</span>
+  {#each panes.filter(target => target !== pane && tiles[target]) as target}
+    <div class="destination"><span>{title[target]}</span>
+      {#each edges as edge, i}
+        <button class="btn" aria-label={`Dock ${edge} of ${title[target]}`} title={edge}
+          onclick={e => { e.currentTarget.closest<HTMLElement>('[popover]')?.hidePopover(); imagesMenu = false; move(pane, target, edge); }}>
+          {['←', '→', '↑', '↓'][i]}
+        </button>
+      {/each}
+    </div>
+  {/each}
+{/snippet}
+<svelte:window onblur={() => closeImagesMenu()} onkeydown={menuKey} onpointerdown={menuOutside} />
+
 <div class="dock" class:manipulating={drag?.moving || sizing} bind:this={surface} bind:clientWidth={width} bind:clientHeight={height}
   hidden={!imagesOnly && (!active || !ready)}>
   {#each panes as pane (pane)}
     {@const rect = tiles[pane] ?? empty}
     {@const full = pane === 'images' && imagesOnly}
     {@const shown = full || (!imagesOnly && active && ready && !!tiles[pane])}
-    <section class="tile" class:full class:drag-source={drag?.moving && drag.pane === pane} hidden={!shown} aria-label={title[pane]}
+    <section data-review-panel={pane} class="tile" class:full class:drag-source={drag?.moving && drag.pane === pane} hidden={!shown} aria-label={title[pane]}
       style={full ? '' : tileStyle(rect)}>
       <header hidden={full}>
         <button class="grip" title="Drag to another panel edge to move" aria-label={`Drag ${title[pane]}`}
           onpointerdown={e => grab(e, pane)} onpointermove={slide} onpointerup={release}
           onpointercancel={release} onlostpointercapture={release}><span aria-hidden="true">⠿</span> {title[pane]}</button>
-        <button class="dock-menu" aria-label={`Move ${title[pane]}`} title="Move panel" popovertarget={`dock-${pane}`}>⋯</button>
-        <div id={`dock-${pane}`} class="move-menu" popover="auto">
-          <span class="muted small">Dock {title[pane]} next to</span>
-          {#each panes.filter(target => target !== pane && tiles[target]) as target}
-            <div class="destination"><span>{title[target]}</span>
-              {#each edges as edge, i}
-                <button class="btn" aria-label={`Dock ${edge} of ${title[target]}`} title={edge}
-                  onclick={e => { move(pane, target, edge); e.currentTarget.closest<HTMLElement>('.move-menu')?.hidePopover(); }}>
-                  {['←', '→', '↑', '↓'][i]}
-                </button>
-              {/each}
-            </div>
-          {/each}
-        </div>
+        {#if pane === 'images'}
+          <button class="dock-menu" aria-label="Move SEM images" title="Move panel" aria-expanded={imagesMenu} aria-controls="dock-images" onclick={() => imagesMenu = !imagesMenu}>⋯</button>
+        {:else}
+          <button id={`dock-trigger-${pane}`} class="dock-menu" aria-label={`Move ${title[pane]}`} title="Move panel" popovertarget={`dock-${pane}`}>⋯</button>
+          <div id={`dock-${pane}`} class="move-menu" popover="auto"
+            use:containedPopover={{anchor: () => surface?.querySelector<HTMLElement>(`#dock-trigger-${pane}`) ?? undefined, w: 310, h: 180}}>
+            {@render destinations(pane)}
+          </div>
+        {/if}
       </header>
+      {#if pane === 'images' && imagesMenu && !full}
+        <!-- The Images body is native, so its own menu must also take layout space. -->
+        <div id="dock-images" class="move-menu image-menu" role="group" aria-label="Move SEM images">
+          {@render destinations(pane)}
+        </div>
+      {/if}
       <div class="body">
         {#if pane === 'images'}
           {@render images(shown && !drag?.moving, full ? 'full' : tileStyle(rect))}
@@ -172,6 +206,8 @@
   .drop-edge.left { right:50%; } .drop-edge.right { left:50%; }
   .drop-edge.top { bottom:50%; } .drop-edge.bottom { top:50%; }
   .move-menu { color:var(--text); background:var(--plot-bg); padding:12px; border:1px solid var(--hairline); border-radius:var(--radius); box-shadow:var(--glass-shadow); }
-  .destination { display:grid; grid-template-columns:1fr repeat(4,30px); align-items:center; gap:4px; margin-top:6px; font-size:0.8rem; }
-  .destination .btn { padding:3px 6px; }
+  .image-menu {flex:none;max-height:min(180px,calc(100% - 60px));overflow:auto;min-width:0;border-radius:0;}
+  .destination { display:grid; grid-template-columns:minmax(0,1fr) repeat(4,minmax(0,30px)); align-items:center; gap:4px; margin-top:6px; font-size:0.8rem; }
+  .destination span {overflow-wrap:anywhere;min-width:0;}
+  .destination .btn { padding:3px;min-width:0; }
 </style>
