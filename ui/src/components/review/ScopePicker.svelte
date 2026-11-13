@@ -180,7 +180,7 @@
   .chevron {width:14px;height:14px;transition:transform var(--motion);}
   .open .chevron {transform:rotate(180deg);}
   .breadcrumb {color:var(--text-muted);font-size:1.2rem;}
-  .header-actions {display:flex;align-items:center;gap:8px;margin-left:auto;flex:none;}
+  .header-actions {display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;min-width:0;}
   .drawer {margin-top:6px;padding:10px;max-height:300px;overflow:auto;overscroll-behavior:contain;border-color:var(--accent);border-top-left-radius:0;}
   .search-row,.run-heading {display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;}
   .search-row input {flex:1 1 250px;width:0;min-width:0;font-size:0.8rem;}

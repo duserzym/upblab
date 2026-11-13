@@ -46,11 +46,19 @@ body { min-height: 0; overflow: hidden; }
 }
 .tab.icon { display: inline-grid; place-items: center; padding: 0.35rem; }
 .tab.account { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:1100px) {
+  .bar {gap:8px;padding:0 8px;}
+  .brand {padding:0 4px;}
+  .tab:not(.icon) {padding-inline:0.65rem;}
+  .tab.account {max-width:12rem;}
+}
 .tab.account:not(.signed-in) { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text); }
 
 .content {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   position: relative;
   display: flex;
 }
@@ -66,11 +74,14 @@ body { min-height: 0; overflow: hidden; }
 
 .center {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
   display: grid;
-  place-items: center;
+  place-items: safe center;
   padding: var(--space-6);
 }
-.card { max-width: 40rem; }
+.card { max-width: min(40rem, 100%); min-width: 0; overflow-wrap: anywhere; }
 .card ul { margin: 0; padding-left: 1.2rem; }
 
 .chip[aria-checked='true'] { background: var(--accent-soft); border-color: var(--accent); }

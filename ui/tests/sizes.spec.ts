@@ -160,6 +160,10 @@ test(`the smallest window (${MIN[0]} x ${MIN[1]}) has no sideways overflow`, asy
   await desktop(page, { mode: 'server', serverUrl: 'http://localhost:8000' });
   await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
   expect(await problems(page, 'Home')).toEqual([]);
+  for (const tab of ['Images', 'Sessions', 'Reduce']) {
+    await page.getByRole('tab', { name: tab, exact: true }).click();
+    expect(await problems(page, `${tab} at minimum size`)).toEqual([]);
+  }
   await page.getByRole('button', { name: 'Settings' }).click();
   expect(await problems(page, 'Settings')).toEqual([]);
 });

@@ -179,7 +179,7 @@
         title={identity.signedIn ? 'Open your account' : `Sign in to ${identity.target.server}`}
         onclick={() => identity.signedIn ? shell.show('account') : (identity.dialog = true)}
       >
-        {#if identity.signedIn}<span class="dot" style="background: {identity.state.offline ? 'var(--warning)' : 'var(--ok)'}"></span>{identity.label}{:else}Sign in{/if}
+        {#if identity.signedIn}<span class="dot" style="background: {identity.state.offline ? 'var(--warning)' : 'var(--ok)'}"></span><span class="account-name" title={identity.label}>{identity.label}</span>{:else}Sign in{/if}
       </button>
     {/if}
     <button

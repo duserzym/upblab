@@ -9,6 +9,12 @@
   import { depthColumnLabel, groupDepthColumns, number, profileAxes, profileColumns } from '../../lib/review-data';
   import type { Point } from '../../lib/concordia';
 
+  let channelButton = $state<HTMLButtonElement>();
+  function escape(event: KeyboardEvent) {
+    if (event.key === 'Escape' && channelsOpen && channelButton?.getClientRects().length && !event.defaultPrevented && !document.querySelector(':popover-open')) {
+      channelsOpen = false; event.preventDefault(); channelButton?.focus();
+    }
+  }
   let chosen = $state<string[] | null>(null);
   let x = $state('signal_relative_time');
   let search = $state('');
@@ -54,6 +60,7 @@
     signal_relative_time: 'Time from signal start (s)', time: 'Acquisition time (s)', time_s: 'Acquisition time (s)', depth_um: 'Depth (µm)',
   })[axis.toLowerCase()] ?? axis;
 </script>
+<svelte:window onkeydown={escape} />
 {#if review.depthState==='loading'}<p class="muted">Loading stored depth profile…</p>
 {:else if review.depthState==='error'}<p class="error">Could not read the depth profile: {review.depthError}</p>
 {:else if !profile?.columns.length}<p class="muted">This run has no stored depth profile for the selected spot.</p>
@@ -64,7 +71,7 @@
       <label>Against <select aria-label="Depth profile axis" value={xKey} onchange={e => x = e.currentTarget.value}>
         {#each axes as c}<option value={c}>{axisLabel(c)}</option>{/each}
       </select></label>
-      <button class="chip" aria-expanded={channelsOpen} aria-controls="depth-channel-picker" onclick={() => channelsOpen = !channelsOpen}>Channels ({visible.length})</button>
+      <button class="chip" bind:this={channelButton} aria-expanded={channelsOpen} aria-controls="depth-channel-picker" onclick={() => channelsOpen = !channelsOpen}>Channels ({visible.length})</button>
       <span class="faint small">Stored sweeps and uncertainty bands</span>
     </div>
     <div class="depth-layout">

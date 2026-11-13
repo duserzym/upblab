@@ -22,7 +22,7 @@
     return a === null || b === null || panel.logX && a <= 0 || panel.logY && b <= 0 ? [] : [{spot,point:[a,b]}];
   }));
 </script>
-<article class="card" data-testid="geochem-panel" data-panel-id={panel.id} data-panel-type={panel.type} data-maximized={maximized}>
+<article class="card" class:editing={!!pickerAxis} aria-current={pickerAxis ? 'true' : undefined} data-testid="geochem-panel" data-panel-id={panel.id} data-panel-type={panel.type} data-maximized={maximized}>
   <header><h3 title={title}>{title}</h3><button class="icon" aria-label={maximized?'Restore panel':'Maximize panel'} onclick={onmaximize}><svg viewBox="0 0 20 20" aria-hidden="true"><path d={maximized?'M7 3v4H3m14 6h-4v4M7 7 3 3m10 10 4 4':'M3 8V3h5m4 0h5v5M3 12v5h5m4 0h5v-5'} /></svg></button><button class="icon" aria-label="Remove panel" onclick={onremove}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg></button></header>
   <div class="axes">
     {#each ['x','y'] as a}
@@ -36,6 +36,7 @@
 </article>
 <style>
   .card {display:flex;flex-direction:column;min-width:0;min-height:0;gap:6px;padding:8px;background:var(--plot-bg);border-radius:var(--radius-sm);overflow:hidden;}
+  .editing {outline:2px solid var(--accent);outline-offset:-2px;}
   header {display:flex;align-items:center;gap:4px;min-width:0;} h3 {font-size:0.78rem;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
   .icon {display:grid;place-items:center;flex:none;width:24px;height:24px;padding:3px;border:0;border-radius:var(--radius-sm);background:transparent;cursor:pointer;}.icon:hover {background:var(--accent-soft);}
   svg {width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;}

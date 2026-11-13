@@ -165,6 +165,7 @@
   .surface {
     flex: 1;
     min-height: 0;
+    min-width: 0;
     width: 100%;
     border: 0;
     display: grid;

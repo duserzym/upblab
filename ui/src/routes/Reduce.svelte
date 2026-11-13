@@ -124,6 +124,8 @@
 </section>
 
 <style>
+  dl {min-width:0;overflow-wrap:anywhere;}
+  dd {min-width:0;}
   .steps { margin: 0; padding-left: 1.2rem; display: grid; gap: var(--space-1); }
   .link { word-break: break-all; }
   a.btn { text-decoration: none; }

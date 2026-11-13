@@ -3,7 +3,7 @@
   import { untrack } from 'svelte';
   import GeochemPanel from './GeochemPanel.svelte';
   import QuantityPicker from './QuantityPicker.svelte';
-  import { catalogue } from '../../lib/geochem';
+  import { axisLabel, catalogue, resolveQuantity } from '../../lib/geochem';
   import { MINERALS, MAX_PANELS, applyPreset, gridColumns, loadBoards, saveBoards, mineralFor, preset, panel, type Mineral, type Panel } from '../../lib/geochem-board';
   import type { ReviewSpot } from '../../lib/review-data';
   let { rows, catalogueRows = rows, selected, material, onselect }: {
@@ -17,6 +17,8 @@
   let picker = $state<{ panel: string; axis: 'x' | 'y'; anchor: HTMLElement } | null>(null);
   let presetAnchor = $state<HTMLButtonElement>();
   let presetPopup = $state<HTMLDivElement>();
+  const editedPanel = $derived(panels.find(p => p.id === picker?.panel));
+  $effect(() => { if (picker && !editedPanel) picker = null; });
   const quantities = $derived(catalogue(catalogueRows));
   const columns = $derived(gridColumns(width));
   const measured = $derived(width > 0);
@@ -48,11 +50,11 @@
     picker = picker?.panel === panel && picker.axis === axis ? null : {panel,axis,anchor};
   }
   function escape(event: KeyboardEvent) {
-    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (event.key !== 'Escape' || event.defaultPrevented || !host?.getClientRects().length || document.querySelector(':popover-open')) return;
     if (picker) {
       const anchor = picker.anchor;
       picker=null; anchor.focus(); event.preventDefault();
-    } else maximized=null;
+    } else if (maximized && !document.querySelector(':popover-open')) { maximized=null; event.preventDefault(); }
   }
   function remove(id: string) { if (picker?.panel===id) picker=null; update(panels.filter(p=>p.id!==id)); if(maximized===id) maximized=null; }
 </script>
@@ -69,9 +71,9 @@
   </div>
   <span class="small muted">{panels.length}/{MAX_PANELS} panels · read-only</span>
 </div>
-{#if picker}
+{#if picker && editedPanel}
   {#key `${picker.panel}-${picker.axis}`}
-    <QuantityPicker {quantities} anchor={picker.anchor} axis={picker.axis.toUpperCase()} title={`${picker.axis.toUpperCase()} axis for panel ${panels.findIndex(p=>p.id===picker?.panel)+1}`} onpick={pick} onclose={()=>picker=null} />
+    <QuantityPicker {quantities} anchor={picker.anchor} axis={picker.axis.toUpperCase()} title={`${picker.axis.toUpperCase()} axis · panel ${panels.findIndex(p=>p.id===picker?.panel)+1} · ${axisLabel(resolveQuantity(editedPanel[picker.axis], quantities))}`} onpick={pick} onclose={()=>picker=null} />
   {/key}
 {/if}
 <div class="board" bind:this={host} data-testid="geochem-board" data-columns={columns} data-mineral={mineral} data-panel-count={panels.length}>
@@ -84,7 +86,7 @@
 </div>
 <style>
   .geochemistry {display:flex;flex-direction:column;flex:1;gap:8px;min-height:0;min-width:0;}
-  .board-toolbar {gap:8px;flex:none;min-width:0;} .section-label {font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);} label {font-size:0.75rem;display:flex;align-items:center;gap:4px;}select {font-size:0.75rem;padding:3px 6px;max-width:120px;}
+  .board-toolbar {flex-wrap:wrap;gap:8px;flex:none;min-width:0;} .section-label {font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);} label {font-size:0.75rem;display:flex;align-items:center;gap:4px;}select {font-size:0.75rem;padding:3px 6px;max-width:120px;}
   .preset-menu {position:fixed;margin:0;max-width:min(360px,calc(100vw - 24px));padding:12px;background:var(--plot-bg);color:var(--text);border:1px solid var(--hairline);border-radius:var(--radius-sm);box-shadow:var(--glass-shadow);}.preset-menu h3 {font-size:0.8rem;margin-bottom:8px;}.preset-menu .chip {margin:3px;}.preset-menu p {font-size:0.7rem;margin-top:8px;}
   .board {flex:1;min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;container-type:size;}
   .grid {display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));grid-auto-rows:max(275px,calc((100cqh - 8px) / 2));gap:8px;min-width:0;}

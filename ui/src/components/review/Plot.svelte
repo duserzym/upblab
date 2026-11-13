@@ -1,6 +1,6 @@
 <script lang="ts">
   import uPlot from 'uplot';
-  import { untrack, getContext } from 'svelte';
+  import { untrack, getContext, type Snippet } from 'svelte';
   import { review } from '../../lib/review.svelte';
   import 'uplot/dist/uPlot.min.css';
   import { settings } from '../../lib/settings.svelte';
@@ -8,7 +8,8 @@
   import type { Point } from '../../lib/concordia';
   import { color, isotopeLabel, type Mark, type Guide, type Band } from './plot-data';
   import { panBounds, zoomBounds, type Bounds, type DragTool, type ZoomAxis } from './plot-viewport';
-  let { marks, guidesForBounds, emptyBounds, bands = [], selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true, viewport = $bindable(null), onbox, ontoggle }: {
+  let { marks, guidesForBounds, emptyBounds, bands = [], selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true, viewport = $bindable(null), onbox, ontoggle, controls }: {
+    controls?: Snippet<[Snippet]>;
     marks: Mark[];
     guidesForBounds?: (bounds: Bounds) => Guide[];
     emptyBounds?: Bounds;
@@ -58,9 +59,14 @@
   $effect(() => {
     if (!visible() || !host)
       return;
-    const ro = new ResizeObserver(([e]) => { width = Math.max(1, Math.floor(e.contentRect.width)); height = Math.max(1, Math.floor(e.contentRect.height)); });
+    let timer: ReturnType<typeof setTimeout>;
+    const ro = new ResizeObserver(([e]) => {
+      clearTimeout(timer);
+      // Resize the existing canvas without writing the bindable viewport.
+      timer = setTimeout(() => { width = Math.max(1, Math.floor(e.contentRect.width)); height = Math.max(1, Math.floor(e.contentRect.height)); }, 100);
+    });
     ro.observe(host);
-    return () => ro.disconnect();
+    return () => { clearTimeout(timer); ro.disconnect(); };
   });
   const valid = (p: Point | null | undefined): p is Point => !!p && p.every(Number.isFinite) && (!logX || p[0] > 0) && (!logY || p[1] > 0);
   const fullBounds = $derived.by((): Bounds => {
@@ -406,7 +412,16 @@
     });
   });
 </script>
-<div class="chart" class:navigable={!!onbox} class:panning={tool === 'pan'} bind:this={chart} data-testid="review-plot" data-point-count={targets.length} data-hovered-key={sharedHover ? review.hoveredKey ?? '' : ''}>
+{#snippet secondaryNavigation()}
+  <button class="chip" aria-pressed={tool === 'select'} title="Drag a rectangle to select spots" onclick={() => tool = 'select'}>Box select</button>
+  <label class="zoom-axis">Zoom
+    <select aria-label="Concordia zoom axes" title="Axes affected by the zoom buttons and scroll wheel" bind:value={zoomAxis}>
+      <option value="both">Both axes</option><option value="x">X only</option><option value="y">Y only</option>
+    </select>
+  </label>
+{/snippet}
+{@render controls?.(secondaryNavigation)}
+<div class="chart" class:navigable={!!onbox} class:panning={tool === 'pan'} bind:this={chart} data-testid="review-plot" data-viewport={JSON.stringify(bounds)} data-point-count={targets.length} data-hovered-key={sharedHover ? review.hoveredKey ?? '' : ''}>
   {#each targets as t (t.spot.key)}
     <button class="point-target" aria-label={`Select ${t.spot.label}`} tabindex={keyboardKey === t.spot.key ? 0 : -1} data-point-key={t.spot.key} data-sample={t.spot.sampleName} data-selected={selected===t.spot.key} data-hovered={sharedHover && review.hoveredKey === t.spot.key} style:left="{t.x}px" style:top="{t.y}px" onclick={()=>onselect(t.spot)} onmouseenter={()=>pointHover(t)} onmouseleave={clearPointHover} onfocus={()=>pointHover(t)} onblur={clearPointHover}></button>
   {/each}
@@ -419,14 +434,10 @@
 </div>
 {#if onbox}
   <div class="navigation row wrap" role="group" aria-label="Concordia navigation">
-    {#each tools as t (t.id)}
+    {#each tools.filter(t => t.id !== 'select') as t (t.id)}
       <button class="chip" aria-pressed={tool === t.id} title={t.title} onclick={() => tool = t.id}>{t.label}</button>
     {/each}
-    <label class="zoom-axis">Zoom
-      <select aria-label="Concordia zoom axes" title="Axes affected by the zoom buttons and scroll wheel" bind:value={zoomAxis}>
-        <option value="both">Both axes</option><option value="x">X only</option><option value="y">Y only</option>
-      </select>
-    </label>
+    <div class="navigation-secondary">{@render secondaryNavigation()}</div>
     <button class="chip zoom" aria-label="Zoom in" title="Zoom in about the center" onclick={() => zoom(0.67)}>+</button>
     <button class="chip zoom" aria-label="Zoom out" title="Zoom out about the center" onclick={() => zoom(1.5)}>−</button>
     <button class="chip" title="Fit all visible spots" onclick={() => viewport = null}>Fit all</button>
@@ -443,7 +454,9 @@
   .navigable.panning :global(.u-over) {cursor:grab;}
   .navigable.panning :global(.u-over:active) {cursor:grabbing;}
   .selection-box {position:absolute;pointer-events:none;border:1px solid var(--accent);background:var(--accent-soft);}
-  .navigation {gap:4px;}
+  .navigation {gap:4px;flex:none;}
+  .navigation-secondary {display:contents;}
+  @container (max-width:760px) {.navigation-secondary {display:none;}}
   .navigation .chip {font-size:0.74rem;padding:3px 7px;}
   .zoom {min-width:27px;}
   .zoom-axis select {font-size:0.72rem;padding:2px 4px;}
@@ -452,4 +465,5 @@
   .legend span { display:inline-flex; gap:5px; align-items:center; }
   i { width:10px;height:10px;flex:none;border-radius:50%; }
   .tooltip { position:absolute;pointer-events:none;background:var(--plot-bg);border:1px solid var(--hairline);padding:5px;max-width:190px;overflow-wrap:anywhere; }
+  @container (max-width:400px) {.navigation .chip {padding:3px 5px;font-size:0.7rem;}}
 </style>

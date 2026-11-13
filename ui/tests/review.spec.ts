@@ -2,35 +2,15 @@ import { test, expect, type Page } from '@playwright/test';
 import { installFakeTauri } from './fake-tauri';
 import { problems } from './problems';
 import { reviewFixtures, session, runs } from './fixtures/review';
-type Call = [
-  string,
-  Record<string, unknown> | undefined
-];
-const calls = (page: Page) => page.evaluate(() => (window as unknown as {
-  __fake: {
-    calls: Call[];
-  };
-}).__fake.calls);
+import { calls, openReview } from './review-helpers';
 const emit = (page: Page, spot: string, via = 'user') => page.evaluate(({ spot, via }) => (window as unknown as {
   __emit: (e: string, p: unknown) => void;
 }).__emit('lab-bridge://notify', { event: { type: 'lab.spot.selected', project: 'project-demo', spot, via }, source: 'grainatlas' }), { spot, via });
-async function openReview(page: Page, options: { signedIn?: boolean; store?: Record<string, unknown> } = {}) {
-  await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [{ name: 'grainatlas', version: 'demo', source: 'fixture', sha256: 'demo', entry: 'modules/grainatlas/index.html' }] } }));
-  await page.addInitScript(installFakeTauri, { store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'review', reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }), ...options.store }, fixtures: reviewFixtures, signedIn: options.signedIn ?? true });
-  await page.goto('./');
-  await page.waitForFunction(() => (window as unknown as {
-    __fake: {
-      listeners: Map<string, unknown>;
-    };
-  }).__fake.listeners.has('lab-bridge://notify'));
-  // Signed out, Review has no stored results to show.
-  if (options.signedIn !== false) await expect(page.locator('[data-spot-key]').first()).toBeVisible();
-}
 for (const [width, height] of [[1440, 900], [1280, 800]]) {
   test.describe(`${width} × ${height}`, () => {
     test.beforeEach(async ({ page }) => { await page.setViewportSize({ width, height }); await openReview(page); });
     test('stored results, plots and image selections stay within the window', async ({ page }) => {
-      expect(await problems(page, 'Review')).toEqual([]);
+      await expect.poll(() => problems(page, 'Review')).toEqual([]);
       await expect(page.locator('[data-spot-key]')).toHaveCount(8);
       await page.locator('[data-spot-key="acq-2"]').click();
       await expect.poll(async () => (await calls(page)).filter(([c]) => c === 'module_command').pop()?.[1]).toMatchObject({ module: 'images', command: { type: 'focus-spot', project: 'project-demo', spot: 'atlas-2', server: 'http://localhost:8000', via: 'review' } });
@@ -46,15 +26,15 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(page.getByRole('treeitem', { name: /Zircon_3/ })).toHaveAttribute('aria-selected', 'true');
       expect((await calls(page)).filter(([c]) => c === 'module_command')).toHaveLength(before);
       await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
-      expect(await problems(page, 'Geochemistry')).toEqual([]);
+      await expect.poll(() => problems(page, 'Geochemistry')).toEqual([]);
       await page.getByTestId('geochem-panel').first().getByRole('button', {name:'Choose Y axis', exact:true}).click();
       await page.getByRole('group', {name:'Choose Y quantity'}).getByRole('button', {name:'REE pattern',exact:true}).click();
       await expect(page.getByText('CI chondrite, McDonough and Sun (1995)')).toBeVisible();
-      expect(await problems(page, 'REE')).toEqual([]);
+      await expect.poll(() => problems(page, 'REE')).toEqual([]);
       await page.locator('[data-spot-key="acq-1"]').click();
       await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
       await expect(page.getByLabel('Depth profile axis')).toBeVisible();
-      expect(await problems(page, 'Depth profile')).toEqual([]);
+      await expect.poll(() => problems(page, 'Depth profile')).toEqual([]);
       await page.getByRole('button', {name:'Standard Demo reference',exact:true}).click({ modifiers: ['Alt'] });
       await expect(page.locator('[data-spot-key]')).toHaveCount(4);
       await page.getByRole('checkbox', {name:'Show Reference_1 in Review',exact:true}).click();
@@ -67,7 +47,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.getByLabel('Filter spots').fill('Zircon_13');
       await page.locator('[data-spot-key="spot-unmeasured"]').click();
       await expect(page.getByTestId('review-details')).toContainText('not measured yet');
-      expect(await problems(page, 'Mount Review')).toEqual([]);
+      await expect.poll(() => problems(page, 'Mount Review')).toEqual([]);
     });
     test('split keeps the same Images surface and fits a narrow window', async ({ page }) => {
       const toggle = page.getByRole('checkbox', { name: 'SEM images', exact: true });
@@ -85,18 +65,18 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       expect(left.x + left.width).toBeLessThanOrEqual(right.x + 1);
       expect(right.x + right.width).toBeLessThanOrEqual(width);
       expect(right.y + right.height).toBeLessThanOrEqual(height);
-      expect(await problems(page, 'Split Review')).toEqual([]);
+      await expect.poll(() => problems(page, 'Split Review')).toEqual([]);
       await page.getByRole('button', { name: 'Show in Images', exact: true }).click();
       await expect(page.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true');
       await expect(surface).toBeVisible();
       for (const tab of ['Geochemistry', 'Depth profile']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
-        expect(await problems(page, `Split ${tab}`)).toEqual([]);
+        await expect.poll(() => problems(page, `Split ${tab}`)).toEqual([]);
       }
       await page.setViewportSize({ width: 1280, height: 800 });
       await expect(toggle).toBeChecked();
-      await expect(surface).toBeHidden();
-      expect(await problems(page, 'Review after narrowing')).toEqual([]);
+      await expect(surface).toBeVisible();
+      await expect.poll(() => problems(page, 'Review after narrowing')).toEqual([]);
     });
   });
 }
@@ -126,7 +106,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       expect(Math.abs(nextRow.x - first.x)).toBeLessThan(1);
       expect(nextRow.y).toBeGreaterThan(first.y);
       await expect(board).toContainText('Ti-in-zircon T is not stored for this run');
-      expect(await problems(page, 'Default board')).toEqual([]);
+      await expect.poll(() => problems(page, 'Default board')).toEqual([]);
     });
     test('quantity chips change axes, keyboard picking works, and the board persists', async ({ page }) => {
       let first = page.getByTestId('geochem-panel').first();
@@ -170,7 +150,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.getByRole('button', { name: 'Apply Rutile preset', exact: true }).click();
       await expect(board).toHaveAttribute('data-mineral', 'Rutile');
       await expect(board).toContainText('Zr-in-rutile T is not stored for this run');
-      expect(await problems(page, 'Preset board')).toEqual([]);
+      await expect.poll(() => problems(page, 'Preset board')).toEqual([]);
     });
     test('sample chips filter all points and rows; shared hover does not command Images', async ({ page }) => {
       const plots = page.getByTestId('review-plot');
@@ -205,7 +185,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.getByRole('button', { name: 'Move Spot metadata', exact: true }).click();
       await page.getByRole('button', { name: 'Dock right of Age & plots', exact: true }).click();
       await expect.poll(async () => (await metadata.boundingBox())!.x).toBeGreaterThan((await plots.boundingBox())!.x);
-      await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
+      await page.getByRole('button', { name: 'Balanced', exact: true }).click();
       await expect.poll(async () => (await metadata.boundingBox())!.x).toBe(original.x);
       await expect.poll(async () => (await metadata.boundingBox())!.y).toBeGreaterThan(original.y);
       await expect(page.getByTestId('review-details').getByRole('heading', { name: 'Zircon_1', exact: true })).toBeVisible();
@@ -280,7 +260,7 @@ test('sample toggles combine tree, concordia and image overlays; Alt solos by mo
     }).toEqual({ spots, colored: spots, distinct: colorCount, valid: true });
   };
   await expectImages([1, 2, 3, 4, 5, 6, 7, 8], 2);
-  expect(await problems(page, 'Combined samples')).toEqual([]);
+  await expect.poll(() => problems(page, 'Combined samples')).toEqual([]);
   await a.click({ modifiers: ['Alt'] });
   await expect(a).toHaveAttribute('aria-pressed', 'true');
   await expect(b).toHaveAttribute('aria-pressed', 'false');
@@ -356,7 +336,7 @@ test('Review has no sideways overflow at the minimum window or in compact split 
   await openReview(page);
   for (const tab of ['Concordia', 'Geochemistry', 'Depth profile']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
-    expect(await problems(page, `Minimum ${tab}`)).toEqual([]);
+    await expect.poll(() => problems(page, `Minimum ${tab}`)).toEqual([]);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
@@ -365,7 +345,7 @@ test('Review has no sideways overflow at the minimum window or in compact split 
   const board = page.getByTestId('geochem-board');
   const width = (await board.boundingBox())!.width;
   await expect(board).toHaveAttribute('data-columns', String(width >= 880 ? 3 : width >= 460 ? 2 : 1));
-  expect(await problems(page, 'Compact board')).toEqual([]);
+  await expect.poll(() => problems(page, 'Compact board')).toEqual([]);
 });
 
 test('hidden Review releases plots and restores its chosen view', async ({ page }) => {
@@ -449,7 +429,9 @@ for (const [width, height] of [[1512, 982], [1024, 640]]) {
     await field.click();
     await expect(drawer).toHaveCount(0);
     await field.click();
-    await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
+    const layoutToggle = page.getByRole('button', { name: 'Layout', exact: true });
+    if (await layoutToggle.isVisible()) await layoutToggle.click();
+    await page.getByRole('button', { name: 'Balanced', exact: true }).click();
     await expect(drawer).toHaveCount(0);
     await field.click();
     await page.evaluate(() => window.dispatchEvent(new Event('blur')));
@@ -470,7 +452,7 @@ test('Review prompts once for an unsaved scope and keeps single-run sessions sel
   await expect(field).toContainText('Choose a session or mount');
   await expect(drawer).toBeVisible();
   await expect(page.getByLabel('Search scopes')).toBeFocused();
-  expect(await problems(page, 'First scope drawer')).toEqual([]);
+  await expect.poll(() => problems(page, 'First scope drawer')).toEqual([]);
   await page.keyboard.press('Escape');
   await page.getByRole('tab', { name: 'Home', exact: true }).click();
   await page.getByRole('tab', { name: 'Review', exact: true }).click();
@@ -543,7 +525,7 @@ for (const [width, split, dataWidth, side] of [[1440, true, 65, true], [1440, tr
     await expect(drawer).toHaveCount(0);
     await expect(page.getByLabel('Plotted depth channels')).toBeVisible();
     await expect.poll(async () => (await canvas.boundingBox())!.width).toBeGreaterThanOrEqual(closed.width - 1);
-    expect(await problems(page, 'Depth drawer')).toEqual([]);
+    await expect.poll(() => problems(page, 'Depth drawer')).toEqual([]);
   });
 }
 
@@ -565,7 +547,7 @@ test('Review anchored menus stay inside every owning tile beside native SEM imag
     }
     await page.keyboard.press('Escape');
   }
-  expect(await problems(page, 'Contained dock menus')).toEqual([]);
+  await expect.poll(() => problems(page, 'Contained dock menus')).toEqual([]);
 });
 
 test('Quantity drawer spans the board, pushes plots down, and returns focus', async ({ page }) => {
@@ -579,7 +561,7 @@ test('Quantity drawer spans the board, pushes plots down, and returns focus', as
   await button.click();
   const drawer = page.getByRole('group', { name: 'Choose Y quantity' });
   await expect(drawer.getByLabel('Filter quantities')).toBeFocused();
-  await expect(drawer).toContainText('Y axis for panel 1');
+  await expect(drawer).toContainText('Y axis · panel 1 ·');
   await contained(drawer, page.getByRole('region', { name: 'Age & plots', exact: true }));
   const d = (await drawer.boundingBox())!, board = (await page.getByTestId('geochem-board').boundingBox())!;
   expect(Math.abs(d.width - board.width)).toBeLessThan(1);

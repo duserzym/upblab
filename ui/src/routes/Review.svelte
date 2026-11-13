@@ -9,6 +9,7 @@
   import { groupSpots, spotGroupKey, type ReviewSpot } from '../lib/review-data';
   import { identity } from '../lib/identity.svelte';
   import { selection } from '../lib/selection.svelte';
+  import { equalLayout, presetLayout, presets, readLayout } from '../lib/review-layout';
   import { settings } from '../lib/settings.svelte';
   import { color } from '../components/review/plot-data';
   import { groupUnregistered, rangeSelection } from '../lib/review-selection';
@@ -23,6 +24,12 @@
   let { active, split = false, imagesOnly, images }: {
     active: boolean; split?: boolean; imagesOnly: boolean; images: Snippet<[boolean, string]>;
   } = $props();
+  const dockLayout = $derived(readLayout(split ? settings.reviewDockSplit : settings.reviewDockSolo, split, settings.reviewDataWidth));
+  let layoutsOpen = $state(false);
+  let layoutChoices = $state<HTMLDivElement>();
+  function layoutEscape(event: KeyboardEvent) {
+    if (layoutsOpen && layoutChoices?.getClientRects().length && event.key === 'Escape' && !event.defaultPrevented && !document.querySelector(':popover-open')) { layoutsOpen = false; event.preventDefault(); }
+  }
   let dock = $state<ReturnType<typeof ReviewDock>>();
   // Release canvases while hidden, retaining each plot's axis and diagram choices.
   setContext('upbstudio.review-visible', () => active && review.state === 'ready');
@@ -212,14 +219,24 @@
     review.select(spot);
   }
 </script>
+<svelte:window onkeydown={layoutEscape} />
+{#snippet layoutButtons()}
+  {#each presets.filter(name => split || name !== 'Image focus') as name}
+    <button class="chip" aria-pressed={equalLayout(dockLayout, presetLayout(name, split))} title={name === 'Balanced' ? 'Reset layout to the default panel positions and sizes' : name} onclick={() => { dock?.applyPreset(name); layoutsOpen = false; }}>{name}</button>
+  {/each}
+{/snippet}
 <section id="review-data-pane" class="view review" class:hidden={!active && !imagesOnly} aria-label="Review results" data-testid="review-view">
   <div class="toolbar glass" hidden={imagesOnly}>
     <ScopePicker active={active && !imagesOnly}>
       {#snippet actions()}
-        <button class="chip" onclick={()=>dock?.reset()} title="Restore the default panel positions and sizes">Reset layout</button>
+        <div class="layout-presets" role="group" aria-label="Layout">{@render layoutButtons()}</div>
+        <button class="chip layout-toggle" aria-expanded={layoutsOpen} aria-controls="review-layout-presets" onclick={() => layoutsOpen = !layoutsOpen}>Layout</button>
         <label class="split-toggle"><input type="checkbox" checked={settings.reviewSplit} onchange={e=>void settings.update({reviewSplit:e.currentTarget.checked})} /> SEM images</label>
       {/snippet}
     </ScopePicker>
+    {#if layoutsOpen}
+      <div id="review-layout-presets" class="layout-drawer" role="group" aria-label="Layout presets" bind:this={layoutChoices}>{@render layoutButtons()}</div>
+    {/if}
     {#if review.state==='ready'}
       <div class="selection-bar" aria-label="Shown samples and standards">
         <div class="selection-actions">
@@ -290,6 +307,9 @@
 </section>
 <style>
   .review {overflow:hidden;}
+  .layout-presets {display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+  .layout-toggle,.layout-drawer {display:none;}
+  .layout-presets .chip {font-size:0.72rem;padding:3px 7px;}
   .toolbar[hidden] {display:none;}
   .toolbar {display:flex;flex-direction:column;gap:8px;padding:8px 12px;border-radius:0;flex:none;min-width:0;border:0;box-shadow:none;}
   label {display:flex;align-items:center;gap:4px;font-size:0.75rem;min-width:0;}
@@ -312,4 +332,10 @@
   :global(.review .plots label) {display:inline-flex;align-items:center;gap:4px;font-size:0.8rem;min-width:0;max-width:100%;}
   :global(.review .plots select) {max-width:175px;min-width:0;}
   :global(.review .plots p) {margin:0;}
+  @container (max-width:500px) {.view-switch {gap:1px;}.view-switch button {font-size:0.69rem;padding:5px 3px;gap:2px;}.view-switch svg {display:none;}}
+  @media (max-width:1100px) {
+    .layout-presets {display:none;}
+    .layout-toggle {display:inline-flex;}
+    .layout-drawer {display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:6px;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--accent-soft);}
+  }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte';
   import Plot from './Plot.svelte';
   import { ratioMarks } from './plot-data';
   import { clusterBounds, contains, type Bounds } from './plot-viewport';
@@ -15,6 +16,8 @@
   } = $props();
   let viewport = $state<Bounds | null>(null);
   let boxed = $state.raw(new Set<string>());
+  let more = $state(false);
+  let moreControls = $state<HTMLDivElement>();
   let ellipses = $state(true);
   const allMarks = $derived(ratioMarks(rows, mode));
   const shown = $derived(allMarks.filter(m => !hidden.has(m.spot.key)));
@@ -55,9 +58,16 @@
     onhide(boxedKeys);
     boxed = new Set();
   }
+  function escape(event: KeyboardEvent) {
+    if (more && moreControls?.getClientRects().length && event.key === 'Escape' && !event.defaultPrevented && !document.querySelector(':popover-open')) { more = false; event.preventDefault(); }
+  }
 </script>
-<div class="row wrap controls">
+<svelte:window onkeydown={escape} />
+{#snippet controls(secondaryNavigation: Snippet)}
+<div class="row controls">
   <label>Diagram <select aria-label="Concordia diagram" value={mode} onchange={e => setMode(e.currentTarget.value as ConcordiaMode)}><option value="wetherill">Wetherill</option><option value="tw">Tera-Wasserburg</option></select></label>
+  <button class="chip more" aria-label="More plot controls" aria-expanded={more} aria-controls="plot-more-controls" onclick={() => more = !more}>More</button>
+  <div id="plot-more-controls" bind:this={moreControls} class="secondary" class:expanded={more}>
   {#if mode === 'tw'}
     <button class="chip" title="Fit the reference curve from 100 to 4540 Ma" onclick={() => viewport = earthView}>Earth-age view</button>
   {/if}
@@ -70,10 +80,21 @@
   {/if}
   {#if hidden.size}<button class="chip" onclick={onrestore}>Show hidden ({hidden.size})</button>{/if}
   <span class="faint small" aria-live="polite">{shown.length}/{allMarks.length} plotted{outside ? ` · ${outside} outside view` : ''}</span>
+  <div class="secondary-navigation">{@render secondaryNavigation()}</div>
+  </div>
 </div>
-<Plot {marks} {guidesForBounds} emptyBounds={mode === 'tw' ? earthView : wetherillView} {selected} {onselect} bind:viewport onbox={selectBox} ontoggle={spot => onhide([spot.key])}
+{/snippet}
+<Plot {controls} {marks} {guidesForBounds} emptyBounds={mode === 'tw' ? earthView : wetherillView} {selected} {onselect} bind:viewport onbox={selectBox} ontoggle={spot => onhide([spot.key])}
   xLabel={mode === 'tw' ? '238U/206Pb' : '207Pb/235U'} yLabel={mode === 'tw' ? '207Pb/206Pb' : '206Pb/238U'} />
 <style>
-  .controls {gap:5px;align-items:center;}
+  .controls {gap:5px;align-items:center;flex:none;min-width:0;}
+  .secondary {display:contents;}
+  .more,.secondary-navigation {display:none;}
+  @container (max-width:760px) {
+    .more {display:inline-flex;}
+    .secondary {display:none;}
+    .secondary.expanded {display:flex;flex-wrap:wrap;align-items:center;gap:5px;flex:1 0 100%;padding:6px;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--accent-soft);}
+    .secondary-navigation {display:contents;}
+  }
   .controls .chip {font-size:0.74rem;padding:3px 7px;}
 </style>

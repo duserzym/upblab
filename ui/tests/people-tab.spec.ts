@@ -61,7 +61,7 @@ test('signing out from the hosted page removes People and returns Home', async (
   await expect(page.getByRole('button', { name: 'Sign in', exact: true }).first()).toBeVisible();
 });
 
-for (const [width, height] of [[1440, 900], [1280, 800]]) {
+for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
   test(`People and the six-tab header fit ${width} x ${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await people(page, true, 'Demo staff with a deliberately long display name');

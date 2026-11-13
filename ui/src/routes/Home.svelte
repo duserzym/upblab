@@ -291,6 +291,7 @@
   .action-tile span { min-width: 0; }
   .action-tile strong { display: block; font-size: 0.88rem; }
   .action-tile small { display: block; font-size: 0.74rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width:1100px) {.action-tiles {grid-template-columns:repeat(2,minmax(0,1fr));}}
   .action-tiles > :global(.panel) { margin-top: 0; }
   .board-section { min-width: 0; gap: var(--space-2); }
   /* The 22.3rem minimum fits four cards in Home's real 1440px content box,
