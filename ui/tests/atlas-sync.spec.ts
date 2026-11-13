@@ -204,7 +204,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
   });
 }
 
-test('sync reloads Review once per mount revision and preserves run, sample filter and selected spot', async ({ page }) => {
+test('sync quietly refreshes Review once per mount revision and preserves run, sample filter and selected spot', async ({ page }) => {
   await openAtlas(page, 'review');
   await page.getByRole('button', { name: 'Sample Sample A', exact: true }).click({ modifiers: ['Alt'] });
   await page.locator('[data-spot-key="acq-2"]').click();
@@ -212,11 +212,13 @@ test('sync reloads Review once per mount revision and preserves run, sample filt
   const path = `/v1/sessions/${session.id}/results?run=preferred`;
   const reads = async () => (await calls(page)).filter(([name, args]) => name === 'api_get' && args?.path === path).length;
   const before = await reads();
+  const inventoryBefore = (await calls(page)).filter(([name, args]) => name === 'api_get' && ['/v1/sessions', '/v1/mounts'].includes(String(args?.path))).length;
   await emit(page, synced);
   await expect.poll(reads).toBe(before + 1);
   await expect(page.getByRole('treeitem', { name: /Zircon_2/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('[data-spot-key]')).toHaveCount(4);
   await expect(page.getByLabel('Filter spots')).toHaveValue('Zircon');
+  expect((await calls(page)).filter(([name, args]) => name === 'api_get' && ['/v1/sessions', '/v1/mounts'].includes(String(args?.path)))).toHaveLength(inventoryBefore);
   await emit(page, { ...synced, project: 'another-project-on-same-mount' });
   // A following status event is processed after the duplicate notice.
   await emit(page, { ...status, mode: 'view', state: 'in-sync', revision: 42 });

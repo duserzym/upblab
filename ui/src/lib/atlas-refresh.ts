@@ -28,13 +28,13 @@ function observe(mount: string, next: MountVersion): 'content' | 'pixels' | null
 export async function refreshAtlasMount(mount: string, content = true) {
   const decision = refreshDecision(mount, review, overview.mounts);
   await Promise.allSettled([
-    content && decision.review ? review.load() : Promise.resolve(),
+    content && decision.review ? review.refresh() : Promise.resolve(),
     // Also discover a newly registered mount that Home has not loaded yet.
     overview.refreshMount(mount),
   ]);
 }
 export async function atlasSyncedNotice(event: AtlasSyncedEvent) {
-  currentSource();
+  const origin = currentSource();
   const previous = versions.get(event.mount);
   if (previous && event.revision < previous.revision) return;
   const change = observe(event.mount, event);
@@ -46,7 +46,15 @@ export async function atlasSyncedNotice(event: AtlasSyncedEvent) {
   const forwarding = firstNotice && change !== 'pixels' && moduleSurfaces.has('sessions')
     ? sendCommand('sessions', { type: 'atlas-synced', project: event.project, mount: event.mount, revision: event.revision })
     : Promise.resolve();
-  await Promise.allSettled([change ? refreshAtlasMount(event.mount, change === 'content') : Promise.resolve(), forwarding]);
+  const refreshing = async () => {
+    if (change === 'content') {
+      if (origin !== currentSource()) return;
+      if (refreshDecision(event.mount, review, overview.mounts).review)
+        await Promise.allSettled([review.refresh()]);
+      await overview.refreshMount(event.mount);
+    } else if (change === 'pixels') await refreshAtlasMount(event.mount, false);
+  };
+  await Promise.allSettled([refreshing(), forwarding]);
 }
 /** Focus checks are additive only after GrainAtlas has advertised v4 this session. */
 export async function checkStandaloneSync(now = Date.now()) {

@@ -152,7 +152,7 @@
       if (row.atlasProjectId && !projects.has(row.atlasProjectId)) projects.set(row.atlasProjectId, new Set());
     for (const row of shown)
       if (row.atlasProjectId && row.atlasSpotId) projects.get(row.atlasProjectId)?.add(row.atlasSpotId);
-    return Object.fromEntries([...projects].map(([id, spots]) => [id, [...spots]]));
+    return Object.fromEntries([...projects].sort(([a], [b]) => a.localeCompare(b)).map(([id, spots]) => [id, [...spots].sort()]));
   });
   const visibleColors = $derived.by(() => {
     const projects = new Map<string, Map<string, string>>();
@@ -162,7 +162,7 @@
       if (!spots) projects.set(row.atlasProjectId, spots = new Map());
       spots.set(row.atlasSpotId, color(row.sampleName));
     }
-    return Object.fromEntries([...projects].map(([id, spots]) => [id, Object.fromEntries(spots)]));
+    return Object.fromEntries([...projects].sort(([a], [b]) => a.localeCompare(b)).map(([id, spots]) => [id, Object.fromEntries([...spots].sort(([a], [b]) => a.localeCompare(b)))]));
   });
   let lastVisibility = '';
   let displayedContext = '';

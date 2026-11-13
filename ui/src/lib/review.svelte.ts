@@ -1,5 +1,6 @@
 import type { SpotSelectedEvent, BridgeCommand } from '@lab/bridge';
 import { identity } from './identity.svelte';
+import { logWarn } from './platform';
 import { shell } from './shell.svelte';
 import { settings } from './settings.svelte';
 import { sendCommand } from './incoming';
@@ -36,6 +37,27 @@ export class Review {
   private generation = 0;
   private depthGeneration = 0;
   private selectionGeneration = 0;
+  private source = '';
+  private listsAt = -Infinity;
+  private listsPending: Promise<void> | null = null;
+  private listGeneration = 0;
+  private currentSource() { return `${identity.target?.server ?? ''}:${identity.revision}`; }
+  private loadLists() {
+    if (this.listsPending) return this.listsPending;
+    if (Date.now() - this.listsAt < 60_000) return Promise.resolve();
+    const source = this.source, gen = ++this.listGeneration;
+    const pending = Promise.all([this.get<SessionOut[]>('/v1/sessions'), this.get<MountOut[]>('/v1/mounts')])
+      .then(([sessions, mounts]) => {
+        if (gen !== this.listGeneration || source !== this.currentSource()) return;
+        this.sessions = sessions;
+        this.mounts = mounts;
+        this.listsAt = Date.now();
+      }).finally(() => {
+        if (gen === this.listGeneration) this.listsPending = null;
+      });
+    this.listsPending = pending;
+    return pending;
+  }
   get selected(): ReviewSpot | null { return this.rows.find(r => r.key === this.selectedKey) ?? this.externalSpot; }
   private async get<T>(path: string): Promise<T> {
     const r = await identity.get<T>(path);
@@ -54,10 +76,12 @@ export class Review {
       void settings.update({ reviewScope: JSON.stringify(this.scope) });
     await this.load();
   }
-  private async referenceNames(rows: ReviewSpot[]) {
-    const sessions = new Set(rows.flatMap(row => row.isReference && row.sessionId && !row.values.reference_material_name
+  private async referenceNames(rows: ReviewSpot[], quiet = false) {
+    const sessions = new Set((quiet ? [] : rows).flatMap(row => row.isReference && row.sessionId && !row.values.reference_material_name
       ? [row.sessionId] : []));
-    const names = new Map<string, string>();
+    // Reuse acquisition metadata on quiet refreshes, but let fresh stored names win.
+    const names = new Map<string, string>(quiet ? this.rows.flatMap(row => row.isReference && row.acquisitionId
+      && row.sampleName !== normalise(row.values).sampleName ? [[row.acquisitionId, row.sampleName] as const] : []) : []);
     await Promise.all([...sessions].map(async id => {
       try {
         const acquisitions = await this.get<{ id: string; reference_material_name?: string }[]>(`/v1/sessions/${enc(id)}/acquisitions`);
@@ -67,22 +91,39 @@ export class Review {
       } catch { /* Older or unavailable metadata leaves the result table's names usable. */ }
     }));
     return rows.map(row => {
-      const sampleName = row.isReference && row.acquisitionId ? names.get(row.acquisitionId) : undefined;
+      const sampleName = row.isReference && row.acquisitionId && !row.values.reference_material_name ? names.get(row.acquisitionId) : undefined;
       return sampleName ? { ...row, sampleName } : row;
     });
   }
-  async load() {
+  async refresh() {
+    await this.load({ quiet: true });
+  }
+  async load({ quiet = false } = {}) {
+    const source = this.currentSource();
+    if (source !== this.source || !identity.target || !identity.signedIn) {
+      this.source = source;
+      this.listGeneration++;
+      this.listsPending = null;
+      this.listsAt = -Infinity;
+      this.sessions = [];
+      this.mounts = [];
+      quiet = false;
+    }
+    quiet = quiet && this.state === 'ready';
     const gen = ++this.generation;
-    this.depthGeneration++;
-    this.depth = null;
-    this.depthState = 'idle';
-    this.rows = [];
-    this.hoveredKey = null;
-    this.runs = [];
-    this.run = null;
-    this.runInfo = {};
-    this.externalSpot = null;
-    this.error = '';
+    const current = () => gen === this.generation && source === this.currentSource();
+    if (!quiet) {
+      this.depthGeneration++;
+      this.depth = null;
+      this.depthState = 'idle';
+      this.rows = [];
+      this.hoveredKey = null;
+      this.runs = [];
+      this.run = null;
+      this.runInfo = {};
+      this.externalSpot = null;
+      this.error = '';
+    }
     if (!identity.target || !identity.signedIn) {
       this.state = identity.target ? 'signed-out' : 'idle';
       this.sessions = [];
@@ -90,69 +131,84 @@ export class Review {
       this.selectedKey = null;
       return;
     }
-    this.state = 'loading';
+    if (!quiet) this.state = 'loading';
     try {
-      const [sessions, mounts] = await Promise.all([this.get<SessionOut[]>('/v1/sessions'), this.get<MountOut[]>('/v1/mounts')]);
-      if (gen !== this.generation)
-        return;
-      this.sessions = sessions;
-      this.mounts = mounts;
       if (!this.scope)
         this.scope = parseScope(settings.reviewScope);
       const scope = this.scope;
-      let rows: ReviewSpot[] = [], runs: RunOut[] = [], run: RunBrief | null = null;
-      const info: Record<string, RunBrief> = {};
-      if (scope?.kind === 'session') {
-        const [table, list] = await Promise.all([this.get<ResultTable>(`/v1/sessions/${enc(scope.id)}/results?run=${enc(scope.run)}`), this.get<RunOut[]>(`/v1/sessions/${enc(scope.id)}/reductions`)]);
-        rows = table.rows.map(r => normalise(r, table));
-        runs = list;
-        run = table.run ?? null;
-        if (run)
-          info[run.run_id] = run;
-      }
-      else if (scope?.kind === 'mount') {
-        const mount = await this.get<{
-          spots: ResultRow[];
-        }>(`/v1/mounts/${enc(scope.id)}/results`);
-        const ids = [...new Set(mount.spots.map(s => s.session_id).filter((v): v is string => typeof v === 'string'))];
-        const atlasIds = new Set(mount.spots.map(s => s.atlas_spot_id));
-        const tables = await Promise.all(ids.map(id => this.get<ResultTable>(`/v1/sessions/${enc(id)}/results?run=preferred`)));
-        rows = tables.flatMap(t => {
-          if (t.run)
-            info[t.run.run_id] = t.run;
-          return t.rows.filter(r => r.mount_id ? r.mount_id === scope.id : !!r.atlas_spot_id && atlasIds.has(r.atlas_spot_id)).map(r => normalise({ ...r, mount_id: r.mount_id ?? scope.id }, t));
-        });
-        const keys = new Set(rows.map(r => r.key));
-        // Preserve mount spots absent from any results table (including unmeasured ones).
-        for (const summary of mount.spots) {
-          const spot = normalise({ ...summary, mount_id: scope.id });
-          if (!keys.has(spot.key)) {
-            rows.push(spot);
-            keys.add(spot.key);
-          }
-        }
-      }
-      if (gen !== this.generation)
-        return;
-      rows = await this.referenceNames(rows);
-      if (gen !== this.generation)
-        return;
+      // Let results finish before picker lists compete for server CPU.
+      const results = this.scopeResults(scope, quiet);
+      if (!scope) await this.loadLists();
+      const { rows: resultRows, runs, run, info } = await results.finally(() => {
+        if (scope && current())
+          void this.loadLists().catch(err => logWarn(`[review] Could not refresh lists: ${String(err)}`));
+      });
+      if (!current()) return;
+      const rows = await this.referenceNames(resultRows, quiet);
+      if (!current()) return;
+      const selected = this.selected;
+      const keepExternal = quiet && this.externalSpot !== null && this.selectedKey === this.externalSpot.key
+        && !rows.some(r => r.key === this.selectedKey);
       assignSampleColors(rows.map(r => r.sampleName));
       this.rows = rows;
       this.runs = runs;
       this.run = run;
       this.runInfo = info;
-      this.selectedKey = rows.some(r => r.key === this.selectedKey) ? this.selectedKey : rows.find(r => !r.isReference)?.key ?? rows[0]?.key ?? null;
+      if (!keepExternal) {
+        this.externalSpot = null;
+        this.selectedKey = rows.some(r => r.key === this.selectedKey) ? this.selectedKey : rows.find(r => !r.isReference)?.key ?? rows[0]?.key ?? null;
+      }
       this.state = 'ready';
-      void this.loadDepth();
+      if (!quiet || !selected || (!keepExternal && !rows.some(r => r.key === selected.key))
+        || selected.acquisitionId !== this.selected?.acquisitionId || selected.runId !== this.selected?.runId)
+        void this.loadDepth();
     }
     catch (err) {
-      if (gen !== this.generation)
+      if (!current()) return;
+      if (quiet) {
+        void logWarn(`[review] Could not refresh results: ${String(err)}`);
         return;
+      }
       this.error = err instanceof Error ? err.message : String(err);
       this.state = /Sign in again/.test(this.error) ? 'signed-out' : 'error';
     }
   }
+  private async scopeResults(scope: ReviewScope | null, quiet: boolean) {
+    let rows: ReviewSpot[] = [], runs: RunOut[] = [], run: RunBrief | null = null;
+    const info: Record<string, RunBrief> = {};
+    if (scope?.kind === 'session') {
+      const [table, list] = await Promise.all([this.get<ResultTable>(`/v1/sessions/${enc(scope.id)}/results?run=${enc(scope.run)}`), quiet ? Promise.resolve(this.runs) : this.get<RunOut[]>(`/v1/sessions/${enc(scope.id)}/reductions`)]);
+      rows = table.rows.map(r => normalise(r, table));
+      runs = list;
+      run = table.run ?? null;
+      if (run)
+        info[run.run_id] = run;
+    }
+    else if (scope?.kind === 'mount') {
+      const mount = await this.get<{
+        spots: ResultRow[];
+      }>(`/v1/mounts/${enc(scope.id)}/results`);
+      const ids = [...new Set(mount.spots.map(s => s.session_id).filter((v): v is string => typeof v === 'string'))];
+      const atlasIds = new Set(mount.spots.map(s => s.atlas_spot_id));
+      const tables = await Promise.all(ids.map(id => this.get<ResultTable>(`/v1/sessions/${enc(id)}/results?run=preferred`)));
+      rows = tables.flatMap(t => {
+        if (t.run)
+          info[t.run.run_id] = t.run;
+        return t.rows.filter(r => r.mount_id ? r.mount_id === scope.id : !!r.atlas_spot_id && atlasIds.has(r.atlas_spot_id)).map(r => normalise({ ...r, mount_id: r.mount_id ?? scope.id }, t));
+      });
+      const keys = new Set(rows.map(r => r.key));
+      // Preserve mount spots absent from any results table (including unmeasured ones).
+      for (const summary of mount.spots) {
+        const spot = normalise({ ...summary, mount_id: scope.id });
+        if (!keys.has(spot.key)) {
+          rows.push(spot);
+          keys.add(spot.key);
+        }
+      }
+    }
+    return { rows, runs, run, info };
+  }
+
   async loadDepth() {
     const gen = ++this.depthGeneration, spot = this.selected;
     this.depth = null;
