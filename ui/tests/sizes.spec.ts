@@ -124,7 +124,7 @@ for (const [w, h] of SIZES) {
       expect(await problems(page, 'Review')).toEqual([]);
       await page.getByRole('tab', { name: 'Reduce' }).click();
       expect(await problems(page, 'Reduce')).toEqual([]);
-      await page.getByRole('button', { name: 'Settings' }).click();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
       expect(await problems(page, 'Settings')).toEqual([]);
 
@@ -155,7 +155,7 @@ for (const [w, h] of SIZES) {
       }
       await page.getByRole('tab', { name: 'Review', exact: true }).click();
       expect(await problems(page, 'web Review')).toEqual([]);
-      await page.getByRole('button', { name: 'Settings' }).click();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
       expect(await problems(page, 'web Settings')).toEqual([]);
       await expect(page.getByLabel('Server URL', { exact: true })).toHaveCount(0);
       await expect(page.locator('.view:visible').getByText(server, { exact: true })).toBeVisible();
@@ -197,7 +197,7 @@ test(`the smallest window (${MIN[0]} x ${MIN[1]}) has no sideways overflow`, asy
     await page.getByRole('tab', { name: tab, exact: true }).click();
     expect(await problems(page, `${tab} at minimum size`)).toEqual([]);
   }
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   expect(await problems(page, 'Settings')).toEqual([]);
 });
 
@@ -221,3 +221,28 @@ test('desktop: drops go to the tab that reads them, never asking', async ({ page
   await expect(page.getByRole('status').filter({ hasText: 'Apatite_demo' })).toContainText('Qtegra export Apatite_demo, 2 files');
   expect(await problems(page, 'Home after drops')).toEqual([]);
 });
+
+// Populated opener controls, including the smallest supported window.
+for (const [width, height] of [...SIZES, MIN]) {
+  test(`Review openers and Reduce session list fit ${width} x ${height}`, async ({ page }) => {
+    const { openReview } = await import('./review-helpers');
+    const { session } = await import('./fixtures/review');
+    await page.setViewportSize({ width, height });
+    await openReview(page, { fixtures: { [`/v1/sessions/${session.id}`]: session }, store: {
+      // Keep details visible at minimum size, with its own vertical scroller.
+      reviewDockSolo: JSON.stringify({ axis: 'x', ratio: 0.3, first: 'spots', second: { axis: 'x', ratio: 0.6, first: 'plots', second: 'details' } }),
+    } });
+    const panel = page.getByTestId('review-details');
+    for (const name of ['Edit in grainatlas', 'Open in Studio']) {
+      await panel.getByRole('button', { name, exact: true }).scrollIntoViewIfNeeded();
+      await expect(panel.getByRole('button', { name, exact: true })).toBeVisible();
+    }
+    expect(await problems(page, 'Review with openers')).toEqual([]);
+    await page.getByRole('tab', { name: 'Reduce', exact: true }).click();
+    await expect(page.getByTestId('reduce-sessions').getByRole('button', { name: 'Open in Studio', exact: true })).toBeVisible();
+    expect(await problems(page, 'Reduce session list')).toEqual([]);
+    await page.getByTestId('reduce-sessions').getByRole('button', { name: 'Open in Studio', exact: true }).click();
+    await expect(page.locator('.view:visible').getByRole('status')).toContainText('Studio is not installed');
+    expect(await problems(page, 'Reduce installation guidance')).toEqual([]);
+  });
+}

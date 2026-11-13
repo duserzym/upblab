@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { installFakeTauri } from './fake-tauri';
+import { installFakeTauri, type FakeOptions } from './fake-tauri';
 import { reviewFixtures, session } from './fixtures/review';
 
 export type Call = [string, Record<string, unknown> | undefined];
@@ -7,9 +7,9 @@ export const calls = (page: Page) => page.evaluate(() => (window as unknown as {
   __fake: { calls: Call[] };
 }).__fake.calls);
 
-export async function openReview(page: Page, options: { signedIn?: boolean; store?: Record<string, unknown> } = {}) {
+export async function openReview(page: Page, options: { signedIn?: boolean; store?: Record<string, unknown>; fixtures?: Record<string, unknown>; grainatlasLaunchErrors?: string[]; studioFound?: boolean; studioLaunchErrors?: FakeOptions['studioLaunchErrors'] } = {}) {
   await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [{ name: 'grainatlas', version: 'demo', source: 'fixture', sha256: 'demo', entry: 'modules/grainatlas/index.html' }] } }));
-  await page.addInitScript(installFakeTauri, { store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'review', reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }), ...options.store }, fixtures: reviewFixtures, signedIn: options.signedIn ?? true });
+  await page.addInitScript(installFakeTauri, { store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'review', reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }), ...options.store }, fixtures: { ...reviewFixtures, ...options.fixtures }, signedIn: options.signedIn ?? true, grainatlasLaunchErrors: options.grainatlasLaunchErrors, studioFound: options.studioFound, studioLaunchErrors: options.studioLaunchErrors });
   await page.goto('./');
   await page.waitForFunction(() => (window as unknown as {
     __fake: { listeners: Map<string, unknown> };

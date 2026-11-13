@@ -10,6 +10,8 @@ export interface FakeOptions {
   standards?: { warning: boolean; message: string; changed: string[] };
   signedIn?: boolean;
   grainatlasLaunchErrors?: string[];
+  studioFound?: boolean;
+  studioLaunchErrors?: string[];
   sessionPaths?: string[];
   folderPaths?: string[];
   projectPackages?: Record<string, unknown>;
@@ -30,6 +32,7 @@ export function installFakeTauri(opts: FakeOptions) {
   let quitSequence = 0;
   let next = 1;
   const launchErrors = [...(opts.grainatlasLaunchErrors ?? [])];
+  const studioErrors = [...(opts.studioLaunchErrors ?? [])];
   const status = {
     phase: 'idle',
     step: '',
@@ -94,7 +97,12 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'probe':
           return { reachable: true };
         case 'studio_status':
-          return { found: false, path: null, error: 'UPbRPy Studio is not installed' };
+          return opts.studioFound ? { found: true, path: '/Applications/UPbRPy Studio.app', kind: 'installed' } : { found: false, path: null, error: 'UPbRPy Studio is not installed' };
+        case 'studio_launch': {
+          const error = studioErrors.shift();
+          if (error) throw new Error(error);
+          return { command: 'Studio opened' };
+        }
         case 'standards_check':
           return opts.standards ?? null;
         case 'auth_restore':
