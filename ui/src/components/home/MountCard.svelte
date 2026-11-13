@@ -1,6 +1,6 @@
 <script lang="ts">
   import Thumbnail from './Thumbnail.svelte';
-  import type { MountRow } from '../../lib/overview.svelte';
+  import { overview, type MountRow } from '../../lib/overview.svelte';
   import { day } from '../../lib/home';
   import { shell } from '../../lib/shell.svelte';
   import { review } from '../../lib/review.svelte';
@@ -12,7 +12,7 @@
 </script>
 <article class="glass panel mount-card" data-testid={atlasOnly ? 'atlas-card' : 'mount-card'}>
   <div class="summary">
-    <Thumbnail sources={row.thumbnails} label={row.mount.label} />
+    <Thumbnail sources={row.thumbnails} label={row.mount.label} onvisible={atlas ? () => void overview.loadThumbnails(row.mount.id) : undefined} />
     <div class="details">
       <button class="main" title={action} aria-label={action} onclick={() => void shell.handleLink(target, 'home')}><span class="key">{label}</span></button>
       <p class="muted small ellipsis" title={atlasOnly ? row.mount.label : row.mount.mount_type}>{atlasOnly ? row.mount.label : row.mount.mount_type || 'Mount'}</p>
@@ -20,7 +20,7 @@
     </div>
   </div>
   <div class="footer">
-    <span class="badge small" title={atlas?.name ?? undefined}>{atlas ? `atlas${atlas.version != null ? ` v${atlas.version}` : ''}${atlas.publishedAt ? ` · ${day(atlas.publishedAt)}` : ''}` : row.atlas === 'error' ? 'atlas unavailable' : 'no atlas'}</span>
+    <span class="badge small" title={atlas?.name ?? undefined}>{atlas ? `atlas${atlas.version != null ? ` v${atlas.version}` : ''}${atlas.publishedAt ? ` · ${day(atlas.publishedAt)}` : ''}` : row.detailsPending ? 'checking atlas…' : row.atlas === 'error' ? 'atlas unavailable' : 'no atlas'}</span>
     {#if !atlasOnly}
       <div class="controls">
         <button class="btn" onclick={(e) => { e.stopPropagation(); shell.show('review'); void review.open({ kind: 'mount', id: row.mount.id }); }}>Review</button>

@@ -63,8 +63,8 @@
           <h2 id="session-access-title">Session access and sharing</h2>
           {#if canList}<span class="muted small">{owned} owned · {rows.length} shown</span>{/if}
           <span class="spacer"></span>
-          {#if canList && rows.length < overview.totalSessions}
-            <button class="btn small" disabled={overview.refreshing} onclick={() => void overview.load(true)}>Show all {overview.totalSessions}</button>
+          {#if canList && overview.sessions.length < overview.totalSessions}
+            <button class="btn small" disabled={overview.refreshing} onclick={() => void overview.loadRest('sessions')}>Showing {overview.sessions.length} of {overview.totalSessions} · Load the rest</button>
           {/if}
           <button class="btn small" disabled={overview.refreshing} onclick={() => void overview.load()}>Refresh access</button>
         </div>

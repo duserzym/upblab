@@ -39,7 +39,14 @@
   const atlases = $derived(mountsShown(overview.mounts, atlasQuery, atlasSort, true));
   const atlasCount = $derived(overview.mounts.filter(r => r.atlas && r.atlas !== 'error').length);
   const maximum = $derived(Math.max(0, ...sessions.map(r => r.session.acquisition_count)));
-  const showAll = () => void overview.load(true);
+  const sessionProgress = $derived(overview.sessionProgress.completed < overview.sessionProgress.total
+    ? `loading ${overview.sessionProgress.completed} of ${overview.sessionProgress.total}` : undefined);
+  const mountProgress = $derived(overview.mountProgress.completed < overview.mountProgress.total
+    ? `loading ${overview.mountProgress.completed} of ${overview.mountProgress.total}` : undefined);
+  const atlasProgress = $derived(overview.mountProgress.completed < overview.mountProgress.total
+    ? `checking ${overview.mountProgress.completed} of ${overview.mountProgress.total} mounts for atlases` : undefined);
+  const sessionCap = $derived({ shown: overview.sessions.length, total: overview.totalSessions, loadRest: () => void overview.loadRest('sessions') });
+  const mountCap = $derived({ shown: overview.mounts.length, total: overview.totalMounts, loadRest: () => void overview.loadRest('mounts') });
   const refresh = () => void overview.load();
 
   // Open anything (ux-conventions rule 4): one folder or any files; the shell
@@ -166,7 +173,7 @@
     {/if}
 
     <section class="board-section stack" aria-label="Sessions">
-      <Toolbar section="Sessions" bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} loaded={overview.sessions.length} refresh={identity.signedIn ? refresh : undefined} showAll={overview.sessions.length < overview.totalSessions ? showAll : undefined} busy={overview.refreshing}>
+      <Toolbar section="Sessions" bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} progress={sessionProgress} cap={sessionCap} refresh={identity.signedIn ? refresh : undefined} busy={overview.refreshing}>
         {#snippet options()}
           <button class="btn small group-button" aria-pressed={groupSessions} onclick={() => groupSessions = !groupSessions}>Group by mineral</button>
         {/snippet}
@@ -218,7 +225,7 @@
 
     {#if overview.state === 'ready'}
       <section class="board-section stack" aria-label="Mounts">
-        <Toolbar section="Mounts" bind:query={mountQuery} bind:sort={mountSort} count={mounts.length} total={overview.totalMounts} loaded={overview.mounts.length} refresh={refresh} showAll={overview.mounts.length < overview.totalMounts ? showAll : undefined} busy={overview.refreshing} />
+        <Toolbar section="Mounts" bind:query={mountQuery} bind:sort={mountSort} count={mounts.length} total={overview.totalMounts} progress={mountProgress} cap={mountCap} refresh={refresh} busy={overview.refreshing} />
         {#if overview.mounts.length === 0}
           <p class="muted small">No mounts yet. Register mounts in Sessions; publish their images from grainatlas.</p>
         {:else}
@@ -230,12 +237,11 @@
         {#if overview.error}<p class="faint small">{overview.error}</p>{/if}
       </section>
       <section class="board-section stack" aria-label="Atlases">
-        <Toolbar section="Atlases" bind:query={atlasQuery} bind:sort={atlasSort} count={atlases.length} total={atlasCount} loaded={overview.mounts.length} refresh={refresh} showAll={overview.mounts.length < overview.totalMounts ? showAll : undefined} busy={overview.refreshing} />
-        {#if overview.mounts.length < overview.totalMounts}<p class="faint small">Atlases of the latest {overview.mounts.length} loaded mounts; Show all to search all {overview.totalMounts} mounts.</p>{/if}
+        <Toolbar section="Atlases" bind:query={atlasQuery} bind:sort={atlasSort} count={atlases.length} total={atlasCount} progress={atlasProgress} cap={mountCap} refresh={refresh} busy={overview.refreshing} />
         <div class="tile-grid" data-testid="atlas-grid">
           {#each atlases as row (row.mount.id)}<MountCard {row} atlasOnly />{/each}
         </div>
-        {#if atlases.length === 0}<p class="muted small">{atlasCount ? 'No atlases match this search.' : 'No published atlases in the loaded mounts.'}</p>{/if}
+        {#if atlases.length === 0 && !atlasProgress}<p class="muted small">{atlasCount ? 'No atlases match this search.' : 'No published atlases.'}</p>{/if}
       </section>
     {/if}
 
@@ -298,6 +304,7 @@
      three at 1280px and two at 1024px, including the tab's scrollbar. */
   .upload-expansion[hidden] { display: none; }
   .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(22.3rem, 100%), 1fr)); gap: var(--space-2); min-width: 0; }
+  [data-testid='session-grid'], [data-testid='mount-grid'], [data-testid='atlas-grid'] { max-height: 20rem; overflow-y: auto; padding: 2px; }
   .tile-grid > :global(.panel) { margin-top: 0; }
   .group-button[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
   .spot-key { flex-wrap: wrap; gap: var(--space-1) var(--space-3); }

@@ -1,5 +1,10 @@
 import type { MountOut, MountRow, SessionRow } from './overview.svelte';
 
+/** Large inventories are explicitly expandable; ordinary inventories are complete. */
+export function capInventory<T>(items: T[]): T[] {
+  return items.slice(0, 500);
+}
+
 export type Sort = 'newest' | 'oldest' | 'az' | 'za';
 export const day = (iso: string | null) => iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 
@@ -48,6 +53,7 @@ export function mountsShown(rows: MountRow[], query: string, sort: Sort, atlases
 }
 
 export function runStatus(row: SessionRow): { tone: 'ok' | 'warning' | 'text-faint'; text: string } {
+  if (row.detailsPending) return { tone: 'text-faint', text: row.runs === null ? 'loading reductions…' : `${row.runs} run${row.runs === 1 ? '' : 's'} · loading reductions…` };
   if (row.runs === null) return { tone: 'text-faint', text: 'reductions unavailable' };
   if (!row.runs) return { tone: 'text-faint', text: 'not reduced' };
   if (row.latest && ['failed', 'running', 'pending', 'queued'].includes(row.latest.status))

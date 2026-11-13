@@ -1,18 +1,15 @@
 // Home's view of laicpmsdb (roadmap phase 4, docs/WORKFLOW.md stage 9):
-// recent sessions with their reduction runs (count, preferred run) and the
+// sessions with their reduction runs (count, preferred run) and the
 // current atlas of each mount. Read as the shell's signed-in account.
 //
 //   GET /v1/sessions                     newest first
-//   GET /v1/sessions/{id}/reductions     per shown session
+//   GET /v1/sessions/{id}/reductions     per session
 //   GET /v1/mounts
 //   GET /v1/mounts/{id}/atlas            {current: {...} | null, versions, …}; current null = none published
 
-import { atlasFileUrl, newestMounts, thumbnailPaths } from './home';
+import { atlasFileUrl, capInventory, newestMounts, thumbnailPaths } from './home';
 import { identity } from './identity.svelte';
 import type { ApiReply } from './platform';
-
-/** How many sessions and mounts Home shows. */
-export const LIMIT = 12;
 
 export interface SessionOut {
   id: string;
@@ -23,6 +20,7 @@ export interface SessionOut {
   started_at: string | null;
   acquisition_count: number;
   run_count?: number;
+  kind_counts?: Record<string, number>;
   preferred_run?: Partial<RunOut> | null;
   instrument?: { name?: string } | null;
   analyst?: string | null;
@@ -61,6 +59,7 @@ export interface Atlas {
 
 export interface SessionRow {
   session: SessionOut;
+  detailsPending?: boolean;
   /** null: could not be read. */
   runs: number | null;
   preferred: RunOut | null;
@@ -79,6 +78,7 @@ interface SessionDetail {
 
 export interface MountRow {
   mount: MountOut;
+  detailsPending?: boolean;
   /** null: none published; 'error': could not be read. */
   atlas: Atlas | null | 'error';
   thumbnails?: string[];
@@ -137,20 +137,24 @@ class Overview {
   totalSessions = $state(0);
   totalMounts = $state(0);
   loadedAt = $state<Date | null>(null);
-  allLoaded = $state(false);
+  sessionProgress = $state({ completed: 0, total: 0 });
+  mountProgress = $state({ completed: 0, total: 0 });
+  private sessionList: SessionOut[] = [];
+  private mountList: MountOut[] = [];
+  private thumbnailSources = new Map<string, { server: string; atlas: Atlas; access: string; started: boolean }>();
   refreshing = $state(false);
   private generation = 0;
 
   private source = '';
 
-  async load(all = this.allLoaded) {
+  async load() {
     const source = `${identity.target?.server ?? ''}:${identity.revision}`;
     if (source !== this.source) {
       this.clear();
       this.source = source;
-      all = false;
     }
     const gen = ++this.generation;
+    this.thumbnailSources.clear();
     if (!identity.target) {
       this.clear();
       return;
@@ -171,22 +175,24 @@ class Overview {
         return;
       }
       if (!isList<SessionOut>(sessions)) throw new Error(`sessions: ${detail(sessions)}`);
-      const shown = all ? sessions.body : sessions.body.slice(0, LIMIT);
-      const mountList = isList<MountOut>(mounts) ? newestMounts(mounts.body) : [];
-      const shownMounts = all ? mountList : mountList.slice(0, LIMIT);
-      const [rows, mountRows] = await Promise.all([
-        mapLimited(shown, (s) => this.sessionRow(s), () => gen === this.generation),
-        mapLimited(shownMounts, (m) => this.mountRow(m), () => gen === this.generation),
-      ]);
-      if (gen !== this.generation) return;
-      this.allLoaded = all;
-      this.sessions = rows;
-      this.mounts = mountRows;
-      this.totalSessions = sessions.body.length;
-      this.totalMounts = mountList.length;
+      this.sessionList = sessions.body;
+      this.mountList = isList<MountOut>(mounts) ? newestMounts(mounts.body) : [];
+      const shown = capInventory(this.sessionList);
+      const shownMounts = capInventory(this.mountList);
+      this.sessions = shown.map(baseSession);
+      this.mounts = shownMounts.map(mount => ({ mount, atlas: null, detailsPending: true }));
+      this.totalSessions = this.sessionList.length;
+      this.totalMounts = this.mountList.length;
+      this.sessionProgress = { completed: 0, total: shown.length };
+      this.mountProgress = { completed: 0, total: shownMounts.length };
+      // Publish base rows before any per-row detail finishes.
       this.state = 'ready';
       this.error = isList(mounts) ? '' : `mounts: ${detail(mounts)}`;
       this.loadedAt = new Date();
+      await Promise.all([
+        this.fillSessions(shown, 0, gen),
+        this.fillMounts(shownMounts, 0, gen),
+      ]);
     } catch (err) {
       if (gen !== this.generation) return;
       const msg = err instanceof Error ? err.message : String(err);
@@ -195,6 +201,48 @@ class Overview {
     } finally {
       if (gen === this.generation) this.refreshing = false;
     }
+  }
+
+  /** The explicit escape hatch for inventories over 500, using the list already read. */
+  async loadRest(section: 'sessions' | 'mounts') {
+    if (this.refreshing || this.state !== 'ready') return;
+    const gen = this.generation;
+    this.refreshing = true;
+    try {
+      if (section === 'sessions') {
+        const offset = this.sessions.length;
+        const rest = this.sessionList.slice(offset);
+        this.sessions = [...this.sessions, ...rest.map(baseSession)];
+        this.sessionProgress.total = this.sessions.length;
+        await this.fillSessions(rest, offset, gen);
+      } else {
+        const offset = this.mounts.length;
+        const rest = this.mountList.slice(offset);
+        this.mounts = [...this.mounts, ...rest.map(mount => ({ mount, atlas: null, detailsPending: true }))];
+        this.mountProgress.total = this.mounts.length;
+        await this.fillMounts(rest, offset, gen);
+      }
+    } finally {
+      if (gen === this.generation) this.refreshing = false;
+    }
+  }
+
+  private async fillSessions(items: SessionOut[], offset: number, gen: number) {
+    await mapLimited(items, async (session, index) => {
+      const row = await this.sessionRow(session);
+      if (gen !== this.generation) return;
+      this.sessions[offset + index] = row;
+      this.sessionProgress.completed += 1;
+    }, () => gen === this.generation);
+  }
+
+  private async fillMounts(items: MountOut[], offset: number, gen: number) {
+    await mapLimited(items, async (mount, index) => {
+      const row = await this.mountRow(mount, gen);
+      if (gen !== this.generation) return;
+      this.mounts[offset + index] = row;
+      this.mountProgress.completed += 1;
+    }, () => gen === this.generation);
   }
 
   private async sessionRow(session: SessionOut): Promise<SessionRow> {
@@ -208,44 +256,60 @@ class Overview {
         canShare: info.can_share === true,
       } : undefined;
     return {
-      session, kindCounts: info?.kind_counts ?? null, access,
+      session, kindCounts: info?.kind_counts ?? session.kind_counts ?? null, access,
       ...(runs.status === 'fulfilled' && isList<RunOut>(runs.value)
         ? summariseRuns(runs.value.body) : { runs: null, preferred: null, latest: null }),
     };
   }
 
-  private async mountRow(mount: MountOut): Promise<MountRow> {
+  private async mountRow(mount: MountOut, gen: number): Promise<MountRow> {
     const server = identity.target?.server;
     try {
       const r = await identity.get(`/v1/mounts/${encodeURIComponent(mount.id)}/atlas`);
       if (r.status === 200) {
         const atlas = parseAtlas(r.body);
         const access = (r.body as { access?: unknown } | null)?.access;
-        let thumbnails: string[] = [];
-        // The host's authenticated proxy only permits /v1/. Atlas files use the
-        // project-scoped read token directly, also in desktop webviews.
-        if (atlas && server && typeof access === 'string' && access) {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 5000);
-          try {
-            const response = await fetch(atlasFileUrl(server, atlas.projectId, 'atlas.json', access), { referrerPolicy: 'no-referrer', signal: controller.signal });
-            if (response.ok)
-              thumbnails = thumbnailPaths(await response.json()).map(path => atlasFileUrl(server, atlas.projectId, path, access));
-          } catch { /* A missing thumbnail must never hide the mount. */ }
-          finally { clearTimeout(timeout); }
-        }
-        return { mount, atlas, thumbnails };
+        if (gen === this.generation && atlas && server && typeof access === 'string' && access)
+          this.thumbnailSources.set(mount.id, { server, atlas, access, started: false });
+        return { mount, atlas };
       }
       if (r.status === 404 || r.status === 405) return { mount, atlas: null };
     } catch { /* fall through */ }
     return { mount, atlas: 'error' };
   }
 
+  /** Called on intersection; mount and atlas cards share one manifest request. */
+  async loadThumbnails(mountId: string) {
+    const source = this.thumbnailSources.get(mountId);
+    if (!source || source.started) return;
+    source.started = true;
+    const { server, atlas, access } = source;
+    const gen = this.generation;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    let thumbnails: string[] = [];
+    // The host's authenticated proxy only permits /v1/. Atlas files use the
+    // project-scoped read token directly, also in desktop webviews.
+    try {
+      const response = await fetch(atlasFileUrl(server, atlas.projectId, 'atlas.json', access), { referrerPolicy: 'no-referrer', signal: controller.signal });
+      if (response.ok)
+        thumbnails = thumbnailPaths(await response.json()).map(path => atlasFileUrl(server, atlas.projectId, path, access));
+    } catch { /* A missing thumbnail must never hide the mount. */ }
+    finally { clearTimeout(timeout); }
+    if (gen !== this.generation) return;
+    const row = this.mounts.find(row => row.mount.id === mountId);
+    if (row) row.thumbnails = thumbnails;
+  }
+
   clear() {
     this.generation += 1;
     this.state = 'idle';
     this.refreshing = false;
-    this.allLoaded = false;
+    this.sessionProgress = { completed: 0, total: 0 };
+    this.mountProgress = { completed: 0, total: 0 };
+    this.sessionList = [];
+    this.mountList = [];
+    this.thumbnailSources.clear();
     this.error = '';
     this.totalSessions = 0;
     this.totalMounts = 0;
@@ -255,17 +319,20 @@ class Overview {
   }
 }
 
-/** Bound the fan-out when Show all loads a large inventory. */
-async function mapLimited<T, R>(items: T[], read: (item: T) => Promise<R>, current: () => boolean): Promise<R[]> {
-  const output = new Array<R>(items.length);
+function baseSession(session: SessionOut): SessionRow {
+  return { session, runs: session.run_count ?? null, preferred: null, latest: null,
+    kindCounts: session.kind_counts, detailsPending: true };
+}
+
+/** Bound background detail fan-out, stopping queued work on refresh. */
+async function mapLimited<T>(items: T[], read: (item: T, index: number) => Promise<void>, current: () => boolean): Promise<void> {
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(4, items.length) }, async () => {
     while (next < items.length && current()) {
       const index = next++;
-      output[index] = await read(items[index]);
+      await read(items[index], index);
     }
   }));
-  return output;
 }
 
 export const overview = new Overview();

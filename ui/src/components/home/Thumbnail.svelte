@@ -1,11 +1,23 @@
 <script lang="ts">
-  let { sources = [], label }: { sources?: string[]; label: string } = $props();
+  let { sources = [], label, onvisible }: { sources?: string[]; label: string; onvisible?: () => void } = $props();
+  let element: HTMLDivElement;
+  $effect(() => {
+    if (!onvisible) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) {
+        observer.disconnect();
+        onvisible?.();
+      }
+    }, { rootMargin: '200px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  });
   let failures = $state.raw(new Set<string>());
   $effect(() => { void sources; failures = new Set(); });
   const images = $derived(sources.filter(src => !failures.has(src)));
 </script>
 
-<div class="thumbnail">
+<div class="thumbnail" bind:this={element}>
   {#if images.length}
     <div class="overview" role="img" aria-label="Atlas overview for {label}"
       style:grid-template-columns={`repeat(${Math.ceil(Math.sqrt(images.length))}, minmax(0, 1fr))`}>

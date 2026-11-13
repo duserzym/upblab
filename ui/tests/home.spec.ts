@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { installFakeTauri } from './fake-tauri';
 import { problems } from './problems';
 import { reviewFixtures, session, runs } from './fixtures/review';
+import { homeSessions, homeMounts, homeAtlasMounts, largeHomeFixtures } from './fixtures/home';
 
 // Small, invented board inventory; the first session also has Review fixtures.
 const sessions = Array.from({ length: 10 }, (_, i) => ({
@@ -24,7 +25,7 @@ const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 type Call = [string, Record<string, unknown> | undefined];
 const calls = (page: Page) => page.evaluate(() => (window as unknown as { __fake: { calls: Call[] } }).__fake.calls);
 
-async function home(page: Page, desktop: boolean, inventory = fixtures, brokenThumbnail = false) {
+async function home(page: Page, desktop: boolean, inventory = fixtures, brokenThumbnail = false, detailsReady?: Promise<void>) {
   await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [{ name: 'grainatlas', version: 'demo', source: 'fixture', sha256: 'demo', entry: 'modules/grainatlas/index.html' }] } }));
   await page.route('**/modules/grainatlas/**', r => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Images fixture</title>' }));
   await page.route('**/atlas/projects/**', r => {
@@ -35,8 +36,9 @@ async function home(page: Page, desktop: boolean, inventory = fixtures, brokenTh
     } } });
     return brokenThumbnail ? r.fulfill({ status: 404 }) : r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, contentType: 'image/png', body: png });
   });
-  await page.route('**/v1/**', r => {
+  await page.route('**/v1/**', async r => {
     const url = new URL(r.request().url());
+    if (/^\/v1\/(sessions|mounts)\//.test(url.pathname)) await detailsReady;
     const body = url.pathname === '/v1/accounts/me' ? { username: 'demo', display_name: 'Demo analyst' } : inventory[url.pathname + url.search];
     return r.fulfill({ status: body === undefined ? 404 : 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Accept' }, json: body ?? {} });
   });
@@ -50,7 +52,7 @@ async function home(page: Page, desktop: boolean, inventory = fixtures, brokenTh
     });
   }
   await page.goto('./');
-  await expect(page.getByTestId('session-card')).toHaveCount(Math.min(12, (inventory['/v1/sessions'] as unknown[]).length));
+  await expect(page.getByTestId('session-card')).toHaveCount(Math.min(500, (inventory['/v1/sessions'] as unknown[]).length));
 }
 
 for (const desktop of [true, false]) {
@@ -98,6 +100,7 @@ for (const desktop of [true, false]) {
     await expect(page.getByRole('treeitem').first()).toBeVisible();
     await page.getByRole('tab', { name: 'Home', exact: true }).click();
     await page.getByLabel('Search mounts').fill('Demo mount 1');
+    await page.getByTestId('mount-card').scrollIntoViewIfNeeded();
     const thumbnail = page.getByTestId('mount-card').getByRole('img', { name: 'Atlas overview for Demo mount 1', exact: true });
     await expect(thumbnail).toBeVisible();
     const images = thumbnail.locator('img');
@@ -142,28 +145,99 @@ test('eight sessions and eight mounts leave the first row of every section in vi
 });
 
 test('failed thumbnail falls back to a mount outline', async ({ page }) => {
+  const failures = Promise.all(['area1/3', 'area2/2'].map(tile => page.waitForResponse(response =>
+    response.url().includes(`/pyramid/${tile}/0_0.png`) && response.status() === 404)));
   await home(page, true, fixtures, true);
-  await expect(page.getByTestId('mount-card').getByRole('img', { name: 'No thumbnail for Demo mount 1', exact: true })).toBeVisible();
+  const card = page.getByTestId('mount-card').filter({ hasText: 'Demo mount 1' });
+  await card.scrollIntoViewIfNeeded();
+  await failures;
+  await expect(card.locator('img')).toHaveCount(0);
+  await expect(card.getByRole('img', { name: 'No thumbnail for Demo mount 1', exact: true })).toBeVisible();
 });
 
 
-test('Show all expands the inventory and makes the remaining sessions searchable', async ({ page }) => {
-  const extra = Array.from({ length: 4 }, (_, i) => ({ ...sessions[0], id: `extra-${i}`, session_key: `Earlier session ${i}` }));
-  const inventory: Record<string, unknown> = { ...fixtures, '/v1/sessions': [...sessions, ...extra] };
-  for (const s of extra) {
-    inventory[`/v1/sessions/${s.id}/reductions`] = [];
-    inventory[`/v1/sessions/${s.id}`] = { kind_counts: { sample: 12 } };
+for (const desktop of [true, false]) {
+  for (const [width, height] of [[1512, 982], [1280, 800], [1024, 640]]) {
+    test(`${desktop ? 'desktop' : 'web'} full inventory opens and searches at ${width} x ${height}`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await home(page, desktop, largeHomeFixtures);
+      const sessions = page.getByRole('region', { name: 'Sessions', exact: true });
+      const mounts = page.getByRole('region', { name: 'Mounts', exact: true });
+      const atlases = page.getByRole('region', { name: 'Atlases', exact: true });
+      await expect(page.getByTestId('session-card')).toHaveCount(homeSessions.length);
+      await expect(page.getByTestId('mount-card')).toHaveCount(homeMounts.length);
+      await expect(mounts.locator('.toolbar')).toContainText('Mounts 40');
+      await expect(sessions.locator('.toolbar')).toContainText('Sessions 15');
+      await expect(page.getByRole('button', { name: 'Show all', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Load the rest', exact: true })).toHaveCount(0);
+      await expect(page.getByTestId('atlas-card')).toHaveCount(homeAtlasMounts.length);
+      await expect(atlases.getByRole('status')).toHaveCount(0);
+      await expect(atlases.locator('.toolbar')).toContainText(`Atlases ${homeAtlasMounts.length}`);
+      for (const mount of homeAtlasMounts) {
+        await expect(page.getByTestId('atlas-card').getByText(mount.label, { exact: true })).toHaveCount(1);
+      }
+      expect(await problems(page, 'Home full inventory before searching')).toEqual([]);
+      await page.getByLabel('Search mounts').fill('Zircon_mount_37');
+      await expect(page.getByTestId('mount-card')).toHaveCount(1);
+      await expect(page.getByTestId('mount-card')).toContainText('Zircon_mount_37');
+      await expect(mounts.locator('.toolbar')).toContainText('Mounts 40');
+      await page.getByLabel('Search atlases').fill('Zircon_mount_37');
+      await expect(page.getByTestId('atlas-card')).toHaveCount(1);
+      await expect(page.getByTestId('atlas-card')).toContainText('Published images 37');
+      await expect(page.getByTestId('atlas-card')).toContainText('Zircon_mount_37');
+      await page.getByLabel('Search sessions').fill('Board session 14');
+      await expect(page.getByTestId('session-card')).toHaveCount(1);
+      expect(await problems(page, 'Home full inventory')).toEqual([]);
+    });
   }
-  await home(page, true, inventory);
-  const section = page.getByRole('region', { name: 'Sessions', exact: true });
-  await expect(section).toContainText('Latest 12 of 14');
-  await expect(section).toContainText('searching the latest 12');
-  await section.getByRole('button', { name: 'Show all', exact: true }).click();
-  await expect(page.getByTestId('session-card')).toHaveCount(14);
-  await page.getByLabel('Search sessions').fill('Earlier session');
-  await expect(page.getByTestId('session-card')).toHaveCount(4);
-  await expect(section).toContainText('4 of 14');
-  await expect(section.getByRole('button', { name: 'Show all', exact: true })).toHaveCount(0);
+}
+
+test('base rows and section progress appear while detail requests are pending', async ({ page }) => {
+  let release!: () => void;
+  const detailsReady = new Promise<void>(resolve => { release = resolve; });
+  await home(page, false, largeHomeFixtures, false, detailsReady);
+  const sessions = page.getByRole('region', { name: 'Sessions', exact: true });
+  const mounts = page.getByRole('region', { name: 'Mounts', exact: true });
+  const atlases = page.getByRole('region', { name: 'Atlases', exact: true });
+  try {
+    await expect(page.getByTestId('session-card')).toHaveCount(15);
+    await expect(page.getByTestId('mount-card')).toHaveCount(40);
+    await expect(sessions.getByRole('status')).toHaveText('loading 0 of 15');
+    await expect(mounts.getByRole('status')).toHaveText('loading 0 of 40');
+    await expect(atlases.getByRole('status')).toHaveText('checking 0 of 40 mounts for atlases');
+    await page.getByLabel('Search mounts').fill('Zircon_mount_37');
+    await expect(page.getByTestId('mount-card')).toHaveCount(1);
+    await expect(page.getByTestId('mount-card')).toContainText('39 grains · 47 spots');
+    await expect(atlases.getByText('No published atlases.', { exact: true })).toHaveCount(0);
+  } finally {
+    release();
+  }
+  await expect(sessions.getByRole('status')).toHaveCount(0);
+  await expect(mounts.getByRole('status')).toHaveCount(0);
+  await expect(atlases.getByRole('status')).toHaveCount(0);
+  await expect(page.getByTestId('atlas-card')).toHaveCount(homeAtlasMounts.length);
+});
+
+test('thumbnail manifests wait for a card to approach the viewport and are shared between sections', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const manifests: string[] = [];
+  page.on('request', request => {
+    if (new URL(request.url()).pathname.endsWith('/atlas.json')) manifests.push(request.url());
+  });
+  await home(page, true, largeHomeFixtures);
+  await expect(page.getByTestId('atlas-card')).toHaveCount(homeAtlasMounts.length);
+  const lastManifest = '/atlas/projects/board-project-37/atlas.json';
+  expect(manifests.some(url => url.includes(lastManifest))).toBe(false);
+  await page.getByLabel('Search mounts').fill('Zircon_mount_37');
+  const mount = page.getByTestId('mount-card');
+  await mount.scrollIntoViewIfNeeded();
+  await expect(mount.getByRole('img', { name: 'Atlas overview for Zircon_mount_37', exact: true })).toBeVisible();
+  expect(manifests.filter(url => url.includes(lastManifest))).toHaveLength(1);
+  await page.getByLabel('Search atlases').fill('Zircon_mount_37');
+  const atlas = page.getByTestId('atlas-card');
+  await atlas.scrollIntoViewIfNeeded();
+  await expect(atlas.getByRole('img', { name: 'Atlas overview for Zircon_mount_37', exact: true })).toBeVisible();
+  expect(manifests.filter(url => url.includes(lastManifest))).toHaveLength(1);
 });
 
 // SCREENSHOTS=1: the Home board with the demo inventory, for docs/screenshots.

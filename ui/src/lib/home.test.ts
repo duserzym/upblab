@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atlasFileUrl, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsByMineral, sessionsShown, thumbnailPaths } from './home';
+import { atlasFileUrl, capInventory, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsByMineral, sessionsShown, thumbnailPaths } from './home';
 import type { MountRow, RunOut, SessionRow } from './overview.svelte';
 
 const run: RunOut = { id: 'r', session_id: 's', pipeline_name: 'UPbRPy', pipeline_version: '0.1', status: 'completed', started_at: '2026-11-05', completed_at: '2026-11-05', upbrpy_version: '0.1', is_preferred_for_session: true, run_by: null, result_count: 2 };
@@ -26,7 +26,7 @@ describe('Home filtering and sorting', () => {
       ['rutile', [rutile]], ['zircon', [newer, older]],
     ]);
   });
-  it('takes recent UUIDv7 mounts before the detail limit instead of the API label order', () => {
+  it('orders UUIDv7 mounts by creation instead of the API label order', () => {
     const first = { ...mount('A').mount, id: '01900000-0000-7000-8000-000000000000' };
     const recent = { ...mount('B').mount, id: '01910000-0000-7000-8000-000000000000' };
     expect(newestMounts([first, recent])).toEqual([recent, first]);
@@ -45,6 +45,8 @@ describe('Home run status', () => {
     const row = session('A', null);
     expect(runStatus(row)).toEqual({ tone: 'text-faint', text: 'not reduced' });
     expect(runStatus({ ...row, runs: null }).text).toBe('reductions unavailable');
+    expect(runStatus({ ...row, runs: null, detailsPending: true }).text).toBe('loading reductions…');
+    expect(runStatus({ ...row, runs: 2, detailsPending: true }).text).toBe('2 runs · loading reductions…');
     expect(runStatus({ ...row, runs: 2 }).text).toBe('2 runs, none preferred');
     expect(runStatus({ ...row, runs: 1, preferred: run, latest: run })).toMatchObject({ tone: 'ok', text: expect.stringContaining('preferred · UPbRPy 0.1') });
     for (const status of ['failed', 'running']) expect(runStatus({ ...row, runs: 2, preferred: run, latest: { ...run, status } })).toEqual({ tone: 'warning', text: `${status} · 2 runs` });
@@ -85,5 +87,23 @@ describe('Home atlas thumbnails', () => {
   it('rejects traversal, external URLs and query strings and encodes access separately', () => {
     expect(thumbnailPaths({ files: { '../bad.png': '', 'https://other/image.png': '', '/bad.png': '', '%2e%2e/bad.png': '', 'bad.png?token=x': '' } })).toEqual([]);
     expect(atlasFileUrl('http://lab/prefix/', 'project', 'pyramid/area 1/0/0_0.webp', 'read+/token')).toBe('http://lab/prefix/atlas/projects/project/pyramid/area%201/0/0_0.webp?access=read%2B%2Ftoken');
+  });
+});
+
+
+describe('Home inventory cap', () => {
+  it('keeps all rows through 500 and explicitly caps larger inventories without changing input', () => {
+    for (const size of [0, 12, 15, 40, 500, 501, 800]) {
+      const items = Array.from({ length: size }, (_, i) => i);
+      expect(capInventory(items)).toEqual(items.slice(0, Math.min(500, size)));
+      expect(items).toHaveLength(size);
+    }
+  });
+  it('searches rows beyond the previous twelve-row subset', () => {
+    const sessions = Array.from({ length: 15 }, (_, i) => session(`Session ${i}`, null));
+    const mounts = Array.from({ length: 40 }, (_, i) => mount(`Zircon_mount_${i}`, '2026-11-01'));
+    expect(sessionsShown(capInventory(sessions), 'Session 14', 'az')).toEqual([sessions[14]]);
+    expect(mountsShown(capInventory(mounts), 'Zircon_mount_37', 'az')).toEqual([mounts[37]]);
+    expect(mountsShown(capInventory(mounts), 'Zircon_mount_37', 'az', true)).toEqual([mounts[37]]);
   });
 });
