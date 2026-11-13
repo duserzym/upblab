@@ -6,6 +6,10 @@ import {
   isBridgeCommand,
   isBridgePush,
   spotSelection,
+  ATLAS_EVENTS,
+  atlasStatus,
+  atlasDrafts,
+  atlasSynced,
   type BridgeCommand,
   MESSAGE_TAG,
   OPEN_FILES_EVENT,
@@ -221,7 +225,7 @@ describe('open-files (protocol v2)', () => {
   };
 
   it('still accepts v1 requests and knows the new op', () => {
-    expect(PROTOCOL_VERSION).toBe(3);
+    expect(PROTOCOL_VERSION).toBe(4);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 1, id: 'a', op: 'token' })).toBe(true);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 2, id: 'a', op: 'open-files' })).toBe(true);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 2, id: 'a', op: 'delete' })).toBe(false);
@@ -472,11 +476,11 @@ describe('commands (protocol v3)', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('host pushCommand posts the v3 envelope to the requested origin', () => {
+  it('host pushCommand posts the current envelope to the requested origin', () => {
     const frame = { postMessage: vi.fn() };
     pushCommand(frame, latest, 'https://lab.example');
     expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith({
-      tag: MESSAGE_TAG, v: 3, push: 'command', command: latest,
+      tag: MESSAGE_TAG, v: PROTOCOL_VERSION, push: 'command', command: latest,
     }, 'https://lab.example');
   });
 });
@@ -600,7 +604,146 @@ describe('resolved theme (v3.1)', () => {
     const frame = { postMessage: vi.fn() };
     pushTheme(frame, 'dark', 'https://lab.example');
     expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith({
-      tag: MESSAGE_TAG, v: 3, push: 'theme', theme: 'dark',
+      tag: MESSAGE_TAG, v: PROTOCOL_VERSION, push: 'theme', theme: 'dark',
     }, 'https://lab.example');
+  });
+});
+
+describe('atlas sync (protocol v4)', () => {
+  const badIds = ['', '-bad', 'a/b', 'a b', 'a?b', 'é', 'a\n', 'a'.repeat(129), null, 1];
+  const badCounts = [-1, 0.5, NaN, Infinity, '1', null, undefined, true];
+  const changes = { spots: 0, grains: 2, labels: 3, pixels: false };
+  const status = {
+    type: ATLAS_EVENTS.status, project: 'p._~-', mount: 'm', name: 'Invented atlas',
+    mode: 'view', state: 'checking', revision: 0, atlasVersion: 1, changes,
+    syncedAt: '2026-11-12T12:00:00Z',
+  };
+  const draft = {
+    project: 'p', name: 'Invented draft', mount: 'm', baseRevision: 0, changes,
+    updatedAt: '2026-11-12T12:00:00Z',
+  };
+  const synced = {
+    type: ATLAS_EVENTS.synced, project: 'p', mount: 'm', revision: 0,
+    atlasVersion: 1, changed: changes, at: '2026-11-12T12:00:00Z',
+  };
+  const commands: BridgeCommand[] = [
+    { type: 'open-project', project: 'p' },
+    { type: 'set-mode', project: 'p', mode: 'view' },
+    { type: 'leave-edit', project: 'p', decision: 'sync' },
+    { type: 'sync-draft', project: 'p' },
+    { type: 'discard-draft', project: 'p' },
+    { type: 'report-status' },
+    { type: 'atlas-synced', project: 'p', mount: 'm', revision: 0 },
+  ];
+
+  it('validates every new command, ignores extra fields and checks required ids', () => {
+    for (const command of commands) {
+      expect(isBridgeCommand(command)).toBe(true);
+      expect(isBridgeCommand({ ...command, future: { any: true }, flash: null, via: false })).toBe(true);
+      if (command.type === 'report-status') continue;
+      expect(isBridgeCommand({ ...command, project: 'a'.repeat(128) })).toBe(true);
+      for (const project of [...badIds, undefined]) expect(isBridgeCommand({ ...command, project })).toBe(false);
+    }
+    for (const mount of [...badIds, undefined]) expect(isBridgeCommand({ ...commands[6], mount })).toBe(false);
+    for (const revision of badCounts) expect(isBridgeCommand({ ...commands[6], revision })).toBe(false);
+    expect(isBridgeCommand({ type: 'future-command' })).toBe(false);
+  });
+
+  it('validates open-project server, mode and revision, and all leave decisions', () => {
+    const open = commands[0];
+    for (const mode of ['view', 'edit']) {
+      expect(isBridgeCommand({ ...open, mode, revision: 0 })).toBe(true);
+      expect(isBridgeCommand({ ...commands[1], mode })).toBe(true);
+    }
+    for (const mode of ['VIEW', 'checking', '', null, true]) {
+      expect(isBridgeCommand({ ...open, mode })).toBe(false);
+      expect(isBridgeCommand({ ...commands[1], mode })).toBe(false);
+    }
+    expect(isBridgeCommand({ type: 'set-mode', project: 'p' })).toBe(false);
+    for (const revision of badCounts.filter((value) => value !== undefined))
+      expect(isBridgeCommand({ ...open, revision })).toBe(false);
+    for (const server of ['http://localhost:8000', 'https://lab.example/atlas', 'https://h/' + 'x'.repeat(2038)])
+      expect(isBridgeCommand({ ...open, server })).toBe(true);
+    for (const server of [null, true, '', 'file:///tmp/a', 'javascript:alert(1)', 'https://', 'https://h/ a', 'https://h/\n', 'https://h/' + 'x'.repeat(2040)])
+      expect(isBridgeCommand({ ...open, server })).toBe(false);
+    for (const decision of ['sync', 'keep-draft', 'discard'])
+      expect(isBridgeCommand({ ...commands[2], decision })).toBe(true);
+    for (const decision of ['cancel', 'keep', '', null, true, undefined])
+      expect(isBridgeCommand({ ...commands[2], decision })).toBe(false);
+  });
+
+  it('parses status snapshots, including checking and nullable fields, without extra fields', () => {
+    expect(atlasStatus(status)).toEqual(status);
+    for (const state of ['checking', 'unregistered', 'in-sync', 'local-changes', 'server-newer', 'both-changed', 'offline'])
+      for (const mode of ['view', 'edit']) expect(atlasStatus({ ...status, state, mode })).toEqual({ ...status, state, mode });
+    const nullable = { ...status, mount: null, revision: null, atlasVersion: null, changes: null, syncedAt: null };
+    expect(atlasStatus(nullable)).toEqual(nullable);
+    expect(atlasStatus({ ...status, revision: null })?.revision).toBeNull();
+    for (const revision of [0, 1]) expect(atlasStatus({ ...nullable, revision })).toBeNull();
+    expect(atlasStatus({ ...status, atlasVersion: undefined, version: 1 })).toBeNull();
+    expect(atlasStatus({ ...status, version: 'ignored' })).toEqual(status);
+    expect(atlasStatus({ ...status, future: true, changes: { ...changes, future: true } })).toEqual(status);
+    for (const field of Object.keys(status)) expect(atlasStatus({ ...status, [field]: undefined })).toBeNull();
+    for (const field of ['project', 'mount']) for (const id of badIds.filter((value) => field === 'project' || value !== null))
+      expect(atlasStatus({ ...status, [field]: id })).toBeNull();
+    for (const field of ['revision', 'atlasVersion']) for (const count of badCounts.filter((value) => value !== null))
+      expect(atlasStatus({ ...status, [field]: count })).toBeNull();
+    for (const [field, value] of [['type', 'future'], ['mode', 'VIEW'], ['mode', null], ['state', 'syncing'], ['state', null], ['name', null], ['syncedAt', 1]])
+      expect(atlasStatus({ ...status, [field as string]: value })).toBeNull();
+  });
+
+  it('parses hosted drafts as one bounded snapshot, including empty and nullable values', () => {
+    const event = { type: ATLAS_EVENTS.drafts, drafts: [draft] };
+    expect(atlasDrafts(event)).toEqual(event);
+    expect(atlasDrafts({ ...event, drafts: [] })).toEqual({ ...event, drafts: [] });
+    const nullable = { ...draft, mount: null, baseRevision: null };
+    expect(atlasDrafts({ ...event, drafts: [nullable] })?.drafts).toEqual([nullable]);
+    expect(atlasDrafts({ ...event, future: true, drafts: [{ ...draft, future: true, changes: { ...changes, future: true } }] })).toEqual(event);
+    expect(atlasDrafts({ ...event, drafts: Array(500).fill(draft) })?.drafts).toHaveLength(500);
+    expect(atlasDrafts({ ...event, drafts: Array(501).fill(draft) })).toBeNull();
+    for (const drafts of [undefined, null, {}, [draft, null]]) expect(atlasDrafts({ ...event, drafts })).toBeNull();
+    expect(atlasDrafts({ ...event, type: 'future' })).toBeNull();
+    for (const field of Object.keys(draft))
+      expect(atlasDrafts({ ...event, drafts: [draft, { ...draft, [field]: undefined }] })).toBeNull();
+    for (const field of ['project', 'mount']) for (const id of badIds.filter((value) => field === 'project' || value !== null))
+      expect(atlasDrafts({ ...event, drafts: [{ ...draft, [field]: id }] })).toBeNull();
+    for (const count of badCounts.filter((value) => value !== null))
+      expect(atlasDrafts({ ...event, drafts: [{ ...draft, baseRevision: count }] })).toBeNull();
+    for (const [field, value] of [['name', null], ['updatedAt', 1]])
+      expect(atlasDrafts({ ...event, drafts: [{ ...draft, [field as string]: value }] })).toBeNull();
+  });
+
+  it('parses sync notices and rejects malformed ids, revisions and timestamps', () => {
+    expect(atlasSynced(synced)).toEqual(synced);
+    expect(atlasSynced({ ...synced, atlasVersion: null })?.atlasVersion).toBeNull();
+    expect(atlasSynced({ ...synced, atlasVersion: undefined, version: 1 })).toBeNull();
+    expect(atlasSynced({ ...synced, version: 'ignored' })).toEqual(synced);
+    expect(atlasSynced({ ...synced, future: true, changed: { ...changes, future: true } })).toEqual(synced);
+    for (const field of Object.keys(synced)) expect(atlasSynced({ ...synced, [field]: undefined })).toBeNull();
+    for (const field of ['project', 'mount']) for (const id of badIds)
+      expect(atlasSynced({ ...synced, [field]: id })).toBeNull();
+    for (const revision of badCounts) expect(atlasSynced({ ...synced, revision })).toBeNull();
+    for (const atlasVersion of badCounts.filter((value) => value !== null)) expect(atlasSynced({ ...synced, atlasVersion })).toBeNull();
+    expect(atlasSynced({ ...synced, type: 'future' })).toBeNull();
+    expect(atlasSynced({ ...synced, at: null })).toBeNull();
+  });
+
+  it('validates changes consistently in all three event parsers', () => {
+    const parseChanges = (value: unknown) => [
+      atlasStatus({ ...status, changes: value }),
+      atlasDrafts({ type: ATLAS_EVENTS.drafts, drafts: [{ ...draft, changes: value }] }),
+      atlasSynced({ ...synced, changed: value }),
+    ];
+    for (const field of ['spots', 'grains', 'labels']) {
+      for (const count of badCounts) for (const result of parseChanges({ ...changes, [field]: count })) expect(result).toBeNull();
+      for (const result of parseChanges({ ...changes, [field]: 0 })) expect(result).not.toBeNull();
+    }
+    for (const pixels of [true, false]) for (const result of parseChanges({ ...changes, pixels })) expect(result).not.toBeNull();
+    for (const value of [[], {}, 'bad', undefined, { ...changes, pixels: 1 }, { ...changes, pixels: undefined }])
+      for (const result of parseChanges(value)) expect(result).toBeNull();
+    expect(atlasDrafts({ type: ATLAS_EVENTS.drafts, drafts: [{ ...draft, changes: null }] })).toBeNull();
+    expect(atlasSynced({ ...synced, changed: null })).toBeNull();
+    for (const parse of [atlasStatus, atlasDrafts, atlasSynced])
+      for (const value of [null, undefined, [], true, 'bad', {}]) expect(parse(value)).toBeNull();
   });
 });

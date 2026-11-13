@@ -9,9 +9,10 @@
 //   3  command: the shell asks a module to show something (focus-spot,
 //      focus-grain); lab.spot.selected.
 //   3.1 theme: resolved shell theme at load and on every change.
+//   4  atlas sync status, hosted drafts, sync notices and edit commands.
 
-export const PROTOCOL_VERSION = 3;
-export const PROTOCOL_MINOR = 1;
+export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_MINOR = 0;
 
 export type Theme = 'light' | 'dark';
 export function isTheme(value: unknown): value is Theme {
@@ -74,6 +75,13 @@ export const SHELL_EVENTS = {
   spotSelected: 'lab.spot.selected',
 } as const;
 
+/** v4: GrainAtlas snapshots and sync notices, sent through notify(). */
+export const ATLAS_EVENTS = {
+  status: 'lab.atlas.status',
+  drafts: 'lab.atlas.drafts',
+  synced: 'lab.atlas.synced',
+} as const;
+
 /** A module event for the shell (timeline entries, status, title changes). */
 export interface BridgeEvent {
   /** Namespaced type, e.g. `grainatlas.spot.selected`. */
@@ -115,7 +123,101 @@ export interface ReviewSpotsCommand {
   focus?: Omit<FocusSpotCommand, 'type'>;
 }
 
-export type BridgeCommand = FocusSpotCommand | FocusGrainCommand | ReviewSpotsCommand;
+export type AtlasMode = 'view' | 'edit';
+export type AtlasState = 'checking' | 'unregistered' | 'in-sync' | 'local-changes' |
+  'server-newer' | 'both-changed' | 'offline';
+
+export interface AtlasChanges {
+  spots: number;
+  grains: number;
+  labels: number;
+  pixels: boolean;
+}
+
+export interface AtlasStatusEvent extends BridgeEvent {
+  type: typeof ATLAS_EVENTS.status;
+  project: string;
+  mount: string | null;
+  name: string;
+  mode: AtlasMode;
+  state: AtlasState;
+  /** Mount content revision; null whenever mount is null. */
+  revision: number | null;
+  /** Mount's current published bundle (laicpmsdb atlas_version). */
+  atlasVersion: number | null;
+  changes: AtlasChanges | null;
+  syncedAt: string | null;
+}
+
+export interface AtlasDraft {
+  project: string;
+  name: string;
+  mount: string | null;
+  baseRevision: number | null;
+  changes: AtlasChanges;
+  updatedAt: string;
+}
+
+export interface AtlasDraftsEvent extends BridgeEvent {
+  type: typeof ATLAS_EVENTS.drafts;
+  drafts: AtlasDraft[];
+}
+
+export interface AtlasSyncedEvent extends BridgeEvent {
+  type: typeof ATLAS_EVENTS.synced;
+  project: string;
+  mount: string;
+  /** Mount content revision, shared by all its project UUIDs. */
+  revision: number;
+  atlasVersion: number | null;
+  changed: AtlasChanges;
+  at: string;
+}
+
+export interface OpenProjectCommand {
+  type: 'open-project';
+  project: string;
+  server?: string;
+  mode?: AtlasMode;
+  revision?: number;
+}
+
+export interface SetModeCommand {
+  type: 'set-mode';
+  project: string;
+  mode: AtlasMode;
+}
+
+export interface LeaveEditCommand {
+  type: 'leave-edit';
+  project: string;
+  decision: 'sync' | 'keep-draft' | 'discard';
+}
+
+export interface SyncDraftCommand {
+  type: 'sync-draft';
+  project: string;
+}
+
+export interface DiscardDraftCommand {
+  type: 'discard-draft';
+  project: string;
+}
+
+export interface ReportStatusCommand {
+  type: 'report-status';
+}
+
+export interface AtlasSyncedCommand {
+  type: 'atlas-synced';
+  project: string;
+  mount: string;
+  revision: number;
+}
+
+export type BridgeCommand = FocusSpotCommand | FocusGrainCommand | ReviewSpotsCommand |
+  OpenProjectCommand | SetModeCommand | LeaveEditCommand | SyncDraftCommand |
+  DiscardDraftCommand | ReportStatusCommand | AtlasSyncedCommand;
 
 /** The shell also accepts grainatlas.spot.selected ({ project, spot, name }) as via 'user'. */
 export interface SpotSelectedEvent extends BridgeEvent {
@@ -130,6 +232,13 @@ export interface SpotSelectedEvent extends BridgeEvent {
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/;
 const isId = (x: unknown): x is string => typeof x === 'string' && ID.test(x);
+const isCount = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0;
+const isAtlasMode = (x: unknown): x is AtlasMode => x === 'view' || x === 'edit';
+const isAtlasState = (x: unknown): x is AtlasState =>
+  x === 'checking' || x === 'unregistered' || x === 'in-sync' || x === 'local-changes' ||
+  x === 'server-newer' || x === 'both-changed' || x === 'offline';
+const isRecord = (x: unknown): x is Record<string, unknown> =>
+  !!x && typeof x === 'object' && !Array.isArray(x);
 const isGrain = (x: unknown): x is string =>
   typeof x === 'string' && x.split('/').length <= 2 && x.split('/').every(isId);
 
@@ -147,6 +256,16 @@ function isServer(x: unknown): boolean {
 export function isBridgeCommand(x: unknown): x is BridgeCommand {
   if (!x || typeof x !== 'object') return false;
   const c = x as Record<string, unknown>;
+  if (c.type === 'report-status') return true;
+  if (c.type === 'open-project') return isId(c.project) &&
+    (c.server === undefined || isServer(c.server)) &&
+    (c.mode === undefined || isAtlasMode(c.mode)) &&
+    (c.revision === undefined || isCount(c.revision));
+  if (c.type === 'set-mode') return isId(c.project) && isAtlasMode(c.mode);
+  if (c.type === 'leave-edit') return isId(c.project) &&
+    (c.decision === 'sync' || c.decision === 'keep-draft' || c.decision === 'discard');
+  if (c.type === 'sync-draft' || c.type === 'discard-draft') return isId(c.project);
+  if (c.type === 'atlas-synced') return isId(c.project) && isId(c.mount) && isCount(c.revision);
   if (c.type === 'review-spots') {
     if (!c.projects || typeof c.projects !== 'object' || Array.isArray(c.projects)) return false;
     const projects = Object.entries(c.projects);
@@ -184,6 +303,57 @@ export function spotSelection(event: BridgeEvent): SpotSelectedEvent | null {
       (event.via !== undefined && event.via !== 'user' && event.via !== 'shell')) return null;
   return { ...event, type: SHELL_EVENTS.spotSelected, project: event.project, spot: event.spot,
     via: event.via ?? 'user' } as SpotSelectedEvent;
+}
+
+function atlasChanges(value: unknown): AtlasChanges | null {
+  if (!isRecord(value) || !isCount(value.spots) || !isCount(value.grains) ||
+      !isCount(value.labels) || typeof value.pixels !== 'boolean') return null;
+  return { spots: value.spots, grains: value.grains, labels: value.labels, pixels: value.pixels };
+}
+
+/** v4: normalise the latest open-project snapshot; unknown fields are ignored. */
+export function atlasStatus(event: unknown): AtlasStatusEvent | null {
+  if (!isRecord(event) || event.type !== ATLAS_EVENTS.status || !isId(event.project) ||
+      (event.mount !== null && !isId(event.mount)) || typeof event.name !== 'string' ||
+      !isAtlasMode(event.mode) || !isAtlasState(event.state) ||
+      (event.revision !== null && !isCount(event.revision)) ||
+      (event.mount === null && event.revision !== null) ||
+      (event.atlasVersion !== null && !isCount(event.atlasVersion)) ||
+      (event.syncedAt !== null && typeof event.syncedAt !== 'string')) return null;
+  const changes = event.changes === null ? null : atlasChanges(event.changes);
+  if (event.changes !== null && !changes) return null;
+  return { type: ATLAS_EVENTS.status, project: event.project, mount: event.mount,
+    name: event.name, mode: event.mode, state: event.state, revision: event.revision,
+    atlasVersion: event.atlasVersion, changes, syncedAt: event.syncedAt };
+}
+
+/** v4: normalise all tracked hosted drafts, rejecting an invalid or oversized snapshot. */
+export function atlasDrafts(event: unknown): AtlasDraftsEvent | null {
+  if (!isRecord(event) || event.type !== ATLAS_EVENTS.drafts ||
+      !Array.isArray(event.drafts) || event.drafts.length > 500) return null;
+  const drafts: AtlasDraft[] = [];
+  for (const draft of event.drafts) {
+    if (!isRecord(draft) || !isId(draft.project) || typeof draft.name !== 'string' ||
+        (draft.mount !== null && !isId(draft.mount)) ||
+        (draft.baseRevision !== null && !isCount(draft.baseRevision)) ||
+        typeof draft.updatedAt !== 'string') return null;
+    const changes = atlasChanges(draft.changes);
+    if (!changes) return null;
+    drafts.push({ project: draft.project, name: draft.name, mount: draft.mount,
+      baseRevision: draft.baseRevision, changes, updatedAt: draft.updatedAt });
+  }
+  return { type: ATLAS_EVENTS.drafts, drafts };
+}
+
+/** v4: normalise a successful sync or update-from-database notice. */
+export function atlasSynced(event: unknown): AtlasSyncedEvent | null {
+  if (!isRecord(event) || event.type !== ATLAS_EVENTS.synced || !isId(event.project) ||
+      !isId(event.mount) || !isCount(event.revision) ||
+      (event.atlasVersion !== null && !isCount(event.atlasVersion)) || typeof event.at !== 'string') return null;
+  const changed = atlasChanges(event.changed);
+  if (!changed) return null;
+  return { type: ATLAS_EVENTS.synced, project: event.project, mount: event.mount,
+    revision: event.revision, atlasVersion: event.atlasVersion, changed, at: event.at };
 }
 
 export type BridgeOp = 'open' | 'token' | 'notify' | 'open-files';

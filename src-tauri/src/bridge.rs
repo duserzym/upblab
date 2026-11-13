@@ -217,7 +217,45 @@ fn valid_server(value: &Value) -> bool {
     })
 }
 
+fn valid_count(value: Option<&Value>) -> bool {
+    value
+        .and_then(Value::as_f64)
+        .is_some_and(|n| n.is_finite() && n >= 0.0 && n.fract() == 0.0)
+}
+
+fn valid_atlas_mode(value: Option<&Value>) -> bool {
+    matches!(value.and_then(Value::as_str), Some("view" | "edit"))
+}
+
 fn valid_command(command: &Value) -> bool {
+    match command.get("type").and_then(Value::as_str) {
+        Some("report-status") => return true,
+        Some("open-project") => {
+            return valid_id(command.get("project"))
+                && command.get("server").is_none_or(valid_server)
+                && command
+                    .get("mode")
+                    .is_none_or(|v| valid_atlas_mode(Some(v)))
+                && command.get("revision").is_none_or(|v| valid_count(Some(v)));
+        }
+        Some("set-mode") => {
+            return valid_id(command.get("project")) && valid_atlas_mode(command.get("mode"));
+        }
+        Some("leave-edit") => {
+            return valid_id(command.get("project"))
+                && matches!(
+                    command.get("decision").and_then(Value::as_str),
+                    Some("sync" | "keep-draft" | "discard")
+                );
+        }
+        Some("sync-draft" | "discard-draft") => return valid_id(command.get("project")),
+        Some("atlas-synced") => {
+            return valid_id(command.get("project"))
+                && valid_id(command.get("mount"))
+                && valid_count(command.get("revision"));
+        }
+        _ => {}
+    }
     if command.get("type").and_then(Value::as_str) == Some("review-spots") {
         let projects = command.get("projects").and_then(Value::as_object);
         return projects.is_some_and(|projects| {
@@ -489,6 +527,159 @@ mod tests {
         assert!(valid_command(&command));
         command["colors"]["p"]["extra"] = json!("#123456");
         assert!(!valid_command(&command));
+    }
+
+    #[test]
+    fn atlas_commands_validate_required_ids_and_ignore_extra_fields() {
+        for mut command in [
+            json!({"type": "open-project", "project": "p"}),
+            json!({"type": "set-mode", "project": "p", "mode": "view"}),
+            json!({"type": "leave-edit", "project": "p", "decision": "sync"}),
+            json!({"type": "sync-draft", "project": "p"}),
+            json!({"type": "discard-draft", "project": "p"}),
+            json!({"type": "atlas-synced", "project": "p", "mount": "m", "revision": 0}),
+        ] {
+            assert!(valid_command(&command));
+            command["future"] = json!({"anything": true});
+            command["flash"] = Value::Null;
+            command["via"] = json!(false);
+            assert!(valid_command(&command));
+            command["project"] = json!("a".repeat(128));
+            assert!(valid_command(&command));
+            for id in [
+                "",
+                "-bad",
+                "a/b",
+                "a b",
+                "a?b",
+                "é",
+                "a\n",
+                &"a".repeat(129),
+            ] {
+                command["project"] = json!(id);
+                assert!(!valid_command(&command), "accepted {command}");
+            }
+            for project in [Value::Null, json!(1)] {
+                command["project"] = project;
+                assert!(!valid_command(&command));
+            }
+            command.as_object_mut().unwrap().remove("project");
+            assert!(!valid_command(&command));
+        }
+        assert!(valid_command(&json!({"type": "report-status"})));
+        assert!(valid_command(
+            &json!({"type": "report-status", "future": true, "project": null})
+        ));
+    }
+
+    #[test]
+    fn atlas_commands_validate_modes_decisions_and_counts() {
+        for mode in ["view", "edit"] {
+            assert!(valid_command(
+                &json!({"type": "open-project", "project": "p", "mode": mode, "revision": 0})
+            ));
+            assert!(valid_command(
+                &json!({"type": "set-mode", "project": "p", "mode": mode})
+            ));
+        }
+        for kind in ["open-project", "set-mode"] {
+            for mode in [
+                json!("VIEW"),
+                json!("checking"),
+                json!(""),
+                Value::Null,
+                json!(true),
+            ] {
+                assert!(!valid_command(
+                    &json!({"type": kind, "project": "p", "mode": mode})
+                ));
+            }
+        }
+        assert!(!valid_command(&json!({"type": "set-mode", "project": "p"})));
+        for decision in ["sync", "keep-draft", "discard"] {
+            assert!(valid_command(
+                &json!({"type": "leave-edit", "project": "p", "decision": decision})
+            ));
+        }
+        for decision in [
+            json!("cancel"),
+            json!("keep"),
+            json!(""),
+            Value::Null,
+            json!(true),
+        ] {
+            assert!(!valid_command(
+                &json!({"type": "leave-edit", "project": "p", "decision": decision})
+            ));
+        }
+        assert!(!valid_command(
+            &json!({"type": "leave-edit", "project": "p"})
+        ));
+        for kind in ["open-project", "atlas-synced"] {
+            for revision in [json!(0), json!(1), json!(1.0)] {
+                assert!(valid_command(
+                    &json!({"type": kind, "project": "p", "mount": "m", "revision": revision})
+                ));
+            }
+            for revision in [json!(-1), json!(0.5), json!("1"), Value::Null, json!(true)] {
+                assert!(!valid_command(
+                    &json!({"type": kind, "project": "p", "mount": "m", "revision": revision})
+                ));
+            }
+        }
+        assert!(!valid_command(
+            &json!({"type": "atlas-synced", "project": "p", "mount": "m"})
+        ));
+        assert!(!valid_command(
+            &json!({"type": "atlas-synced", "project": "p", "revision": 0})
+        ));
+        for mount in [
+            json!(""),
+            json!("-bad"),
+            json!("a/b"),
+            json!("a b"),
+            json!("a?b"),
+            json!("é"),
+            json!("a\n"),
+            json!("a".repeat(129)),
+            Value::Null,
+            json!(1),
+        ] {
+            assert!(!valid_command(
+                &json!({"type": "atlas-synced", "project": "p", "mount": mount, "revision": 0})
+            ));
+        }
+    }
+
+    #[test]
+    fn open_project_validates_optional_server_like_focus_spot() {
+        for server in [
+            "http://localhost:8000",
+            "https://lab.example/atlas",
+            &format!("https://h/{}", "x".repeat(2038)),
+        ] {
+            assert!(valid_command(
+                &json!({"type": "open-project", "project": "p", "server": server})
+            ));
+        }
+        for server in [
+            "",
+            "file:///tmp/a",
+            "javascript:alert(1)",
+            "https://",
+            "https://h/ a",
+            "https://h/\n",
+            &format!("https://h/{}", "x".repeat(2040)),
+        ] {
+            assert!(!valid_command(
+                &json!({"type": "open-project", "project": "p", "server": server})
+            ));
+        }
+        for server in [Value::Null, json!(true)] {
+            assert!(!valid_command(
+                &json!({"type": "open-project", "project": "p", "server": server})
+            ));
+        }
     }
 
     #[test]

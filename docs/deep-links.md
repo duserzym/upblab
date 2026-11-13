@@ -63,12 +63,48 @@ it; use the Home tab's link box instead.
 
 ## Module installers
 
-Per the cross-platform contract, the module apps' own installers register only
-their own scheme (grainatlas desktop registers `grainatlas`, UPbRPy Studio
-registers `upbr`). When both are installed, the OS picks one handler per
-scheme; UPb Lab routes a `grainatlas://` link to its Images tab and a
-`upbr://` link to Studio (adding a handoff code), while the standalone app
-opens it itself (Studio then asks for a sign-in if the link has no code).
+`grainatlas://` stays registered to UPb Lab and opens its Images tab.
+Standalone GrainAtlas is launched with arguments, as described below.
+UPbRPy Studio's installer registers `upbr`; when both Studio and UPb Lab are
+installed, the OS picks one handler for that scheme. UPb Lab routes an
+`upbr://` link to Studio, adding a handoff code. Studio can also open the link
+itself, asking for a sign-in if the link has no code.
+
+## Open in GrainAtlas (standalone)
+
+The shell launches the installed standalone app with arguments. There is no
+new URL scheme; `grainatlas://` stays with UPb Lab. On macOS:
+
+```text
+open -n -b org.grainatlas.desktop --args --project <project-uuid> --server <base-url> --code <one-time-code> [--revision <n>]
+```
+
+GrainAtlas uses `tauri-plugin-single-instance`, keyed per `--profile`, to
+forward argv to a running instance. The shell never passes `--profile`. The
+running instance opens or focuses that project, using its own draft if it
+holds one and saying so in its status chip. The forwarding process exits as
+soon as it hands over argv.
+
+As for Studio, the code comes from `POST /v1/auth/handoff`. It is single-use
+and short-lived, is exchanged at `POST /v1/auth/exchange` before anything else,
+is never stored, and is redacted in both apps' logs. It is visible in the
+process list only for the seconds the launching process lives. Never pass a
+bearer token on the command line. GrainAtlas checks `--server` against its
+configured server; a different server asks the user first, and nothing is
+fetched before the yes.
+
+On macOS the shell looks for the bundle id through LaunchServices and in
+`/Applications` and `~/Applications`. If absent, the button says
+"GrainAtlas is not installed (looked in /Applications and ~/Applications)".
+
+On Windows (from the GrainAtlas config, not verified on a Windows machine),
+start `grainatlas-desktop.exe` with the same arguments. Find it through
+`InstallLocation` under
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\grainatlas`
+(NSIS, current-user install), then `%LOCALAPPDATA%\grainatlas`, then
+`Program Files\grainatlas` (MSI). Single-instance forwarding works the same
+on Windows. This section records the launch contract; bridge v4 does not
+implement the launcher.
 
 
 ## Shell to module: commands (bridge v3)

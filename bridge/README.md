@@ -41,8 +41,9 @@ inside a module webview is intercepted and routed like `open()`.
 
 The shell side of the `postMessage` transport is `createFrameHost` from
 `@lab/bridge/host`. The wire format is in `src/protocol.ts`
-(`PROTOCOL_VERSION` 3; version 1 had `open`, `token` and `notify`, version 2
-added `open-files`, and version 3 adds commands and spot selection).
+(`PROTOCOL_VERSION` 4, `PROTOCOL_MINOR` 0; version 1 had `open`, `token` and
+`notify`, version 2 added `open-files`, version 3 added commands and spot
+selection, version 3.1 added theme, and version 4 adds atlas sync).
 
 ## `open-files`: files the user opened in the shell (protocol v2)
 
@@ -192,7 +193,7 @@ Web wire format:
 ```ts
 // Shell side, from @lab/bridge/host:
 pushCommand(frame, command, targetOrigin);
-// Posts { tag: 'lab-bridge', v: 3, push: 'command', command }.
+// Posts { tag: 'lab-bridge', v: PROTOCOL_VERSION, push: 'command', command }.
 ```
 
 The module accepts command pushes only from `window.parent`, validates the
@@ -216,6 +217,119 @@ A v3 module on an older shell receives no commands; existing operations keep
 working. Older shells can receive `lab.spot.selected` as an ordinary `notify`
 event but have no selection consumer. The v3 shell accepts both the current
 and legacy selection events from modules of any version.
+
+## Protocol v4: atlas sync status, drafts and sync notices
+
+GrainAtlas sends the shell sync status, hosted drafts and successful sync
+notices through `notify`. The shell sends commands through the existing
+`onCommand` transport. Events are idempotent snapshots: the newest received
+snapshot wins, rather than adding counts to an earlier snapshot. This section
+defines the adoption contract; this change adds the protocol and validators,
+while the shell Home list, refresh handlers and Images toolbar remain to be
+implemented.
+
+```ts
+import { notify, ATLAS_EVENTS, atlasStatus, atlasDrafts, atlasSynced } from '@lab/bridge';
+
+await notify({
+  type: ATLAS_EVENTS.status, project, mount, name, mode: 'view',
+  state: 'checking', revision: null, atlasVersion: null, changes: null, syncedAt: null,
+});
+await notify({ type: ATLAS_EVENTS.drafts, drafts });
+await notify({
+  type: ATLAS_EVENTS.synced, project, mount, revision, atlasVersion,
+  changed: { spots: 1, grains: 0, labels: 0, pixels: false }, at,
+});
+
+// Shell notify consumer: each helper returns a normalised typed value or null.
+const status = atlasStatus(event);
+const hostedDrafts = atlasDrafts(event);
+const syncNotice = atlasSynced(event);
+```
+
+`project` is the project UUID and `mount` is the laicpmsdb mount id. Both use
+the existing `isId` rule described in v3, rather than a stricter UUID parser.
+Counts, revisions and atlas versions are non-negative integers. `name` and timestamp
+fields are strings; the parsers do not interpret dates. Changes have
+`{ spots: number, grains: number, labels: number, pixels: boolean }`. Unknown
+extra fields are ignored, including inside changes and draft entries. Missing
+required fields or invalid values reject the whole event.
+
+`GET /v1/atlas/projects/{uuid}` returns `revision`, `atlas_version`,
+`mount_id`, `mount_label`, `changed_at`, `changed_by`, `current_project_uuid`
+and `superseded`. `revision` is the mount's content revision for spots,
+grains and labels; it increases by 1 per sync that changes something. A mount
+can carry two project UUIDs, so consumers key refreshes on `mount` + `revision`,
+not `project`. In status events, `revision` is null whenever `mount` is null;
+the parser rejects a non-null revision without a mount. `atlasVersion` maps
+to `atlas_version`, the mount's current published bundle (integer or null).
+
+| GrainAtlas → shell event | Payload and when to send |
+| --- | --- |
+| `lab.atlas.status` (`ATLAS_EVENTS.status`) | `{ type, project, mount: string \| null, name, mode: 'view' \| 'edit', state, revision: number \| null, atlasVersion: number \| null, changes: AtlasChanges \| null, syncedAt: string \| null }`. Send after open and whenever status changes. `revision` must be null when `mount` is null. `state` is `'checking'`, `'unregistered'`, `'in-sync'`, `'local-changes'`, `'server-newer'`, `'both-changed'` or `'offline'`. `'checking'` means the server lookup is in flight immediately after open. |
+| `lab.atlas.drafts` (`ATLAS_EVENTS.drafts`) | `{ type, drafts: [{ project, name, mount: string \| null, baseRevision: number \| null, changes: AtlasChanges, updatedAt: string }] }`, at most 500 entries. Send the full list of every tracked hosted draft with unsynced changes at start-up and whenever it changes, including an empty list when cleared. Standalone app drafts use separate storage and are not reported. |
+| `lab.atlas.synced` (`ATLAS_EVENTS.synced`) | `{ type, project, mount, revision: number, atlasVersion: number \| null, changed: AtlasChanges, at: string }`. Send after any successful sync or update-from-database. `mount` and `revision` are required and non-null. |
+
+| Shell → module command | Payload and when to send |
+| --- | --- |
+| `open-project` | `{ type, project, server?: string, mode?: 'view' \| 'edit', revision?: number }`. Open a project, optionally at a revision. `server` follows `focus-spot`: an HTTP or HTTPS URL of at most 2048 characters, with no whitespace or control characters. |
+| `set-mode` | `{ type, project, mode: 'view' \| 'edit' }`. Request a mode change in the project. |
+| `leave-edit` | `{ type, project, decision: 'sync' \| 'keep-draft' \| 'discard' }`. Send after the shell's own leave guard has asked the user. The module acts without asking again and keeps a one-step undo snapshot in memory after discard. |
+| `sync-draft` | `{ type, project }`. Sync a hosted draft from the shell Home list. |
+| `discard-draft` | `{ type, project }`. Discard a hosted draft from Home after confirmation in a shell dialog. |
+| `report-status` | `{ type }`. Request that GrainAtlas re-send both `lab.atlas.status` and `lab.atlas.drafts`, for example when a shell consumer needs current snapshots. |
+| `atlas-synced` | `{ type, project, mount, revision }`. Forward a successful sync notice to other modules, such as Sessions, so they refresh. Both ids and the non-negative integer revision are required. |
+
+The Edit switch, status chip, Sync control and split tool live in the
+GrainAtlas module. The shell owns the leave guard and Home draft actions. On
+`lab.atlas.synced`, the shell refreshes Review, Home and Sessions by re-reading
+the mount and forwards `atlas-synced` to other modules. On window focus it also
+re-reads the mount to catch syncs made in the standalone app. Every shell
+dialog in this flow hides module surfaces first, as required by UX rule 8
+(L3), and restores them when the dialog closes.
+
+Protocol v4 retains every v3 operation, including v3.1 theme behavior; it does
+not require version equality. Older modules ignore unknown commands and the
+shell ignores unknown events. A newer module on an older shell continues
+using the operations that shell supports and degrades silently for v4. The
+command queue still retains only the newest untaken command per module; no
+additional queue or acknowledgement is introduced.
+
+### Open in GrainAtlas (standalone)
+
+The shell launches the installed standalone app with arguments. There is no
+new URL scheme; `grainatlas://` stays with UPb Lab. On macOS:
+
+```text
+open -n -b org.grainatlas.desktop --args --project <project-uuid> --server <base-url> --code <one-time-code> [--revision <n>]
+```
+
+GrainAtlas uses `tauri-plugin-single-instance`, keyed per `--profile`, to
+forward argv to a running instance. The shell never passes `--profile`. The
+running instance opens or focuses that project, using its own draft if it
+holds one and saying so in its status chip. The forwarding process exits as
+soon as it hands over argv.
+
+As for Studio, the code comes from `POST /v1/auth/handoff`. It is single-use
+and short-lived, is exchanged at `POST /v1/auth/exchange` before anything else,
+is never stored, and is redacted in both apps' logs. It is visible in the
+process list only for the seconds the launching process lives. Never pass a
+bearer token on the command line. GrainAtlas checks `--server` against its
+configured server; a different server asks the user first, and nothing is
+fetched before the yes.
+
+On macOS the shell looks for the bundle id through LaunchServices and in
+`/Applications` and `~/Applications`. If absent, the button says
+"GrainAtlas is not installed (looked in /Applications and ~/Applications)".
+
+On Windows (from the GrainAtlas config, not verified on a Windows machine),
+start `grainatlas-desktop.exe` with the same arguments. Find it through
+`InstallLocation` under
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\grainatlas`
+(NSIS, current-user install), then `%LOCALAPPDATA%\grainatlas`, then
+`Program Files\grainatlas` (MSI). Single-instance forwarding works the same
+on Windows. This section records the launch contract; this protocol change
+does not implement the launcher.
 
 ## Adopting the bridge in a module
 
