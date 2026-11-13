@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { openInStudio } from '../../lib/apps.svelte';
   import type { SessionRow } from '../../lib/overview.svelte';
   import MineralIcon from './MineralIcon.svelte';
   import { day, kindColor, kindLabel, kindSegments, runStatus } from '../../lib/home';
@@ -45,7 +46,7 @@
     <p class="run small" title={status.text}><span class="dot" style:background={`var(--${status.tone})`} aria-hidden="true"></span><span class="ellipsis">{status.text}</span></p>
     <div class="controls">
       {#if row.runs && row.runs > 0}<button class="btn" onclick={(e) => { e.stopPropagation(); shell.show('review'); void review.open({ kind: 'session', id: s.id }); }}>Review</button>{/if}
-      <button class="btn" title="Open this session in UPbRPy Studio" onclick={(e) => { e.stopPropagation(); void shell.handleLink(`upbr://session/${s.id}`, 'home'); }}>Reduce</button>
+      <button class="btn" onclick={(e) => { e.stopPropagation(); void openInStudio({ session: s.id, run: null }, 'home'); }}>Reduce</button>
     </div>
   </div>
 </article>

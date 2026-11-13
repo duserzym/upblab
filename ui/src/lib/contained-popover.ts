@@ -26,7 +26,13 @@ export function containedPopover(node: HTMLElement, options: { anchor: () => HTM
   // A dock move, scroll or window resize can move a native surface before observers run.
   window.addEventListener('resize', close);
   window.addEventListener('blur', close);
-  const scroll = (event: Event) => { if (!node.contains(event.target as Node)) close(); };
+  // Only a scroll that can move the anchor closes the menu; others (a hidden
+  // plot, the Spots list following the selection) leave it where it is.
+  const scroll = (event: Event) => {
+    const target = event.target as Node | null, anchor = options.anchor();
+    if (target && node.contains(target)) return;
+    if (!anchor || !(target instanceof Element) || target.contains(anchor)) close();
+  };
   document.addEventListener('scroll', scroll, true);
   node.addEventListener('beforetoggle', beforeToggle);
   return { destroy() {

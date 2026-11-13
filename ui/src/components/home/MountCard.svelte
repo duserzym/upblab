@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { editInAtlas } from '../../lib/apps.svelte';
+  import AtlasGuidance from '../AtlasGuidance.svelte';
   import Thumbnail from './Thumbnail.svelte';
   import { overview, type MountRow } from '../../lib/overview.svelte';
   import { atlasStatus } from '../../lib/home';
@@ -33,9 +35,11 @@
       {status.text}
     </span>
     <div class="controls">
+      {#if atlas}<button class="btn" onclick={(e) => { e.stopPropagation(); void editInAtlas({ project: atlas!.projectId, mount: row.mount.id }, 'home'); }}>Edit in grainatlas</button>{/if}
       <button class="btn" onclick={(e) => { e.stopPropagation(); shell.show('review'); void review.open({ kind: 'mount', id: row.mount.id }); }}>Review</button>
     </div>
   </div>
+  <AtlasGuidance mount={row.mount.id} from="home" />
 </article>
 <style>
   .mount-card { position: relative; min-width: 0; padding: var(--space-2) var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); box-shadow: none; }
@@ -53,6 +57,6 @@
   .badge { color: var(--text-muted); display: inline-flex; align-items: center; gap: var(--space-1); }
   .badge.published { color: var(--accent); }
   .badge svg { width: 1rem; height: 1rem; flex: none; }
-  .controls { position: relative; z-index: 1; display: flex; gap: var(--space-1); margin-left: auto; }
+  .controls { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
   .btn { padding: 0.1rem var(--space-2); font-size: 0.74rem; }
 </style>

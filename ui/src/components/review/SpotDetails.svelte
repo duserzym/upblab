@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { editInAtlas, openInStudio } from '../../lib/apps.svelte';
+  import AtlasGuidance from '../AtlasGuidance.svelte';
+  import StudioGuidance from '../StudioGuidance.svelte';
   import { review } from '../../lib/review.svelte';
   import { shell } from '../../lib/shell.svelte';
   import { dateLabel, number } from '../../lib/review-data';
@@ -42,9 +45,12 @@
     <p class="small muted">Pipeline {run?.pipeline_version??'not recorded'} · {run?.run_by??'operator not recorded'}</p>
   {/if}
   <div class="stack">
+    <button class="btn" disabled={!spot.atlasProjectId} title={spot.atlasProjectId ? 'Edit in grainatlas (E)' : 'No published images'} onclick={() => void editInAtlas({ project: spot!.atlasProjectId, mount: spot!.mountId, spot: spot!.atlasSpotId }, 'review')}>Edit in grainatlas</button>
+    <button class="btn" disabled={!spot.runId && !spot.sessionId} title={spot.runId || spot.sessionId ? 'Open in Studio (S)' : 'Not measured yet'} onclick={() => void openInStudio({ session: spot!.sessionId, run: spot!.runId, acquisition: spot!.acquisitionId }, 'review')}>Open in Studio</button>
+    <AtlasGuidance mount={spot.mountId} from="review" />
+    <StudioGuidance from="review" />
     <button class="btn" disabled={!spot.atlasProjectId||!spot.atlasSpotId} onclick={()=>void review.focus(spot!,true)}>Show in Images</button>
     {#if spot.acquisitionId}<button class="btn" onclick={()=>void shell.handleLink(`laicpmsdb://acquisition/${spot!.acquisitionId}`,'review')}>Raw sweeps in Sessions</button>{/if}
-    {#if spot.runId}<button class="btn" onclick={()=>void shell.handleLink(`upbr://run/${spot!.runId}`,'review')}>Open run in Studio</button>{/if}
   </div>
 {:else}<p class="muted">Select a spot to see its stored results.</p>{/if}
 <style>

@@ -15,6 +15,7 @@
   import { groupUnregistered, rangeSelection } from '../lib/review-selection';
   import { allShown, filterRows, groupState, noneShown, rangeToggle, recallShown, reconcile, rememberShown, setGroup, soloSample, toggleSample } from '../lib/sample-filter';
   import { sendCommand } from '../lib/incoming';
+  import { editInAtlas, openInStudio } from '../lib/apps.svelte';
   import { shell } from '../lib/shell.svelte';
   import type { ReviewSpotsCommand } from '@lab/bridge';
   import ConcordiaPlot from '../components/review/ConcordiaPlot.svelte';
@@ -28,6 +29,17 @@
   let layoutsOpen = $state(false);
   let layoutChoices = $state<HTMLDivElement>();
   function layoutEscape(event: KeyboardEvent) {
+    if (active && shell.view === 'review' && review.selected && !event.defaultPrevented
+      && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+      && !(event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="dialog"],[role="menu"]'))
+      && !document.querySelector(':popover-open')) {
+      const spot = review.selected, key = event.key.toLowerCase();
+      if (key === 'e' && spot.atlasProjectId) {
+        event.preventDefault(); void editInAtlas({ project: spot.atlasProjectId, mount: spot.mountId, spot: spot.atlasSpotId }, 'review');
+      } else if (key === 's' && (spot.sessionId || spot.runId)) {
+        event.preventDefault(); void openInStudio({ session: spot.sessionId, run: spot.runId, acquisition: spot.acquisitionId }, 'review');
+      }
+    }
     if (layoutsOpen && layoutChoices?.getClientRects().length && event.key === 'Escape' && !event.defaultPrevented && !document.querySelector(':popover-open')) { layoutsOpen = false; event.preventDefault(); }
   }
   let dock = $state<ReturnType<typeof ReviewDock>>();

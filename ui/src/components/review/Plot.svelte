@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { containedPopover } from '../../lib/contained-popover';
+  import { editInAtlas, openInStudio, showInImages } from '../../lib/apps.svelte';
   import uPlot from 'uplot';
-  import { untrack, getContext, type Snippet } from 'svelte';
+  import { untrack, getContext, tick, type Snippet } from 'svelte';
   import { review } from '../../lib/review.svelte';
   import 'uplot/dist/uPlot.min.css';
   import { settings } from '../../lib/settings.svelte';
@@ -27,6 +29,55 @@
     onbox?: (bounds: Bounds) => void;
     ontoggle?: (spot: ReviewSpot) => void;
   } = $props();
+  let menu = $state<HTMLDivElement>();
+  let menuAnchor = $state<HTMLElement>();
+  let menuSpot = $state<ReviewSpot | null>(null);
+  async function openMenu(spot: ReviewSpot, anchor: HTMLElement) {
+    onselect(spot);
+    menuSpot = spot; menuAnchor = anchor;
+    await tick();
+    // Selecting scrolls the Spots list to the spot; containedPopover closes
+    // on any scroll, so open once that scroll has happened.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if (!menu || menuSpot !== spot) return;
+    if (!menu.matches(':popover-open')) menu.showPopover();
+    menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    // A manual popover: WebKit fires contextmenu on mouse-down, and an auto
+    // popover would be light-dismissed by the mouse-up that follows.
+    document.removeEventListener('pointerdown', outside, true);
+    setTimeout(() => document.addEventListener('pointerdown', outside, true), 0);
+  }
+  function outside(event: PointerEvent) {
+    if (menu?.contains(event.target as Node)) return;
+    closeMenu();
+  }
+  function closeMenu() {
+    document.removeEventListener('pointerdown', outside, true);
+    if (menu?.matches(':popover-open')) menu.hidePopover();
+  }
+  $effect(() => () => document.removeEventListener('pointerdown', outside, true));
+  function menuKey(event: KeyboardEvent) {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(); menuAnchor?.focus(); }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const buttons = [...(menu?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
+      const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+      buttons[(index + (event.key === 'ArrowDown' ? 1 : buttons.length - 1)) % buttons.length]?.focus();
+    }
+    if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && ['e', 's'].includes(event.key.toLowerCase())) {
+      event.preventDefault(); event.stopPropagation(); act(event.key.toLowerCase() === 'e' ? 'atlas' : 'studio');
+    }
+  }
+  function act(action: 'atlas' | 'studio' | 'images' | 'hide') {
+    const spot = menuSpot;
+    closeMenu();
+    if (!spot) return;
+    const atlas = { project: spot.atlasProjectId, mount: spot.mountId, spot: spot.atlasSpotId };
+    if (action === 'atlas' && spot.atlasProjectId) void editInAtlas(atlas, 'review');
+    if (action === 'studio' && (spot.sessionId || spot.runId)) void openInStudio({ session: spot.sessionId, run: spot.runId, acquisition: spot.acquisitionId }, 'review');
+    if (action === 'images') void showInImages(atlas, 'review');
+    if (action === 'hide') ontoggle?.(spot);
+  }
   const visible = getContext<() => boolean>('upbstudio.review-visible') ?? (() => true);
   let host = $state<HTMLDivElement>();
   let width = $state(400), height = $state(300);
@@ -307,12 +358,14 @@
       if (spot) onselect(spot);
     };
     const contextmenu = (e: MouseEvent) => {
-      if (!ontoggle) return;
+      if (!sharedHover) return;
       const key = (e.target as HTMLElement | null)?.dataset.pointKey;
       const spot = marks.find(m => m.spot.key === key)?.spot ?? hit(e, false);
       if (!spot) return;
+      const anchor = [...(chart?.querySelectorAll<HTMLElement>('.point-target') ?? [])].find(n => n.dataset.pointKey === spot.key);
+      if (!anchor) return;
       e.preventDefault();
-      ontoggle(spot);
+      openMenu(spot, anchor);
     };
     const move = (e: PointerEvent) => {
       if (drag?.id === e.pointerId) {
@@ -423,7 +476,7 @@
 {@render controls?.(secondaryNavigation)}
 <div class="chart" class:navigable={!!onbox} class:panning={tool === 'pan'} bind:this={chart} data-testid="review-plot" data-viewport={JSON.stringify(bounds)} data-point-count={targets.length} data-hovered-key={sharedHover ? review.hoveredKey ?? '' : ''}>
   {#each targets as t (t.spot.key)}
-    <button class="point-target" aria-label={`Select ${t.spot.label}`} tabindex={keyboardKey === t.spot.key ? 0 : -1} data-point-key={t.spot.key} data-sample={t.spot.sampleName} data-selected={selected===t.spot.key} data-hovered={sharedHover && review.hoveredKey === t.spot.key} style:left="{t.x}px" style:top="{t.y}px" onclick={()=>onselect(t.spot)} onmouseenter={()=>pointHover(t)} onmouseleave={clearPointHover} onfocus={()=>pointHover(t)} onblur={clearPointHover}></button>
+    <button class="point-target" aria-haspopup="menu" aria-label={`Select ${t.spot.label}`} tabindex={keyboardKey === t.spot.key ? 0 : -1} data-point-key={t.spot.key} data-sample={t.spot.sampleName} data-selected={selected===t.spot.key} data-hovered={sharedHover && review.hoveredKey === t.spot.key} style:left="{t.x}px" style:top="{t.y}px" oncontextmenu={e => { e.preventDefault(); e.stopPropagation(); openMenu(t.spot, e.currentTarget); }} onkeydown={e => { if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); e.stopPropagation(); openMenu(t.spot, e.currentTarget); } }} onclick={()=>onselect(t.spot)} onmouseenter={()=>pointHover(t)} onmouseleave={clearPointHover} onfocus={()=>pointHover(t)} onblur={clearPointHover}></button>
   {/each}
   <div class="canvas" bind:this={host}></div>
   {#if box}
@@ -431,6 +484,12 @@
       style:width="{Math.abs(box.start[0] - box.end[0])}px" style:height="{Math.abs(box.start[1] - box.end[1])}px"></div>
   {/if}
   {#if hovered}<div class="tooltip small" style:left="{tooltip.x}px" style:top="{tooltip.y}px">{sharedHover ? hovered.label : hovered.sampleName}{#if sharedHover && hovered.date}<br />{dateLabel(hovered)} Ma{/if}</div>{/if}
+</div>
+<div popover="manual" role="menu" tabindex="-1" aria-label="Spot actions" class="panel stack spot-menu" bind:this={menu} use:containedPopover={{ anchor: () => menuAnchor, w: 220, h: ontoggle ? 190 : 150 }} onkeydown={menuKey}>
+  <button class="btn" role="menuitem" disabled={!menuSpot?.atlasProjectId} title={menuSpot?.atlasProjectId ? 'Edit in grainatlas (E)' : 'No published images'} onclick={() => act('atlas')}>Edit in grainatlas <kbd>E</kbd></button>
+  <button class="btn" role="menuitem" disabled={!menuSpot?.sessionId && !menuSpot?.runId} title={menuSpot?.sessionId || menuSpot?.runId ? 'Open in Studio (S)' : 'Not measured yet'} onclick={() => act('studio')}>Open in Studio <kbd>S</kbd></button>
+  <button class="btn" role="menuitem" disabled={!menuSpot?.atlasProjectId && !menuSpot?.mountId} onclick={() => act('images')}>Show in Images</button>
+  {#if ontoggle}<button class="btn" role="menuitem" onclick={() => act('hide')}>Hide spot</button>{/if}
 </div>
 {#if onbox}
   <div class="navigation row wrap" role="group" aria-label="Concordia navigation">
@@ -446,6 +505,8 @@
 {#if legend}<div class="legend small" aria-label="Sample legend">{#each samples as sample}<span><i style:background={color(sample)}></i>{sample}</span>{/each}</div>{/if}
 {#if marks.length === 0}<p class="muted small">No stored values for these axes.</p>{/if}
 <style>
+  .spot-menu {background:var(--plot-bg);color:var(--text);gap:4px;padding:6px;border:1px solid var(--hairline);}
+  .spot-menu:not(:popover-open) {display:none;} .spot-menu .btn {white-space:normal;justify-content:space-between;text-align:left;font-size:0.78rem;}
   .chart { position:relative; flex:1; min-height:150px;min-width:0;border-radius:var(--radius-sm); background:var(--plot-bg); overflow:hidden; }
   .point-target {position:absolute;z-index:1;width:12px;height:12px;transform:translate(-50%,-50%);padding:0;border:0;background:transparent;border-radius:50%;cursor:pointer;}
   .navigable .point-target {touch-action:none;}
