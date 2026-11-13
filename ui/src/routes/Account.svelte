@@ -66,7 +66,7 @@
           {#if canList && overview.sessions.length < overview.totalSessions}
             <button class="btn small" disabled={overview.refreshing} onclick={() => void overview.loadRest('sessions')}>Showing {overview.sessions.length} of {overview.totalSessions} · Load the rest</button>
           {/if}
-          <button class="btn small" disabled={overview.refreshing} onclick={() => void overview.load()}>Refresh access</button>
+          <button class="btn small" disabled={overview.refreshing} onclick={() => void overview.load({ force: true })}>Refresh access</button>
         </div>
         {#if canList && rows.length}
           <div class="table-wrap">

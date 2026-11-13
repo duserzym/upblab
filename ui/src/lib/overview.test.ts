@@ -5,6 +5,7 @@ vi.mock('./identity.svelte', () => ({
   identity: {
     target: { server: 'http://h', key: 'http://h' },
     signedIn: true,
+    revision: 0,
     get: (path: string) => get(path),
   },
 }));
@@ -63,6 +64,12 @@ describe('parseAtlas', () => {
   });
 });
 
+beforeEach(() => {
+  vi.restoreAllMocks();
+  identity.target = { server: 'http://h', key: 'http://h' };
+  identity.revision = 0;
+});
+
 describe('overview.load', () => {
   beforeEach(() => {
     get.mockReset();
@@ -80,7 +87,7 @@ describe('overview.load', () => {
       if (path === '/v1/mounts/m2/atlas') return { status: 404, body: { detail: 'Not Found' } };
       throw new Error(path);
     });
-    await overview.load();
+    await overview.load({ force: true });
     expect(overview.state).toBe('ready');
     expect(overview.sessions[0]).toMatchObject({ runs: 1, preferred: { id: 'r1' } });
     expect(overview.mounts.map((m) => m.atlas)).toEqual([{ projectId: 'p1', name: null, version: null, publishedAt: null }, null]);
@@ -88,14 +95,14 @@ describe('overview.load', () => {
 
   it('says signed out without asking the server', async () => {
     (identity as { signedIn: boolean }).signedIn = false;
-    await overview.load();
+    await overview.load({ force: true });
     expect(overview.state).toBe('signed-out');
     expect(get).not.toHaveBeenCalled();
   });
 
   it('reports an unreachable server', async () => {
     get.mockRejectedValue(new Error('server unreachable: connection refused'));
-    await overview.load();
+    await overview.load({ force: true });
     expect(overview.state).toBe('unreachable');
   });
 
@@ -105,7 +112,7 @@ describe('overview.load', () => {
       if (path === '/v1/mounts') return { status: 200, body: [] };
       return { status: 500, body: null };
     });
-    await overview.load();
+    await overview.load({ force: true });
     expect(overview.state).toBe('ready');
     expect(overview.sessions[0].runs).toBeNull();
   });
@@ -132,7 +139,7 @@ describe('Home inventory details', () => {
       if (path.endsWith('/atlas')) return { status: 200, body: { current: null } };
       return { status: 200, body: { kind_counts: { sample: 3, primary_standard: 1 } } };
     });
-    await overview.load();
+    await overview.load({ force: true });
     expect(overview.sessions).toHaveLength(15);
     expect(overview.mounts).toHaveLength(14);
     expect(overview.totalSessions).toBe(15);
@@ -154,14 +161,14 @@ describe('Home inventory details', () => {
       if (path === '/v1/mounts') return { status: 200, body: [{ id: 'm', label: 'Demo', grain_count: 1, spot_count: 1 }] };
       return { status: 200, body: { current: { project_id: 'p' }, access: 'read-token' } };
     });
-    await overview.load();
+    await overview.load({ force: true });
     expect(fetch).not.toHaveBeenCalled();
     await Promise.all([overview.loadThumbnails('m'), overview.loadThumbnails('m')]);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith('http://h/atlas/projects/p/atlas.json?access=read-token', expect.anything());
     expect(overview.mounts[0].thumbnails).toEqual(['http://h/atlas/projects/p/pyramid/area1/0/0_0.webp?access=read-token']);
     fetch.mockRejectedValue(new Error('missing image manifest'));
-    await overview.load();
+    await overview.load({ force: true });
     await overview.loadThumbnails('m');
     expect(overview.mounts[0].atlas).toMatchObject({ projectId: 'p' });
     expect(overview.mounts[0].thumbnails).toEqual([]);
@@ -177,7 +184,7 @@ describe('Home inventory details', () => {
       if (path === '/v1/mounts') return Promise.resolve({ status: 200, body: mounts });
       return new Promise(resolve => pending.set(path, resolve));
     });
-    const loading = overview.load();
+    const loading = overview.load({ force: true });
     await vi.waitFor(() => expect(pending.size).toBe(12)); // 4 sessions (2 calls each), 4 mounts.
     expect(overview.state).toBe('ready');
     expect(overview.refreshing).toBe(true);
@@ -213,7 +220,7 @@ describe('Home inventory details', () => {
       if (path === '/v1/mounts') return { status: 200, body: mounts };
       return { status: 200, body: path.endsWith('/reductions') ? [] : { current: null } };
     });
-    await overview.load();
+    await overview.load({ force: true });
     expect(overview.sessions).toHaveLength(500);
     expect(overview.mounts).toHaveLength(500);
     expect(overview.totalSessions).toBe(501);
@@ -240,21 +247,21 @@ describe('Home inventory details', () => {
       if (path === '/v1/mounts') return { status: 200, body: [{ id: 'm', label: 'Demo', grain_count: 1, spot_count: 1 }] };
       return { status: 200, body: { current: { project_id: 'old' }, access: 'old-token' } };
     });
-    await overview.load();
+    await overview.load({ force: true });
     const thumbnails = overview.loadThumbnails('m');
     get.mockImplementation((path: string) => {
       if (path === '/v1/sessions') return Promise.resolve({ status: 200, body: [] });
       if (path === '/v1/mounts') return Promise.resolve({ status: 200, body: [{ id: 'm', label: 'New', grain_count: 1, spot_count: 1 }] });
       return new Promise(resolve => { finishAtlas = resolve; });
     });
-    const stale = overview.load();
+    const stale = overview.load({ force: true });
     await vi.waitFor(() => expect(finishAtlas).toBeTypeOf('function'));
     get.mockImplementation(async (path: string) => {
       if (path === '/v1/sessions') return { status: 200, body: [] };
       if (path === '/v1/mounts') return { status: 200, body: [{ id: 'm', label: 'Newest', grain_count: 1, spot_count: 1 }] };
       return { status: 200, body: { current: { project_id: 'newest' } } };
     });
-    await overview.load();
+    await overview.load({ force: true });
     finishManifest({ ok: true, json: async () => ({ files: { 'thumbnail.png': 'invented' } }) });
     finishAtlas({ status: 200, body: { current: { project_id: 'stale' }, access: 'stale-token' } });
     await Promise.all([stale, thumbnails]);
@@ -269,7 +276,7 @@ describe('Home inventory details', () => {
   it('ignores superseded inventory responses', async () => {
     let finish!: (reply: { status: number; body: unknown[] }) => void;
     get.mockImplementation((path: string) => path === '/v1/sessions' ? new Promise(resolve => { finish = resolve; }) : Promise.resolve({ status: 200, body: [] }));
-    const loading = overview.load();
+    const loading = overview.load({ force: true });
     overview.clear();
     finish({ status: 200, body: [] });
     await loading;
@@ -292,14 +299,16 @@ describe('refreshMount', () => {
   it('keeps the shown row while fetching and replaces just that mount and its atlas', async () => {
     let finish!: (reply: unknown) => void;
     const updated = { id: 'm1', label: 'Updated name', grain_count: 3, spot_count: 12 };
-    get.mockImplementation((path: string) => path === '/v1/mounts'
+    get.mockImplementation((path: string) => path === '/v1/mounts/m1'
       ? new Promise(resolve => { finish = resolve; })
       : Promise.resolve({ status: 200, body: { current: { project_id: 'p1', version: 3 } } }));
     const refreshing = overview.refreshMount('m1');
     expect(overview.mounts[0].mount.label).toBe('Earlier name');
-    finish({ status: 200, body: [updated] });
+    finish({ status: 200, body: { ...updated, ignored: true } });
     await refreshing;
     expect(overview.mounts[0]).toMatchObject({ mount: updated, atlas: { version: 3 } });
+    expect(overview.mounts[0].mount).not.toHaveProperty('ignored');
+    expect(get.mock.calls.map(([path]) => path)).toEqual(['/v1/mounts/m1', '/v1/mounts/m1/atlas']);
   });
   it('refetches the manifest for loaded thumbnails on the same project without reusing the cached list', async () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ files: { 'pyramid/old/0/0_0.webp': 'invented' } }) });
@@ -309,9 +318,10 @@ describe('refreshMount', () => {
     get.mockImplementation(async (path: string) => {
       if (path === '/v1/sessions') return { status: 200, body: [] };
       if (path === '/v1/mounts') return { status: 200, body: mounts };
+      if (path === '/v1/mounts/m1') return { status: 200, body: mounts[0] };
       return { status: 200, body: { current: { project_id: path.includes('/m1/') ? 'p1' : 'p2', version }, access: 'read-token' } };
     });
-    await overview.load();
+    await overview.load({ force: true });
     await overview.loadThumbnails('m1');
     await overview.loadThumbnails('m2');
     const otherThumbnails = [...overview.mounts[1].thumbnails!];
@@ -329,8 +339,8 @@ describe('refreshMount', () => {
   it('keeps unrequested thumbnails lazy after refreshing a mount', async () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ files: {} }) });
     vi.stubGlobal('fetch', fetch);
-    get.mockImplementation(async (path: string) => path === '/v1/mounts'
-      ? { status: 200, body: [overview.mounts[0].mount] }
+    get.mockImplementation(async (path: string) => path === '/v1/mounts/m1'
+      ? { status: 200, body: overview.mounts[0].mount }
       : { status: 200, body: { current: { project_id: 'p1', version: 2 }, access: 'read-token' } });
     await overview.refreshMount('m1');
     expect(fetch).not.toHaveBeenCalled();
@@ -343,8 +353,8 @@ describe('refreshMount', () => {
       .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
       .mockResolvedValue({ ok: true, json: async () => ({ files: { 'pyramid/new/0/0_0.webp': 'invented' } }) });
     vi.stubGlobal('fetch', fetch);
-    get.mockImplementation(async (path: string) => path === '/v1/mounts'
-      ? { status: 200, body: [overview.mounts[0].mount] }
+    get.mockImplementation(async (path: string) => path === '/v1/mounts/m1'
+      ? { status: 200, body: overview.mounts[0].mount }
       : { status: 200, body: { current: { project_id: 'p1' }, access: 'read-token' } });
     await overview.refreshMount('m1');
     const stale = overview.loadThumbnails('m1');
@@ -367,4 +377,163 @@ describe('refreshMount', () => {
     await refreshing;
     expect(overview.mounts[0].mount.label).toBe('Earlier name');
   });
+});
+
+
+describe('Home revisit freshness', () => {
+  beforeEach(() => {
+    overview.clear();
+    get.mockReset();
+    vi.unstubAllGlobals();
+    (identity as { signedIn: boolean }).signedIn = true;
+  });
+  it.each((['load', 'refreshMount'] as const).flatMap(method =>
+    (['project', 'version'] as const).flatMap(change =>
+      (['loaded', 'started', 'row'] as const).map(thumbnails => ({ method, change, thumbnails })))))(
+    'reloads thumbnails after $method changes the atlas $change (previous thumbnails: $thumbnails)',
+    async ({ method, change, thumbnails }) => {
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const mount = { id: 'm', label: 'Mount', grain_count: 1, spot_count: 1 };
+      let atlas = { project_id: 'p1', version: 1 };
+      get.mockImplementation(async path => ({ status: 200, body: path === '/v1/sessions' ? []
+        : path === '/v1/mounts' ? [mount] : path === '/v1/mounts/m' ? mount
+        : { current: atlas, access: 'token' } }));
+      let finishOld!: (reply: unknown) => void;
+      const manifest = (area: string) => ({ ok: true, json: async () => ({ files: { [`pyramid/${area}/0/0_0.webp`]: 'invented' } }) });
+      const fetch = vi.fn().mockResolvedValue(manifest('old'));
+      vi.stubGlobal('fetch', fetch);
+      await overview.load();
+      let oldRequest: Promise<void> | undefined;
+      if (thumbnails === 'started') {
+        fetch.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
+        oldRequest = overview.loadThumbnails('m');
+      } else if (thumbnails === 'loaded') {
+        await overview.loadThumbnails('m');
+      } else {
+        // The row can retain thumbnails even when its source has not started.
+        overview.mounts[0].thumbnails = ['http://h/atlas/projects/p1/pyramid/old/0/0_0.webp?access=token'];
+      }
+      fetch.mockClear();
+      fetch.mockResolvedValue(manifest('new'));
+      atlas = change === 'project' ? { project_id: 'p2', version: 1 } : { project_id: 'p1', version: 2 };
+      clock.mockReturnValue(61_001);
+      if (method === 'load') await overview.load();
+      else await overview.refreshMount('m');
+      // The existing card must update without another intersection callback.
+      await vi.waitFor(() => expect(overview.mounts[0].thumbnails).toEqual([
+        `http://h/atlas/projects/${atlas.project_id}/pyramid/new/0/0_0.webp?access=token`,
+      ]));
+      expect(overview.mounts[0].atlas).toMatchObject({ projectId: atlas.project_id, version: atlas.version });
+      expect(fetch).toHaveBeenCalledExactlyOnceWith(
+        `http://h/atlas/projects/${atlas.project_id}/atlas.json?access=token`, expect.anything());
+      if (oldRequest) {
+        finishOld(manifest('old'));
+        await oldRequest;
+        expect(overview.mounts[0].thumbnails?.[0]).toContain('/pyramid/new/');
+      }
+    },
+  );
+
+  it('skips fresh revisits, revalidates detailed rows in place, and preserves unchanged thumbnails', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const session = { id: 's', session_key: 'Session', material: 'zircon', started_at: null, acquisition_count: 2 };
+    const mount = { id: 'm', label: 'Mount', grain_count: 1, spot_count: 2 };
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ files: { 'pyramid/a/0/0_0.webp': 'invented' } }) });
+    vi.stubGlobal('fetch', fetch);
+    get.mockImplementation(async path => ({ status: 200, body: path === '/v1/sessions' ? [session]
+      : path === '/v1/mounts' ? [mount] : path.endsWith('/reductions') ? [run('r', '2026-01-01', true)]
+      : path.endsWith('/atlas') ? { current: { project_id: 'p', version: 1 }, access: 'token' } : { kind_counts: { sample: 2 } } }));
+    await overview.load();
+    await overview.loadThumbnails('m');
+    const completed = overview.loadedAt!.getTime();
+    clock.mockReturnValue(completed + 59_999);
+    get.mockClear();
+    await overview.load();
+    expect(get).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+    const oldSession = overview.sessions[0], oldMount = overview.mounts[0];
+    clock.mockReturnValue(completed + 60_001);
+    const previous = get.getMockImplementation()!;
+    const pending = new Map<string, (reply: unknown) => void>();
+    get.mockImplementation(path => path === '/v1/sessions' || path === '/v1/mounts' ? previous(path)
+      : new Promise(resolve => pending.set(path, resolve)));
+    const revalidating = overview.load();
+    await vi.waitFor(() => expect(pending.size).toBe(3));
+    expect(overview.state).toBe('ready');
+    expect(overview.sessions[0]).toBe(oldSession);
+    expect(overview.mounts[0]).toBe(oldMount);
+    expect(overview.sessions[0].detailsPending).toBeUndefined();
+    expect(overview.sessionProgress.completed).toBe(overview.sessionProgress.total);
+    expect(overview.mountProgress.completed).toBe(overview.mountProgress.total);
+    for (const [path, resolve] of pending) resolve(await previous(path));
+    await revalidating;
+    await overview.loadThumbnails('m');
+    expect(overview.mounts[0].thumbnails).toEqual(oldMount.thumbnails);
+    expect(fetch).toHaveBeenCalledOnce();
+    get.mockImplementation(previous);
+    get.mockClear();
+    await overview.load({ force: true });
+    await overview.loadThumbnails('m');
+    expect(get).toHaveBeenCalledWith('/v1/sessions');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('adds and drops inventory rows and clears freshness on identity change', async () => {
+    const session = (id: string) => ({ id, session_key: id, material: 'zircon', started_at: null, acquisition_count: 0 });
+    const mount = (id: string) => ({ id, label: id, grain_count: 0, spot_count: 0 });
+    let ids = ['old', 'kept'];
+    get.mockImplementation(async path => ({ status: 200, body: path === '/v1/sessions' ? ids.map(session)
+      : path === '/v1/mounts' ? ids.map(mount) : path.endsWith('/reductions') ? [] : { current: null } }));
+    await overview.load();
+    vi.spyOn(Date, 'now').mockReturnValue(overview.loadedAt!.getTime() + 60_001);
+    ids = ['kept', 'new'];
+    await overview.load();
+    expect(overview.sessions.map(row => row.session.id)).toEqual(ids);
+    expect(overview.mounts.map(row => row.mount.id).sort()).toEqual([...ids].sort());
+    get.mockClear();
+    identity.revision++;
+    const loading = overview.load();
+    expect(overview.sessions).toEqual([]);
+    await loading;
+    expect(get).toHaveBeenCalledWith('/v1/sessions');
+  });
+
+  it('keeps an unchanged manifest request valid across in-place revalidation', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    let finish!: (reply: unknown) => void;
+    const fetch = vi.fn().mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    vi.stubGlobal('fetch', fetch);
+    get.mockImplementation(async path => ({ status: 200, body: path === '/v1/sessions' ? []
+      : path === '/v1/mounts' ? [{ id: 'm', label: 'Mount', grain_count: 1, spot_count: 1 }]
+      : { current: { project_id: 'p', version: 1 }, access: 'token' } }));
+    await overview.load();
+    const thumbnails = overview.loadThumbnails('m');
+    clock.mockReturnValue(61_001);
+    await overview.load();
+    finish({ ok: true, json: async () => ({ files: { 'pyramid/a/0/0_0.webp': 'invented' } }) });
+    await thumbnails;
+    await overview.loadThumbnails('m');
+    expect(overview.mounts[0].thumbnails).toEqual(['http://h/atlas/projects/p/pyramid/a/0/0_0.webp?access=token']);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+});
+
+it.each([404, 405])('refreshMount falls back to the inventory only for HTTP %s and appends new mounts', async status => {
+  overview.clear();
+  get.mockReset();
+  const mount = { id: 'new', label: 'New', grain_count: 1, spot_count: 1 };
+  get.mockImplementation(async path => path === '/v1/mounts/new' ? { status, body: {} }
+    : path === '/v1/mounts' ? { status: 200, body: [mount] } : { status: 200, body: { current: null } });
+  await overview.refreshMount('new');
+  expect(get.mock.calls.map(([path]) => path)).toEqual(['/v1/mounts/new', '/v1/mounts', '/v1/mounts/new/atlas']);
+  expect(overview.mounts[0].mount).toEqual(mount);
+  expect(overview.totalMounts).toBe(1);
+});
+
+it('does not fall back to the inventory on other mount errors', async () => {
+  overview.clear();
+  get.mockReset();
+  get.mockResolvedValue({ status: 503, body: {} });
+  await overview.refreshMount('missing');
+  expect(get.mock.calls.map(([path]) => path)).toEqual(['/v1/mounts/missing']);
 });

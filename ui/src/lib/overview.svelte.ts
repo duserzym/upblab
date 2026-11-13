@@ -147,14 +147,17 @@ class Overview {
 
   private source = '';
 
-  async load() {
+  async load({ force = false } = {}) {
     const source = `${identity.target?.server ?? ''}:${identity.revision}`;
     if (source !== this.source) {
       this.clear();
       this.source = source;
     }
+    if (!force && identity.target && identity.signedIn && this.state === 'ready'
+      && (this.refreshing || (this.loadedAt && Date.now() - this.loadedAt.getTime() < 60_000))) return;
+    const inPlace = !force && this.state === 'ready';
     const gen = ++this.generation;
-    this.thumbnailSources.clear();
+    if (!inPlace) this.thumbnailSources.clear();
     if (!identity.target) {
       this.clear();
       return;
@@ -179,20 +182,25 @@ class Overview {
       this.mountList = isList<MountOut>(mounts) ? newestMounts(mounts.body) : [];
       const shown = capInventory(this.sessionList);
       const shownMounts = capInventory(this.mountList);
-      this.sessions = shown.map(baseSession);
-      this.mounts = shownMounts.map(mount => ({ mount, atlas: null, detailsPending: true }));
+      const previousSessions = new Map(inPlace ? this.sessions.map(row => [row.session.id, row]) : []);
+      const previousMounts = new Map(inPlace ? this.mounts.map(row => [row.mount.id, row]) : []);
+      this.sessions = shown.map(session => previousSessions.get(session.id) ?? baseSession(session));
+      this.mounts = shownMounts.map(mount => previousMounts.get(mount.id) ?? { mount, atlas: null, detailsPending: true });
+      for (const id of this.thumbnailSources.keys()) {
+        if (!this.mountList.some(mount => mount.id === id)) this.thumbnailSources.delete(id);
+      }
       this.totalSessions = this.sessionList.length;
       this.totalMounts = this.mountList.length;
-      this.sessionProgress = { completed: 0, total: shown.length };
-      this.mountProgress = { completed: 0, total: shownMounts.length };
+      this.sessionProgress = { completed: inPlace ? shown.length : 0, total: shown.length };
+      this.mountProgress = { completed: inPlace ? shownMounts.length : 0, total: shownMounts.length };
       // Publish base rows before any per-row detail finishes.
       this.state = 'ready';
       this.error = isList(mounts) ? '' : `mounts: ${detail(mounts)}`;
-      this.loadedAt = new Date();
       await Promise.all([
-        this.fillSessions(shown, 0, gen),
-        this.fillMounts(shownMounts, 0, gen),
+        this.fillSessions(shown, 0, gen, !inPlace),
+        this.fillMounts(shownMounts, 0, gen, !inPlace),
       ]);
+      if (gen === this.generation) this.loadedAt = new Date(Date.now());
     } catch (err) {
       if (gen !== this.generation) return;
       const msg = err instanceof Error ? err.message : String(err);
@@ -209,15 +217,27 @@ class Overview {
     const gen = this.generation, server = identity.target.server, access = identity.revision;
     const current = () => gen === this.generation && server === identity.target?.server && access === identity.revision;
     try {
-      const reply = await identity.get<MountOut[]>('/v1/mounts');
-      if (!current() || !isList<MountOut>(reply)) return;
-      const mount = reply.body.find(m => m.id === id);
-      if (!mount) return;
-      const reloadThumbnails = this.thumbnailSources.get(id)?.started === true;
-      const row = await this.mountRow(mount, gen);
+      const reply = await identity.get<MountOut>(`/v1/mounts/${encodeURIComponent(id)}`);
       if (!current()) return;
-      this.mountList = reply.body;
-      this.totalMounts = reply.body.length;
+      let mount: MountOut | undefined;
+      if (reply.status === 200 && reply.body?.id === id) {
+        // Detail replies contain other metadata that Home does not use.
+        const { id, label, mount_type, grain_count, spot_count } = reply.body;
+        mount = { id, label, mount_type, grain_count, spot_count };
+      } else if (reply.status === 404 || reply.status === 405) {
+        const list = await identity.get<MountOut[]>('/v1/mounts');
+        if (!current() || !isList<MountOut>(list)) return;
+        mount = list.body.find(m => m.id === id);
+      }
+      if (!mount) return;
+      const reloadThumbnails = this.thumbnailSources.get(id)?.started === true
+        || this.mounts.find(row => row.mount.id === id)?.thumbnails !== undefined;
+      const row = await this.mountRow(mount, gen, false);
+      if (!current()) return;
+      const listed = this.mountList.findIndex(m => m.id === id);
+      if (listed >= 0) this.mountList[listed] = mount;
+      else this.mountList = [...this.mountList, mount];
+      this.totalMounts = this.mountList.length;
       const index = this.mounts.findIndex(r => r.mount.id === id);
       if (index >= 0) this.mounts[index] = row;
       else this.mounts = [...this.mounts, row];
@@ -250,21 +270,24 @@ class Overview {
     }
   }
 
-  private async fillSessions(items: SessionOut[], offset: number, gen: number) {
+  private async fillSessions(items: SessionOut[], offset: number, gen: number, progress = true) {
     await mapLimited(items, async (session, index) => {
       const row = await this.sessionRow(session);
       if (gen !== this.generation) return;
       this.sessions[offset + index] = row;
-      this.sessionProgress.completed += 1;
+      if (progress) this.sessionProgress.completed += 1;
     }, () => gen === this.generation);
   }
 
-  private async fillMounts(items: MountOut[], offset: number, gen: number) {
+  private async fillMounts(items: MountOut[], offset: number, gen: number, progress = true) {
     await mapLimited(items, async (mount, index) => {
+      const reloadThumbnails = this.thumbnailSources.get(mount.id)?.started === true
+        || this.mounts.find(row => row.mount.id === mount.id)?.thumbnails !== undefined;
       const row = await this.mountRow(mount, gen);
       if (gen !== this.generation) return;
       this.mounts[offset + index] = row;
-      this.mountProgress.completed += 1;
+      if (reloadThumbnails) void this.loadThumbnails(mount.id);
+      if (progress) this.mountProgress.completed += 1;
     }, () => gen === this.generation);
   }
 
@@ -285,18 +308,23 @@ class Overview {
     };
   }
 
-  private async mountRow(mount: MountOut, gen: number): Promise<MountRow> {
+  private async mountRow(mount: MountOut, gen: number, preserve = true): Promise<MountRow> {
     const server = identity.target?.server;
     try {
       const r = await identity.get(`/v1/mounts/${encodeURIComponent(mount.id)}/atlas`);
       if (r.status === 200) {
         const atlas = parseAtlas(r.body);
         const access = (r.body as { access?: unknown } | null)?.access;
+        const previous = this.mounts.find(row => row.mount.id === mount.id);
+        if (preserve && this.thumbnailSources.has(mount.id) && previous?.atlas && previous.atlas !== 'error' && atlas
+          && previous.atlas.projectId === atlas.projectId && previous.atlas.version === atlas.version)
+          return { mount, atlas, thumbnails: previous.thumbnails };
         if (gen === this.generation) this.thumbnailSources.delete(mount.id);
         if (gen === this.generation && atlas && server && typeof access === 'string' && access)
           this.thumbnailSources.set(mount.id, { server, atlas, access, started: false });
         return { mount, atlas };
       }
+      if (gen === this.generation) this.thumbnailSources.delete(mount.id);
       if (r.status === 404 || r.status === 405) return { mount, atlas: null };
     } catch { /* fall through */ }
     return { mount, atlas: 'error' };
@@ -308,7 +336,6 @@ class Overview {
     if (!source || source.started) return;
     source.started = true;
     const { server, atlas, access } = source;
-    const gen = this.generation;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5000);
     let thumbnails: string[] = [];
@@ -320,7 +347,8 @@ class Overview {
         thumbnails = thumbnailPaths(await response.json()).map(path => atlasFileUrl(server, atlas.projectId, path, access));
     } catch { /* A missing thumbnail must never hide the mount. */ }
     finally { clearTimeout(timeout); }
-    if (gen !== this.generation || source !== this.thumbnailSources.get(mountId)) return;
+    // Unchanged atlases retain their source across an in-place revalidation.
+    if (source !== this.thumbnailSources.get(mountId)) return;
     const row = this.mounts.find(row => row.mount.id === mountId);
     if (row) row.thumbnails = thumbnails;
   }

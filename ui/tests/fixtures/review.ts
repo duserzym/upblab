@@ -44,7 +44,7 @@ export const reviewFixtures: Record<string, unknown> = {
   [`/v1/sessions/${session.id}/results?run=preferred`]: table,
   [`/v1/sessions/${session.id}/results?run=run-preferred`]: table,
   [`/v1/sessions/${session.id}/results?run=run-newer`]: { ...table, run: { ...runBrief, run_id: 'run-newer', is_preferred: false, started_at: runs[1].started_at, pipeline_version: '0.1.1' }, rows: rows.map(r => ({ ...r, run_id: 'run-newer', preferred_date: r.preferred_date + 1 })) },
-  [`/v1/mounts/${mount.id}/results`]: mountResults, [`/v1/mounts/${mount.id}/atlas`]: { current: { project_id: 'project-demo', version: 1 } },
+  [`/v1/mounts/${mount.id}`]: mount, [`/v1/mounts/${mount.id}/results`]: mountResults, [`/v1/mounts/${mount.id}/atlas`]: { current: { project_id: 'project-demo', version: 1 } },
   '/v1/spots/by-atlas/atlas-unmeasured/results': { spot: unmeasured, columns: table.columns, rows: [] },
 };
 for (const row of rows) {

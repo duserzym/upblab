@@ -48,7 +48,7 @@
     ? `checking ${overview.mountProgress.completed} of ${overview.mountProgress.total} mounts for atlases` : undefined);
   const sessionCap = $derived({ shown: overview.sessions.length, total: overview.totalSessions, loadRest: () => void overview.loadRest('sessions') });
   const mountCap = $derived({ shown: overview.mounts.length, total: overview.totalMounts, loadRest: () => void overview.loadRest('mounts') });
-  const refresh = () => void overview.load();
+  const refresh = () => void overview.load({ force: true });
   const collapsed = (section: HomeSection) => settings.homeSections[section]?.collapsed ?? false;
   const toggleSection = (section: HomeSection) => void settings.updateHomeSection(section, { collapsed: !collapsed(section) });
   const resetHomeLayout = () => void settings.update({ homeSections: {} });
