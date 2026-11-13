@@ -144,8 +144,10 @@
 
 {#if isDesktop}
   <div class="surface" bind:this={el} aria-label={title} data-module={module}>
-    <!-- The native webview paints over this element. Visible only while it loads. -->
-    <p class="faint small">Loading {title}…</p>
+    <!-- The native webview paints here; its placeholder keeps the same bounds. -->
+    {#if active && shell.overlay}
+      <p class="faint small" role="status">Hidden while a dialog is open</p>
+    {:else}<p class="faint small">Loading {title}…</p>{/if}
   </div>
 {:else}
   <iframe

@@ -1,9 +1,10 @@
 # UX conventions in the shell
 
-The rules are written once, in grainatlas:
+Rules 1–7 are written once, in grainatlas:
 [`docs/ux-conventions.md`](../../grainatlas/docs/ux-conventions.md) (the
-source; read it there). This page only says where UPb Lab's shell follows
-each one, and which do not apply to it. Module tabs follow the rules in their
+source; read it there). This page says where UPb Lab's shell follows
+each one, and which do not apply to it. Rule 8 sets the shell's layering
+contract. Module tabs follow the rules in their
 own code; the shell's part is to pass them what they need (theme, files,
 sign-in) and to give them the whole area under the tab bar.
 
@@ -16,6 +17,7 @@ sign-in) and to give them the whole area under the tab bar.
 | 5. The scale is known, or asked once | Does not apply to the shell: the scale is grainatlas's question, asked after the files arrive through `open-files`. |
 | 6. Server features are additive and say where data comes from | One server setting (Settings → laicpmsdb: a lab server or "This computer"); the tab bar names the server in the sign-in button's tooltip and dialog; the sign-in is the shell's (`token()` for modules), kept in the OS keychain, never in a URL or file. Home says which part is missing (no server, unreachable, signed out) next to the list it affects. |
 | 7. Fit a 14-inch laptop | Checked at 1440 × 900 and 1280 × 800 CSS pixels, and Home and Settings at 1024 × 640, in Chromium and WebKit: first-run wizard, Home (also while files are dragged over it), Images, Sessions, Review (including plots and details), Reduce, Settings, sign-in dialog; module tabs get the full width and all the height under the 48 px tab bar (`ui/tests/sizes.spec.ts`, `ui/tests/review.spec.ts`, `make e2e`, part of `make test`). Long URLs, paths and ids wrap; pages scroll inside the window, never sideways. The window opens at 1280 × 800 centred, cannot go below 1024 × 640, and reopens where it was left, fitted to the monitor it is on (`src-tauri/src/geometry.rs`, `window.json` in the app config folder). Settings → Appearance and layout → **Reset layout** returns it to 1280 × 800 centred. Review remembers its scope and the Side by side choice; the split with the existing Images surface is offered only at widths of 1440 CSS px or more. Each Review column scrolls within the window. Home's card grids show 4 cards across at 1440 px, 3 at 1280 and 2 below 1100 (`ui/tests/home.spec.ts`); the Review geochemistry board shows 3 x 2 panels when its own width is 880 px or more, else 2 x 2, and scrolls vertically for more (`ui/tests/review.spec.ts`). Theme: every tab is checked in light and dark (`ui/tests/theme.spec.ts`). |
+| 8. Layers stay within their owner | L0 tiles are dock panels in flow. L1 in-tile drawers are pickers kept open while looking at the result: depth channels, geochemistry axis quantities, session and run pickers. They open inside their own tile or toolbar and take layout space; content beside or below shrinks. They never float. L2 anchored menus are short, one-shot choices (move panel, presets, row actions). They may float, using the shared `containedPopover` / `containRect` helper to stay inside the owning tile, flip above or right-align to the anchor near an edge, and clamp every edge. They never extend over another tile or a module surface; a menu for a native surface takes layout space above it. L3 app dialogs and popups outside a tile use the shared overlay registry (`ui/src/lib/overlays.svelte.ts`): every visible module surface is hidden and replaced by a quiet placeholder of the same size before opening, then restored on close. Future toasts use a reserved strip of shell chrome that no module surface covers. Nothing relies on z-index to paint over a native module surface. |
 
 ## What the modules still adopt
 

@@ -6,8 +6,8 @@
   import { check, download, install, updater } from '../lib/updater.svelte';
   import { checkButtonView, RELEASES_PAGE } from '../lib/updates';
   import { moduleVersions, type ModuleVersion } from '../lib/versions';
+  import { openOverlay, closeOverlay } from '../lib/overlays.svelte';
 
-  let { onopenchange }: { onopenchange: (open: boolean) => void } = $props();
   let button: HTMLButtonElement;
   let popup: HTMLDivElement;
   let open = $state(false);
@@ -28,7 +28,8 @@
   function beforeToggle(event: ToggleEvent) {
     open = event.newState === 'open';
     // Native module webviews must hide before the shell's popover can paint over them.
-    onopenchange(open);
+    if (open) openOverlay('updates');
+    else closeOverlay('updates');
     if (open) {
       if (!modulesLoaded) {
         modulesLoaded = true;
@@ -40,7 +41,7 @@
   onMount(() => {
     const observer = new ResizeObserver(() => { if (open) position(); });
     observer.observe(popup);
-    return () => { observer.disconnect(); onopenchange(false); };
+    return () => { observer.disconnect(); closeOverlay('updates'); };
   });
   async function showSettings(event: MouseEvent) {
     event.preventDefault();

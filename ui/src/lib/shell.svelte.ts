@@ -6,6 +6,7 @@ import { isDesktop, launchStudio, logInfo, logWarn, openExternal, studioStatus, 
 import { identity } from './identity.svelte';
 import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
+import { overlays } from './overlays.svelte';
 
 export type View = TabId | 'settings' | 'account';
 
@@ -98,7 +99,7 @@ class Shell {
   targets = $state<Record<ModuleTab, ModuleTarget | null>>({ images: null, sessions: null, people: null });
   studio = $state<StudioRequest | null>(null);
   /** Overlays in the shell (dialogs) must hide native module webviews, which always paint on top. */
-  overlay = $state(false);
+  get overlay() { return overlays.active; }
   private seq = 0;
 
   get atlas(): InstalledModule | undefined {

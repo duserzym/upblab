@@ -14,16 +14,17 @@ const calls = (page: Page) => page.evaluate(() => (window as unknown as {
 const emit = (page: Page, spot: string, via = 'user') => page.evaluate(({ spot, via }) => (window as unknown as {
   __emit: (e: string, p: unknown) => void;
 }).__emit('lab-bridge://notify', { event: { type: 'lab.spot.selected', project: 'project-demo', spot, via }, source: 'grainatlas' }), { spot, via });
-async function openReview(page: Page) {
+async function openReview(page: Page, options: { signedIn?: boolean; store?: Record<string, unknown> } = {}) {
   await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [{ name: 'grainatlas', version: 'demo', source: 'fixture', sha256: 'demo', entry: 'modules/grainatlas/index.html' }] } }));
-  await page.addInitScript(installFakeTauri, { store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'review', reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }) }, fixtures: reviewFixtures, signedIn: true });
+  await page.addInitScript(installFakeTauri, { store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'review', reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }), ...options.store }, fixtures: reviewFixtures, signedIn: options.signedIn ?? true });
   await page.goto('./');
   await page.waitForFunction(() => (window as unknown as {
     __fake: {
       listeners: Map<string, unknown>;
     };
   }).__fake.listeners.has('lab-bridge://notify'));
-  await expect(page.locator('[data-spot-key]').first()).toBeVisible();
+  // Signed out, Review has no stored results to show.
+  if (options.signedIn !== false) await expect(page.locator('[data-spot-key]').first()).toBeVisible();
 }
 for (const [width, height] of [[1440, 900], [1280, 800]]) {
   test.describe(`${width} × ${height}`, () => {
@@ -47,7 +48,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
       expect(await problems(page, 'Geochemistry')).toEqual([]);
       await page.getByTestId('geochem-panel').first().getByRole('button', {name:'Choose Y axis', exact:true}).click();
-      await page.getByRole('dialog', {name:'Choose Y quantity'}).getByRole('button', {name:'REE pattern',exact:true}).click();
+      await page.getByRole('group', {name:'Choose Y quantity'}).getByRole('button', {name:'REE pattern',exact:true}).click();
       await expect(page.getByText('CI chondrite, McDonough and Sun (1995)')).toBeVisible();
       expect(await problems(page, 'REE')).toEqual([]);
       await page.locator('[data-spot-key="acq-1"]').click();
@@ -130,16 +131,16 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     test('quantity chips change axes, keyboard picking works, and the board persists', async ({ page }) => {
       let first = page.getByTestId('geochem-panel').first();
       await first.getByRole('button', { name: 'Choose Y axis', exact: true }).click();
-      const picker = page.getByRole('dialog', { name: 'Choose Y quantity' });
+      const picker = page.getByRole('group', { name: 'Choose Y quantity' });
       await picker.getByLabel('Filter quantities').fill('U/Yb');
       await picker.getByRole('button', { name: 'U/Yb', exact: true }).click();
       await expect(picker).toHaveCount(0);
       await expect(first.getByRole('button', { name: 'Choose Y axis', exact: true })).toContainText('U/Yb (from stored ppm)');
       await first.getByRole('button', { name: 'Choose X axis', exact: true }).click();
-      const search = page.getByRole('dialog').getByLabel('Filter quantities');
+      const search = page.getByRole('group', { name: 'Choose X quantity' }).getByLabel('Filter quantities');
       await search.fill('Hf');
       await search.press('ArrowDown');
-      await expect(page.getByRole('dialog').getByRole('button', { name: 'Hf', exact: true })).toBeFocused();
+      await expect(page.getByRole('group', { name: 'Choose X quantity' }).getByRole('button', { name: 'Hf', exact: true })).toBeFocused();
       await page.keyboard.press('Enter');
       await expect(first.getByRole('button', { name: 'Choose X axis', exact: true })).toContainText('Hf (ppm)');
       await page.reload();
@@ -482,35 +483,143 @@ test('Review prompts once for an unsaved scope and keeps single-run sessions sel
   await expect(page.getByRole('listbox', { name: 'Runs', exact: true }).getByRole('option')).toHaveCount(2);
 });
 
-test('Review popups remain inside their dock panel beside native SEM images', async ({ page }) => {
-  await page.setViewportSize({ width: 1512, height: 982 });
+async function contained(popup: ReturnType<Page['locator']>, owner: ReturnType<Page['locator']>) {
+  await expect(popup).toBeVisible();
+  const p = (await popup.boundingBox())!, b = (await owner.boundingBox())!;
+  expect(p.x).toBeGreaterThanOrEqual(b.x - 1);
+  expect(p.y).toBeGreaterThanOrEqual(b.y - 1);
+  expect(p.x + p.width).toBeLessThanOrEqual(b.x + b.width + 1);
+  expect(p.y + p.height).toBeLessThanOrEqual(b.y + b.height + 1);
+}
+
+for (const [width, split, dataWidth, side] of [[1440, true, 65, true], [1440, true, 50, false], [1280, false, 50, true]] as const) {
+  test(`Depth channels take layout space at ${width}px, split ${split}, data width ${dataWidth}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 900 : 800 });
+    await openReview(page, { store: { reviewDataWidth: dataWidth } });
+    if (split) await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+    await page.locator('[data-spot-key="acq-1"]').click();
+    await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+    const plots = page.locator('section[aria-label="Age & plots"]');
+    const button = page.getByRole('button', { name: /^Channels/ });
+    const drawer = page.getByRole('group', { name: 'Depth profile channels' });
+    const canvas = plots.locator('canvas').first();
+    await expect(canvas).toBeVisible();
+    // Make the initial state explicit even if the component was remounted.
+    if (await button.getAttribute('aria-expanded') === 'true') await button.click();
+    // Wait until the plot has taken its tile size (it starts at uPlot's 400 x 300).
+    let closed = (await canvas.boundingBox())!;
+    await expect.poll(async () => {
+      const before = closed;
+      await page.waitForTimeout(150);
+      closed = (await canvas.boundingBox())!;
+      return before.width === closed.width && before.height === closed.height;
+    }).toBe(true);
+    await button.click();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(button).toHaveAttribute('aria-controls', 'depth-channel-picker');
+    await contained(drawer, plots);
+    if (split) {
+      const d = (await drawer.boundingBox())!, sem = (await page.locator('section[aria-label="SEM images"]').boundingBox())!;
+      expect(d.x + d.width <= sem.x + 1 || d.x >= sem.x + sem.width - 1 || d.y + d.height <= sem.y + 1 || d.y >= sem.y + sem.height - 1).toBe(true);
+    }
+    await expect.poll(async () => (await canvas.boundingBox())![side ? 'width' : 'height']).toBeLessThan(closed[side ? 'width' : 'height'] - 20);
+    const check = drawer.locator('input[type="checkbox"]').first();
+    const wasChecked = await check.isChecked();
+    await check.click();
+    await expect(check).toBeChecked({ checked: !wasChecked });
+    await expect(drawer).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    const group = drawer.getByRole('checkbox', { name: /^Select all/ }).first();
+    await expect(group).toHaveAttribute('aria-checked', 'mixed');
+    await group.click();
+    await expect(group).toHaveAttribute('aria-checked', 'true');
+    await group.click();
+    await expect(group).toHaveAttribute('aria-checked', 'false');
+    await drawer.getByRole('button', { name: 'Restore defaults', exact: true }).click();
+    await page.getByRole('tab', { name: 'Concordia', exact: true }).click();
+    await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+    await expect(drawer).toBeVisible();
+    await button.click();
+    await expect(drawer).toHaveCount(0);
+    await expect(page.getByLabel('Plotted depth channels')).toBeVisible();
+    await expect.poll(async () => (await canvas.boundingBox())!.width).toBeGreaterThanOrEqual(closed.width - 1);
+    expect(await problems(page, 'Depth drawer')).toEqual([]);
+  });
+}
+
+test('Review anchored menus stay inside every owning tile beside native SEM images', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await openReview(page);
   await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
   const plots = page.getByRole('region', { name: 'Age & plots', exact: true });
-  const contained = async (popup: ReturnType<Page['locator']>, owner = plots) => {
-    await expect(popup).toBeVisible();
-    const p = (await popup.boundingBox())!, b = (await owner.boundingBox())!;
-    expect(p.x).toBeGreaterThanOrEqual(b.x);
-    expect(p.y).toBeGreaterThanOrEqual(b.y);
-    expect(p.x + p.width).toBeLessThanOrEqual(b.x + b.width + 1);
-    expect(p.y + p.height).toBeLessThanOrEqual(b.y + b.height + 1);
-  };
   await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
   await page.getByRole('button', { name: 'Presets', exact: true }).click();
-  await contained(page.locator('#review-geochem-presets'));
+  await contained(page.locator('#review-geochem-presets'), plots);
   await page.keyboard.press('Escape');
-  await page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true }).click();
-  await contained(page.getByRole('dialog', { name: 'Choose Y quantity' }));
-  await page.keyboard.press('Escape');
-  await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
-  await page.getByRole('button', { name: /^Channels/ }).click();
-  await contained(page.locator('#depth-channel-picker'));
-  await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Move Spot metadata', exact: true }).click();
-  await contained(page.locator('#dock-details'), page.getByRole('region', { name: 'Spot metadata', exact: true }));
-  await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Move SEM images', exact: true }).click();
-  const menu = (await page.locator('#dock-images').boundingBox())!, surface = (await page.locator('[data-module="images"]').boundingBox())!;
-  expect(menu.y + menu.height).toBeLessThanOrEqual(surface.y);
+  for (const [pane, title] of [['spots', 'Spots'], ['plots', 'Age & plots'], ['details', 'Spot metadata'], ['images', 'SEM images']]) {
+    await page.getByRole('button', { name: `Move ${title}`, exact: true }).click();
+    await contained(page.locator(`#dock-${pane}`), page.getByRole('region', { name: title, exact: true }));
+    if (pane === 'images') {
+      const menu = (await page.locator('#dock-images').boundingBox())!, surface = (await page.locator('[data-module="images"]').boundingBox())!;
+      expect(menu.y + menu.height).toBeLessThanOrEqual(surface.y + 1);
+    }
+    await page.keyboard.press('Escape');
+  }
   expect(await problems(page, 'Contained dock menus')).toEqual([]);
 });
+
+test('Quantity drawer spans the board, pushes plots down, and returns focus', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openReview(page);
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+  await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+  const panel = page.getByTestId('geochem-panel').first();
+  const button = panel.getByRole('button', { name: 'Choose Y axis', exact: true });
+  const before = (await panel.boundingBox())!;
+  await button.click();
+  const drawer = page.getByRole('group', { name: 'Choose Y quantity' });
+  await expect(drawer.getByLabel('Filter quantities')).toBeFocused();
+  await expect(drawer).toContainText('Y axis for panel 1');
+  await contained(drawer, page.getByRole('region', { name: 'Age & plots', exact: true }));
+  const d = (await drawer.boundingBox())!, board = (await page.getByTestId('geochem-board').boundingBox())!;
+  expect(Math.abs(d.width - board.width)).toBeLessThan(1);
+  expect((await panel.boundingBox())!.y).toBeGreaterThan(before.y + 20);
+  expect(d.y + d.height).toBeLessThanOrEqual(board.y + 1);
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+  await expect(button).toBeFocused();
+  await button.click();
+  await panel.getByRole('button', { name: 'Choose X axis', exact: true }).click();
+  await expect(page.getByRole('group', { name: /^Choose [XY] quantity$/ })).toHaveCount(1);
+  const x = page.getByRole('group', { name: 'Choose X quantity' });
+  await x.getByLabel('Filter quantities').fill('Hf');
+  await x.getByLabel('Filter quantities').press('ArrowDown');
+  await expect(x.getByRole('button', { name: 'Hf', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(x).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Choose X axis', exact: true })).toBeFocused();
+});
+
+for (const [tab, module] of [['Images', 'images'], ['Sessions', 'sessions']] as const) {
+  test(`Sign-in hides and restores the visible ${tab} surface without changing its box`, async ({ page }) => {
+    await openReview(page, { signedIn: false });
+    await page.getByRole('tab', { name: tab, exact: true }).click();
+    const surface = page.locator(`[data-module="${module}"]`);
+    await expect(surface).toBeVisible();
+    await expect.poll(async () => (await calls(page)).some(([c, a]) => c === 'module_open' && a?.module === module)).toBe(true);
+    const box = await surface.boundingBox();
+    const start = (await calls(page)).length;
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Sign in to laicpmsdb' });
+    await expect(dialog).toBeVisible();
+    await expect.poll(async () => (await calls(page)).slice(start).some(([c, a]) => c === 'module_hide' && a?.module === module)).toBe(true);
+    await expect(surface.getByRole('status')).toHaveText('Hidden while a dialog is open');
+    expect(await surface.boundingBox()).toEqual(box);
+    const closed = (await calls(page)).length;
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(surface.getByRole('status')).toHaveCount(0);
+    await expect.poll(async () => (await calls(page)).slice(closed).some(([c, a]) => c === 'module_open' && a?.module === module && a.navigate === false)).toBe(true);
+    expect(await surface.boundingBox()).toEqual(box);
+  });
+}

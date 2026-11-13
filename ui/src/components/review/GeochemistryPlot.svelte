@@ -2,6 +2,7 @@
   import { containedPopover } from '../../lib/contained-popover';
   import { untrack } from 'svelte';
   import GeochemPanel from './GeochemPanel.svelte';
+  import QuantityPicker from './QuantityPicker.svelte';
   import { catalogue } from '../../lib/geochem';
   import { MINERALS, MAX_PANELS, applyPreset, gridColumns, loadBoards, saveBoards, mineralFor, preset, panel, type Mineral, type Panel } from '../../lib/geochem-board';
   import type { ReviewSpot } from '../../lib/review-data';
@@ -13,6 +14,7 @@
   let panels = $state<Panel[]>([]);
   let width = $state(0), host = $state<HTMLDivElement>();
   let maximized = $state<string | null>(null);
+  let picker = $state<{ panel: string; axis: 'x' | 'y'; anchor: HTMLElement } | null>(null);
   let presetAnchor = $state<HTMLButtonElement>();
   let presetPopup = $state<HTMLDivElement>();
   const quantities = $derived(catalogue(catalogueRows));
@@ -31,35 +33,57 @@
     untrack(()=>{if (!boards[mineral] && !maximized) panels=preset(mineral).slice(0,cols===3?6:4);});
   });
   function switchMineral(m: Mineral) {
-    mineral=m; maximized=null;
+    mineral=m; maximized=null; picker=null;
     panels=boards[m] ?? preset(m).slice(0,gridColumns(width)===3?6:4);
   }
   function update(next: Panel[]) {
     panels=next; boards={...boards,[mineral]:next}; saveBoards(boards);
   }
   function replace(p: Panel) { update(panels.map(current=>current.id===p.id?p:current)); }
-  function remove(id: string) { update(panels.filter(p=>p.id!==id)); if(maximized===id) maximized=null; }
+  function pick(id: string) {
+    const p = panels.find(p => p.id === picker?.panel);
+    if (p && picker) replace(id === 'ree' ? {...p,type:'ree'} : {...p,type:'biplot',[picker.axis]:id});
+  }
+  function choose(panel: string, axis: 'x' | 'y', anchor: HTMLElement) {
+    picker = picker?.panel === panel && picker.axis === axis ? null : {panel,axis,anchor};
+  }
+  function escape(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (picker) {
+      const anchor = picker.anchor;
+      picker=null; anchor.focus(); event.preventDefault();
+    } else maximized=null;
+  }
+  function remove(id: string) { if (picker?.panel===id) picker=null; update(panels.filter(p=>p.id!==id)); if(maximized===id) maximized=null; }
 </script>
-<svelte:window onkeydown={e=>{if(e.key==='Escape'&&!e.defaultPrevented) maximized=null;}} />
+<svelte:window onkeydown={escape} />
+<div class="geochemistry">
 <div class="board-toolbar row">
   <span class="section-label">Geochemistry</span>
   <label>Mineral <select aria-label="Preset mineral" value={mineral} onchange={e=>switchMineral(e.currentTarget.value as Mineral)}>{#each MINERALS as m}<option>{m}</option>{/each}</select></label>
   <button class="chip" popovertarget="review-geochem-presets" aria-label="Presets" bind:this={presetAnchor}>Presets</button>
   <div class="preset-menu" use:containedPopover={{anchor: () => presetAnchor, w: 360, h: 220}} popover="auto" id="review-geochem-presets" bind:this={presetPopup}>
     <h3>Replace board with a mineral preset</h3>
-    {#each MINERALS as m}<button class="chip" aria-label={`Apply ${m} preset`} aria-pressed={mineral===m} onclick={()=>{mineral=m;update(applyPreset(m));maximized=null;presetPopup?.hidePopover();}}>{m}</button>{/each}
+    {#each MINERALS as m}<button class="chip" aria-label={`Apply ${m} preset`} aria-pressed={mineral===m} onclick={()=>{mineral=m;update(applyPreset(m));maximized=null;picker=null;presetPopup?.hidePopover();}}>{m}</button>{/each}
     <p class="small muted">Choose a preset to replace the current panels. You can change each axis afterwards.</p>
   </div>
   <span class="small muted">{panels.length}/{MAX_PANELS} panels · read-only</span>
 </div>
+{#if picker}
+  {#key `${picker.panel}-${picker.axis}`}
+    <QuantityPicker {quantities} anchor={picker.anchor} axis={picker.axis.toUpperCase()} title={`${picker.axis.toUpperCase()} axis for panel ${panels.findIndex(p=>p.id===picker?.panel)+1}`} onpick={pick} onclose={()=>picker=null} />
+  {/key}
+{/if}
 <div class="board" bind:this={host} data-testid="geochem-board" data-columns={columns} data-mineral={mineral} data-panel-count={panels.length}>
   {#if !rows.length}<p class="muted empty" role="status">No samples shown</p>{/if}
   <div class="grid" class:maximized={!!maximized} style:--columns={columns}>
-    {#each shown as p (p.id)}<GeochemPanel panel={p} {rows} {quantities} {selected} {onselect} maximized={maximized===p.id} onchange={replace} onmaximize={()=>maximized=maximized===p.id?null:p.id} onremove={()=>remove(p.id)} />{/each}
+    {#each shown as p (p.id)}<GeochemPanel panel={p} pickerAxis={picker?.panel===p.id?picker.axis:undefined} onchoose={(axis,anchor)=>choose(p.id,axis,anchor)} {rows} {quantities} {selected} {onselect} maximized={maximized===p.id} onchange={replace} onmaximize={()=>{picker=null;maximized=maximized===p.id?null:p.id;}} onremove={()=>remove(p.id)} />{/each}
     {#if !maximized && panels.length<MAX_PANELS}<button class="add" onclick={()=>update([...panels,panel('Th','U')])}><span aria-hidden="true">＋</span> Add panel</button>{/if}
   </div>
 </div>
+</div>
 <style>
+  .geochemistry {display:flex;flex-direction:column;flex:1;gap:8px;min-height:0;min-width:0;}
   .board-toolbar {gap:8px;flex:none;min-width:0;} .section-label {font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);} label {font-size:0.75rem;display:flex;align-items:center;gap:4px;}select {font-size:0.75rem;padding:3px 6px;max-width:120px;}
   .preset-menu {position:fixed;margin:0;max-width:min(360px,calc(100vw - 24px));padding:12px;background:var(--plot-bg);color:var(--text);border:1px solid var(--hairline);border-radius:var(--radius-sm);box-shadow:var(--glass-shadow);}.preset-menu h3 {font-size:0.8rem;margin-bottom:8px;}.preset-menu .chip {margin:3px;}.preset-menu p {font-size:0.7rem;margin-top:8px;}
   .board {flex:1;min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;container-type:size;}

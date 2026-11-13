@@ -5,7 +5,9 @@
   (they paint over the shell page otherwise).
 -->
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import { identity, type Provider, type Providers } from '../lib/identity.svelte';
+  import { openOverlay, closeOverlay } from '../lib/overlays.svelte';
 
   let username = $state('');
   let password = $state('');
@@ -14,6 +16,11 @@
   let input = $state<HTMLInputElement>();
 
   const server = $derived(identity.target?.server ?? '');
+  $effect.pre(() => {
+    if (identity.dialog && !identity.signedIn) openOverlay('sign-in');
+    else closeOverlay('sign-in');
+  });
+  onDestroy(() => closeOverlay('sign-in'));
 
   // Each time the dialog opens signed out: ask which methods the server offers.
   $effect(() => {

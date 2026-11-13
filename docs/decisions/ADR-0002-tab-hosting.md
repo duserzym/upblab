@@ -34,6 +34,7 @@ user switches tabs.
   the child in place when the window resizes.
 - Native webviews always paint above the shell page, so shell overlays must
   hide the module webview first (`shell.overlay`).
+  See [UX conventions, rule 8](../ux-conventions.md) for the layering contract.
 - Tab shortcuts are native menu accelerators (`src-tauri/src/menu.rs`):
   keystrokes go to the focused webview, so page-level shortcuts in the shell
   stop working as soon as the user clicks into a module.
