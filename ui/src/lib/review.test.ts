@@ -16,11 +16,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   settings.reviewSplit = false;
+  settings.reviewScope = '';
   review = new Review();
   get.mockImplementation(async (path) => ({ status: path in reviewFixtures ? 200 : 404, body: reviewFixtures[path] }) as never);
   vi.mocked(sendCommand).mockResolvedValue(true);
 });
 describe('Review selection and loading', () => {
+  it('leaves an unsaved scope for the header to prompt and restores a saved scope', async () => {
+    await review.load();
+    expect(review.state).toBe('ready');
+    expect(review.sessions).toHaveLength(1);
+    expect(review.scope).toBeNull();
+    expect(get.mock.calls.some(([path]) => path.includes('/results'))).toBe(false);
+    settings.reviewScope = JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' });
+    await review.load();
+    expect(review.scope).toEqual({ kind: 'session', id: session.id, run: 'preferred' });
+    expect(review.rows).toHaveLength(12);
+  });
   it('groups standard spots by the acquisition reference name while preserving raw labels', async () => {
     const previous = get.getMockImplementation()!;
     get.mockImplementation(async path => path === `/v1/sessions/${session.id}/acquisitions`

@@ -98,7 +98,7 @@ export class Review {
       this.sessions = sessions;
       this.mounts = mounts;
       if (!this.scope)
-        this.scope = parseScope(settings.reviewScope) ?? (sessions[0] ? { kind: 'session', id: sessions[0].id, run: 'preferred' } : mounts[0] ? { kind: 'mount', id: mounts[0].id } : null);
+        this.scope = parseScope(settings.reviewScope);
       const scope = this.scope;
       let rows: ReviewSpot[] = [], runs: RunOut[] = [], run: RunBrief | null = null;
       const info: Record<string, RunBrief> = {};

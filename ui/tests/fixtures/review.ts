@@ -1,8 +1,8 @@
 // Entirely invented zircon measurements. No source data is copied here.
-export const session = { id: 'session-demo', session_key: 'Zircon_demo_06Nov26', material: 'zircon', started_at: '2026-11-06T10:00:00Z', acquisition_count: 12 };
+export const session = { id: 'session-demo', session_key: 'Zircon_demo_06Nov26', material: 'zircon', started_at: '2026-11-06T10:00:00Z', acquisition_count: 12, run_count: 2, preferred_run: { id: 'run-preferred' } };
 export const mount = { id: 'mount-demo', label: 'Demo zircon mount', grain_count: 3, spot_count: 13 };
 export const runs = [
-  { id: 'run-preferred', session_id: session.id, status: 'completed', is_preferred_for_session: true, started_at: '2026-11-06T12:00:00Z', completed_at: '2026-11-06T12:30:00Z', pipeline_name: 'UPbRPy', pipeline_version: '0.1.0', upbrpy_version: '0.1.0', run_by: 'Demo analyst', result_count: 12 },
+  { id: 'run-preferred', parsing_changed_at: '2026-11-07T10:00:00Z', session_id: session.id, status: 'completed', is_preferred_for_session: true, started_at: '2026-11-06T12:00:00Z', completed_at: '2026-11-06T12:30:00Z', pipeline_name: 'UPbRPy', pipeline_version: '0.1.0', upbrpy_version: '0.1.0', run_by: 'Demo analyst', result_count: 12 },
   { id: 'run-newer', session_id: session.id, status: 'completed', is_preferred_for_session: false, started_at: '2026-11-06T14:00:00Z', completed_at: '2026-11-06T14:30:00Z', pipeline_name: 'UPbRPy', pipeline_version: '0.1.1', upbrpy_version: '0.1.1', run_by: 'Demo analyst', result_count: 12 },
 ];
 export const rows = Array.from({ length: 12 }, (_, i) => ({
@@ -43,7 +43,7 @@ export const reviewFixtures: Record<string, unknown> = {
   '/v1/sessions': [session], '/v1/mounts': [mount], [`/v1/sessions/${session.id}/reductions`]: runs,
   [`/v1/sessions/${session.id}/results?run=preferred`]: table,
   [`/v1/sessions/${session.id}/results?run=run-preferred`]: table,
-  [`/v1/sessions/${session.id}/results?run=run-newer`]: { ...table, run: { ...runBrief, run_id: 'run-newer', is_preferred: false, pipeline_version: '0.1.1' }, rows: rows.map(r => ({ ...r, run_id: 'run-newer', preferred_date: r.preferred_date + 1 })) },
+  [`/v1/sessions/${session.id}/results?run=run-newer`]: { ...table, run: { ...runBrief, run_id: 'run-newer', is_preferred: false, started_at: runs[1].started_at, pipeline_version: '0.1.1' }, rows: rows.map(r => ({ ...r, run_id: 'run-newer', preferred_date: r.preferred_date + 1 })) },
   [`/v1/mounts/${mount.id}/results`]: mountResults, [`/v1/mounts/${mount.id}/atlas`]: { current: { project_id: 'project-demo', version: 1 } },
   '/v1/spots/by-atlas/atlas-unmeasured/results': { spot: unmeasured, columns: table.columns, rows: [] },
 };

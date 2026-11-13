@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack, setContext, type Snippet } from 'svelte';
+  import ScopePicker from '../components/review/ScopePicker.svelte';
   import ReviewDock from '../components/ReviewDock.svelte';
   import type { ConcordiaMode } from '../lib/concordia';
   import { grainKey } from '../lib/review-layers';
@@ -25,8 +26,7 @@
   let dock = $state<ReturnType<typeof ReviewDock>>();
   // Release canvases while hidden, retaining each plot's axis and diagram choices.
   setContext('upbstudio.review-visible', () => active && review.state === 'ready');
-  let filter = $state(''), scopeFilter = $state(''), plot = $state('Concordia');
-  let scopePopup = $state<HTMLDivElement>();
+  let filter = $state(''), plot = $state('Concordia');
   let samplesShown = $state<string[]>([]);
   let sampleAnchor = $state<string | null>(null), grainAnchor = $state<string | null>(null);
   let groupUnknown = $state(true);
@@ -42,7 +42,6 @@
   const scopeValue = $derived(review.scope ? `${review.scope.kind}:${review.scope.id}` : '');
   const filterScope = $derived(`${scopeValue}|${groupUnknown ? 'grouped' : 'ungrouped'}`);
   const material = $derived(review.sessions.find(s=>s.id===(review.scope?.kind==='session'?review.scope.id:review.rows.find(r=>r.sessionId)?.sessionId))?.material);
-  const scopeName = $derived(review.scope?.kind==='session'?review.sessions.find(s=>s.id===review.scope?.id)?.session_key:review.mounts.find(m=>m.id===review.scope?.id)?.label);
   $effect(() => {
     void scopeValue;
     untrack(() => { clearSelection(); filter = ''; });
@@ -182,9 +181,6 @@
     });
   });
   const runContext = $derived(JSON.stringify(review.scope));
-  const complete = $derived(review.runs.filter(r => r.status === 'completed' || r.status === 'complete').sort((a, b) => b.started_at.localeCompare(a.started_at)));
-  const newest = $derived(complete[0]);
-  const noPreferred = $derived(!complete.some(r => r.is_preferred_for_session));
   $effect(() => {
     if (!active || !settings.loaded || identity.checking)
       return;
@@ -211,10 +207,6 @@
       void review.fromImages(event);
     });
   });
-  function choose(value: string) {
-    const [kind, ...rest] = value.split(':');
-    if (kind === 'session' || kind === 'mount') void review.open({ kind, id: rest.join(':') });
-  }
   function selectSpot(spot: ReviewSpot) {
     if (!plotted.some(row => row.key === spot.key)) filter = '';
     review.select(spot);
@@ -222,26 +214,12 @@
 </script>
 <section id="review-data-pane" class="view review" class:hidden={!active && !imagesOnly} aria-label="Review results" data-testid="review-view">
   <div class="toolbar glass" hidden={imagesOnly}>
-    <div class="scope-row">
-      <h1>Review</h1>
-      <button class="btn scope-button" aria-label="Choose review scope" title={`${scopeName || 'Choose scope'} · ${material || 'Stored results'} · ${review.rows.length} spots`} popovertarget="review-scope-picker"><span>{review.scope?.kind==='mount'?'Mount':'Session'} · {scopeName || 'Choose scope'}</span><small class="muted">{material || 'Stored results'} · {review.rows.length} spots</small><span aria-hidden="true">⌄</span></button>
-      <div class="scope-picker" id="review-scope-picker" popover="auto" bind:this={scopePopup}>
-        <input type="search" aria-label="Search scopes" placeholder="Find session or mount…" bind:value={scopeFilter} />
-        <select aria-label="Review scope" size="9" value={scopeValue} onchange={e=>{choose(e.currentTarget.value);scopePopup?.hidePopover();}}>
-          <option value="" disabled>Choose a session or mount</option>
-          <optgroup label="Sessions">{#each review.sessions.filter(s=>`${s.session_key} ${s.material}`.toLowerCase().includes(scopeFilter.toLowerCase())||scopeValue===`session:${s.id}`) as s}<option value="session:{s.id}">{s.session_key} · {s.material} · {s.acquisition_count} spots</option>{/each}</optgroup>
-          <optgroup label="Mounts">{#each review.mounts.filter(m=>m.label.toLowerCase().includes(scopeFilter.toLowerCase())||scopeValue===`mount:${m.id}`) as m}<option value="mount:{m.id}">{m.label}</option>{/each}</optgroup>
-        </select>
-      </div>
-      {#if review.scope?.kind==='session'}
-        <label class="run">Run <select aria-label="Review run" value={review.scope.run} onchange={e=>review.scope?.kind==='session'&&void review.open({...review.scope,run:e.currentTarget.value})}>
-          <option value="preferred">{noPreferred&&newest?'Newest run, not preferred':'Preferred run'}</option>
-          {#each complete as r}<option value={r.id}>{r.id.slice(0,8)} · {r.is_preferred_for_session?'preferred':noPreferred&&r.id===newest?.id?'newest run, not preferred':r.started_at.slice(0,10)}</option>{/each}
-        </select></label>
-      {/if}
-      <button class="chip" onclick={()=>dock?.reset()} title="Restore the default panel positions and sizes">Reset layout</button>
-      <label class="split-toggle"><input type="checkbox" checked={settings.reviewSplit} onchange={e=>void settings.update({reviewSplit:e.currentTarget.checked})} /> SEM images</label>
-    </div>
+    <ScopePicker active={active && !imagesOnly}>
+      {#snippet actions()}
+        <button class="chip" onclick={()=>dock?.reset()} title="Restore the default panel positions and sizes">Reset layout</button>
+        <label class="split-toggle"><input type="checkbox" checked={settings.reviewSplit} onchange={e=>void settings.update({reviewSplit:e.currentTarget.checked})} /> SEM images</label>
+      {/snippet}
+    </ScopePicker>
     {#if review.state==='ready'}
       <div class="selection-bar" aria-label="Shown samples and standards">
         <div class="selection-actions">
@@ -313,12 +291,8 @@
 <style>
   .review {overflow:hidden;}
   .toolbar[hidden] {display:none;}
-  h1 {font-size:1rem;margin:0;}
   .toolbar {display:flex;flex-direction:column;gap:8px;padding:8px 12px;border-radius:0;flex:none;min-width:0;border:0;box-shadow:none;}
-  .scope-row {display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap;}
-  .scope-button {min-width:0;max-width:420px;gap:8px;font-size:0.8rem;padding:4px 8px;}.scope-button>span:first-child {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.scope-button small {font-size:0.7rem;white-space:nowrap;}
-  .scope-picker {position:fixed;top:100px;left:12px;margin:0;padding:12px;width:min(420px,calc(100vw - 24px));background:var(--plot-bg);color:var(--text);border:1px solid var(--hairline);border-radius:var(--radius);box-shadow:var(--glass-shadow);}.scope-picker input,.scope-picker select {width:100%;}.scope-picker select {margin-top:8px;font-size:0.8rem;}
-  label {display:flex;align-items:center;gap:4px;font-size:0.75rem;min-width:0;}.run select {max-width:220px;font-size:0.75rem;padding:4px 6px;}.split-toggle {margin-left:auto;}
+  label {display:flex;align-items:center;gap:4px;font-size:0.75rem;min-width:0;}
   .selection-bar {display:flex;align-items:flex-start;gap:5px 12px;flex-wrap:wrap;max-height:86px;overflow:auto;min-width:0;padding:4px;}
   .sample-bar,.selection-actions {display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;}
   .selection-bar .chip {padding:2px 7px;font-size:0.75rem;}

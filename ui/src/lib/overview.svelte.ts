@@ -22,6 +22,8 @@ export interface SessionOut {
   status?: string;
   started_at: string | null;
   acquisition_count: number;
+  run_count?: number;
+  preferred_run?: Partial<RunOut> | null;
   instrument?: { name?: string } | null;
   analyst?: string | null;
 }
@@ -38,6 +40,7 @@ export interface RunOut {
   is_preferred_for_session: boolean;
   run_by: string | null;
   result_count: number;
+  parsing_changed_at?: string | null;
 }
 
 export interface MountOut {

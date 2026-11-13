@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installFakeTauri } from './fake-tauri';
 import { problems } from './problems';
-import { reviewFixtures, session } from './fixtures/review';
+import { reviewFixtures, session, runs } from './fixtures/review';
 type Call = [
   string,
   Record<string, unknown> | undefined
@@ -61,7 +61,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.getByRole('checkbox', {name:'Show Standards in Review',exact:true}).click();
       await expect(page.getByRole('checkbox', {name:'Show Reference_1 in Review',exact:true})).toBeChecked();
       await page.getByRole('button', {name:'Choose review scope',exact:true}).click();
-      await page.getByLabel('Review scope', { exact: true }).selectOption('mount:mount-demo');
+      await page.getByRole('listbox', { name: 'Mounts', exact: true }).getByRole('option', { name: /Demo zircon mount/ }).click();
       await expect(page.locator('[data-spot-key]')).toHaveCount(9);
       await page.getByLabel('Filter spots').fill('Zircon_13');
       await page.locator('[data-spot-key="spot-unmeasured"]').click();
@@ -339,7 +339,8 @@ test('group toggles, ranges and Escape preserve display filters by scope and gro
   await expect(b).toHaveAttribute('aria-pressed', 'false');
   const choose = async (scope: string) => {
     await page.getByRole('button', { name: 'Choose review scope', exact: true }).click();
-    await page.getByLabel('Review scope', { exact: true }).selectOption(scope);
+    await page.getByRole('listbox', { name: scope.startsWith('mount:') ? 'Mounts' : 'Sessions', exact: true })
+      .getByRole('option', { name: scope.startsWith('mount:') ? /Demo zircon mount/ : /Zircon_demo_06Nov26/ }).click();
   };
   await choose('mount:mount-demo');
   await expect(spots).toHaveCount(9);
@@ -385,4 +386,131 @@ test('hidden Review releases plots and restores its chosen view', async ({ page 
   await expect(page.getByRole('tab', { name: 'Geochemistry', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(plots).toHaveCount(count);
   await expect(page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true })).toHaveText(axis!);
+});
+
+for (const [width, height] of [[1512, 982], [1024, 640]]) {
+  test(`Review drawers stay above SEM images and support keyboard scope and run selection at ${width} × ${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openReview(page);
+    await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+    const field = page.getByRole('button', { name: 'Choose review scope', exact: true });
+    const run = page.getByRole('button', { name: 'Review run', exact: true });
+    const drawer = page.getByTestId('review-picker-drawer');
+    const search = page.getByRole('searchbox', { name: 'Search scopes', exact: true });
+    await field.click();
+    await expect(field).toHaveAttribute('aria-expanded', 'true');
+    await expect(search).toBeFocused();
+    if (width === 1512) {
+      const surface = page.locator('[data-module="images"]');
+      await expect(surface).toBeVisible();
+      await expect.poll(async () => {
+        const d = (await drawer.boundingBox())!, image = (await surface.boundingBox())!;
+        return d.y + d.height <= image.y;
+      }).toBe(true);
+      // The native child must receive the new rectangle, not just the DOM placeholder.
+      await expect.poll(async () => (await calls(page)).filter(([c, args]) => c === 'module_bounds' && args?.module === 'images').pop()?.[1]?.bounds)
+        .toMatchObject({ y: Math.round((await surface.boundingBox())!.y) });
+    }
+    await expect.poll(() => problems(page, 'Open scope drawer')).toEqual([]);
+    await search.fill('Demo zircon mount');
+    await search.press('ArrowDown');
+    await expect(page.getByRole('listbox', { name: 'Mounts', exact: true }).getByRole('option')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(field).toContainText('Demo zircon mount');
+    await expect(run).toHaveCount(0);
+    await expect(drawer).toHaveCount(0);
+    await field.click();
+    await expect(search).toBeFocused();
+    await search.fill('Zircon_demo_06Nov26');
+    await search.press('ArrowDown');
+    await expect(page.getByRole('listbox', { name: 'Sessions', exact: true }).getByRole('option')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(field).toContainText('Zircon_demo_06Nov26');
+    await expect(run).toContainText('run-pref');
+    await run.click();
+    await expect(page.getByRole('listbox', { name: 'Runs', exact: true }).getByRole('option', { name: /^Preferred run/ })).toBeFocused();
+    await expect(drawer.getByText('made before spot names were re-parsed').first()).toBeVisible();
+    // The dock and native bounds follow the drawer one frame later.
+    await expect.poll(() => problems(page, 'Open run drawer')).toEqual([]);
+    await page.getByRole('listbox', { name: 'Runs', exact: true }).locator('[data-run="run-newer"]').click();
+    await expect(run).toContainText('run-newe');
+    await expect.poll(async () => (await calls(page)).some(([c, args]) => c === 'api_get' && args?.path === `/v1/sessions/${session.id}/results?run=run-newer`)).toBe(true);
+    await run.click();
+    await page.keyboard.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(run).toBeFocused();
+    await expect(run).toHaveAttribute('aria-expanded', 'false');
+    await field.click();
+    await search.press('Escape');
+    await expect(drawer).toHaveCount(0);
+    await expect(field).toBeFocused();
+    await field.click();
+    await field.click();
+    await expect(drawer).toHaveCount(0);
+    await field.click();
+    await page.getByRole('button', { name: 'Reset layout', exact: true }).click();
+    await expect(drawer).toHaveCount(0);
+    await field.click();
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    await expect(drawer).toHaveCount(0);
+  });
+}
+
+test('Review prompts once for an unsaved scope and keeps single-run sessions selectable', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 640 });
+  await page.addInitScript(installFakeTauri, {
+    store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'review', reviewScope: '' },
+    fixtures: { ...reviewFixtures, [`/v1/sessions/${session.id}/reductions`]: runs.slice(0, 1) },
+    signedIn: true,
+  });
+  await page.goto('./');
+  const field = page.getByRole('button', { name: 'Choose review scope', exact: true });
+  const drawer = page.getByTestId('review-picker-drawer');
+  await expect(field).toContainText('Choose a session or mount');
+  await expect(drawer).toBeVisible();
+  await expect(page.getByLabel('Search scopes')).toBeFocused();
+  expect(await problems(page, 'First scope drawer')).toEqual([]);
+  await page.keyboard.press('Escape');
+  await page.getByRole('tab', { name: 'Home', exact: true }).click();
+  await page.getByRole('tab', { name: 'Review', exact: true }).click();
+  await expect(drawer).toHaveCount(0);
+  await field.click();
+  await page.getByRole('listbox', { name: 'Sessions', exact: true }).getByRole('option').click();
+  const run = page.getByRole('button', { name: 'Review run', exact: true });
+  await expect(run).toBeVisible();
+  await run.click();
+  await expect(page.getByRole('listbox', { name: 'Runs', exact: true }).getByRole('option')).toHaveCount(2);
+});
+
+test('Review popups remain inside their dock panel beside native SEM images', async ({ page }) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await openReview(page);
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+  const plots = page.getByRole('region', { name: 'Age & plots', exact: true });
+  const contained = async (popup: ReturnType<Page['locator']>, owner = plots) => {
+    await expect(popup).toBeVisible();
+    const p = (await popup.boundingBox())!, b = (await owner.boundingBox())!;
+    expect(p.x).toBeGreaterThanOrEqual(b.x);
+    expect(p.y).toBeGreaterThanOrEqual(b.y);
+    expect(p.x + p.width).toBeLessThanOrEqual(b.x + b.width + 1);
+    expect(p.y + p.height).toBeLessThanOrEqual(b.y + b.height + 1);
+  };
+  await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+  await page.getByRole('button', { name: 'Presets', exact: true }).click();
+  await contained(page.locator('#review-geochem-presets'));
+  await page.keyboard.press('Escape');
+  await page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true }).click();
+  await contained(page.getByRole('dialog', { name: 'Choose Y quantity' }));
+  await page.keyboard.press('Escape');
+  await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+  await page.getByRole('button', { name: /^Channels/ }).click();
+  await contained(page.locator('#depth-channel-picker'));
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Move Spot metadata', exact: true }).click();
+  await contained(page.locator('#dock-details'), page.getByRole('region', { name: 'Spot metadata', exact: true }));
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Move SEM images', exact: true }).click();
+  const menu = (await page.locator('#dock-images').boundingBox())!, surface = (await page.locator('[data-module="images"]').boundingBox())!;
+  expect(menu.y + menu.height).toBeLessThanOrEqual(surface.y);
+  expect(await problems(page, 'Contained dock menus')).toEqual([]);
 });
