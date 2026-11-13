@@ -1,6 +1,6 @@
 # The lab workflow and the hand-offs between the apps
 
-**Status:** v1.1, 2026-11-06. This is the cross-repository contract for how a
+**Status:** v1.2, 2026-11-13. This is the cross-repository contract for how a
 sample travels through the four applications. Each repository's own plan
 points here for the hand-offs and keeps its internal design to itself:
 `laicpmsdb/docs/DATABASE_ARCHITECTURE_PLAN.md` section 8,
@@ -9,6 +9,9 @@ and `ARCHITECTURE_PLAN.md` here (decision 10, phases 3 and 4). Change this
 page first, bump the version line, then the app plans.
 
 Changed in v1.1: results appear in the Review tab with plots linked both ways to Images.
+
+Changed in v1.2: UPb Lab is the upload and review portal; edits open the
+standalone apps in context (section 4a).
 
 ## 1. The workflow
 
@@ -139,6 +142,31 @@ new run that may name the one it supersedes.
 5. Standalone users see the same two menu items disabled with a one-line
    explanation; nothing else differs.
 
+## 4a. Opening the apps from UPb Lab
+
+Decision of 2026-11-13: UPb Lab uploads and reviews; image, spot and grain
+edits happen in standalone grainatlas, reductions and raw sweeps in UPbRPy
+Studio, each opened in context and syncing to laicpmsdb. The shell still
+links the pipeline and never reduces.
+
+1. **Edit in grainatlas** (Review, with a spot selected; Home, on a mount
+   card) launches grainatlas with `--project <atlas project> --server
+   --code [--spot <atlas spot> | --grain <atlas grain>]`. grainatlas opens
+   the mount signed in, as its own tab, and focuses the object; a project
+   already open is switched to, not opened twice.
+2. **Open in Studio** (Review; Home, on a session card) launches Studio with
+   `upbr://run/<id>` or `upbr://session/<id>` plus `acquisition=<id>` and
+   `via=upblab`. Studio opens at that analysis with its raw sweep shown; an
+   open project is raised, not fetched again.
+3. Coming back: the database is the channel. UPb Lab rereads the atlas
+   revision and the session's runs when its window gains focus and every
+   20 s for two hours after an opener, refreshing Review and Home with the
+   selection kept. After a submission from a `via=upblab` project Studio
+   opens `laicpmsdb://run/<id>`, which shows that run in Review.
+
+Arguments and links are specified in `docs/deep-links.md` (Openers).
+Older apps ignore the additions and open the mount, session or run.
+
 ## 5. Results as attributes
 
 - laicpmsdb stores every reduced quantity as `scalar_result` rows keyed by
@@ -164,6 +192,8 @@ new run that may name the one it supersedes.
 | `grainatlas://project/<id>/spot/<id>` | Images tab; the project from the recent list, else from `server/atlas/projects/<id>/` |
 | `upbr://session/<id>?server=&code=` | launch Studio in database mode |
 | `upbr://run/<id>?server=` | Studio opens the project of that run from its cache or re-fetches the bundle |
+| `upbr://session/<id>` or `run/<id>` with `&acquisition=<id>&via=upblab` | the same, at one analysis with its raw sweep (section 4a) |
+| `laicpmsdb://run/<id>` | UPb Lab Review on that run's session and run (Studio, after a submission) |
 
 ## 7. What each repository implements
 

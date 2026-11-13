@@ -16,6 +16,8 @@ three schemes with the operating system and routes them to a tab:
 | `grainatlas://project/<id>/spot/<id>` | Images tab, `index.html?server=<laicpmsdb>&project=<id>&spot=<id>` |
 | `upbr://session/<id>?server=&code=` | launches UPbRPy Studio in database mode (`--open "<link>"`); without `code`, the shell mints one with its sign-in (`POST /v1/auth/handoff`) and adds its `server` (docs/WORKFLOW.md section 4); the Reduce tab shows the result, or install instructions when Studio is missing |
 | `upbr://run/<id>?server=` | the same, for the project of a reduction run |
+| `upbr://session/<id>?…&acquisition=<id>&via=upblab`, `upbr://run/<id>?…` | the same, opening at one analysis with its raw sweep (Openers section below) |
+| `laicpmsdb://run/<id>` | Review, scoped to the run's session and showing that run (sent by Studio after a submission) |
 | `https://…`, `http://…` | the system browser |
 
 Query links pass on only their one known parameter, re-encoded. One-time
@@ -136,3 +138,83 @@ for spot selections caused by a command. The shell also accepts the legacy
 
 See [Protocol v3: commands and spot selection](../bridge/README.md#protocol-v3-commands-and-spot-selection)
 for ids, API, desktop and web wire formats, and version compatibility.
+
+## Openers: editing in grainatlas and UPbRPy Studio (2026-11-13)
+
+UPb Lab is the upload and review portal. Editing images, spots and grains
+happens in standalone grainatlas; reducing and inspecting raw sweeps happens
+in UPbRPy Studio. Review and Home open them in context with **Edit in
+grainatlas** and **Open in Studio**. This section is the contract. It only
+adds optional arguments and one new link; every existing link and launch
+command line keeps working, and an app that does not know an addition
+ignores it (checked against grainatlas `tauri/src-tauri/src/launch.rs` and
+UPbRPy `GUI/launch.py` as of 2026-11-13).
+
+### UPb Lab to grainatlas
+
+The standalone launch above gains two optional arguments:
+
+```text
+open -n -b org.grainatlas.desktop --args --project <atlas project uuid> --server <base-url> --code <one-time-code> [--revision <n>] [--spot <atlas spot uuid> | --grain <atlas grain uuid>]
+```
+
+- `--project` names the mount's published atlas project (one project per
+  mount). `--spot` is `physical_spot.atlas_spot_id`; `--grain` is
+  `grain.atlas_grain_id`. Both are grainatlas's own UUIDs. At most one of
+  them is passed; the shell passes `--spot` whenever a spot is selected.
+- grainatlas opens the project signed in through the code, then selects
+  and centres the spot or grain, as the bridge `focus-spot` and
+  `focus-grain` commands do in the embedded module.
+- Opening something already open switches to it: single-instance
+  forwarding hands the arguments to the running app, which shows the
+  project's existing tab (one tab per project, earlier tabs kept) and
+  focuses the object. It never opens a second copy of a project.
+- Today's grainatlas ignores `--spot` and `--grain` (unknown flags and
+  their values are skipped) and opens or focuses the project.
+- Without the desktop app (web delivery), or when the mount has no
+  published atlas, UPb Lab does the best existing thing: the Images tab
+  with `grainatlas://project/<id>/spot/<id>`, or the mount page.
+
+### UPb Lab to Studio
+
+`upbr://session/<id>` and `upbr://run/<id>` gain two optional query
+parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| `acquisition=<acquisition uuid>` | open at this analysis (the session manifest maps it to its label) with its raw sweep shown |
+| `via=upblab` | the link was sent by UPb Lab; Studio reports a submission back (below) |
+
+Example: `upbr://run/<run>?server=<base-url>&code=<code>&acquisition=<acq>&via=upblab`.
+`server` and `code` keep their meaning. The shell sends `run` when the spot
+has a reduction run and `session` otherwise. Today's Studio ignores unknown
+query parameters and opens the session or run. Opening a session or run
+whose project is already open in Studio raises that window and selects the
+analysis instead of fetching the bundle again.
+
+### Coming back
+
+The database is the channel; neither app has to reach UPb Lab for the
+shell to stay current.
+
+- grainatlas: every sync raises the project's revision
+  (`GET /v1/atlas/projects/<id>`, `revision`). The embedded module also sends
+  `lab.atlas.synced` over the bridge.
+- Studio: a submission adds a run to `GET /v1/sessions/<id>/reductions`.
+
+After an opener, UPb Lab watches what it opened: when its window gains
+focus, and every 20 s while it is visible, for two hours after the last
+open. A new revision reloads Review and the mount's Home card; a new run
+reloads Review if it shows that session and the session's Home card. The
+selected spot stays selected (Review rows are keyed by acquisition).
+
+One link is added so Studio can bring Review forward after a submission:
+
+| Link | Opens |
+| --- | --- |
+| `laicpmsdb://run/<run uuid>` | Review, scoped to the run's session (`GET /v1/runs/<id>`), showing that run, keeping the selected spot when it is in the session |
+
+Studio opens it through the operating system after **Submit to database**
+succeeds, only for a project opened by a link carrying `via=upblab`.
+grainatlas does not send a link after a sync: it would pull UPb Lab to the
+front in the middle of editing.
