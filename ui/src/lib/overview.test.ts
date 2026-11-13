@@ -33,7 +33,7 @@ describe('summariseRuns', () => {
     expect(s.runs).toBe(3);
     expect(s.preferred?.id).toBe('b');
     expect(s.latest?.id).toBe('b');
-    expect(summariseRuns([])).toEqual({ runs: 0, preferred: null, latest: null });
+    expect(summariseRuns([])).toEqual({ runs: 0, preferred: null, latest: null, completed: null });
   });
 });
 
@@ -536,4 +536,16 @@ it('does not fall back to the inventory on other mount errors', async () => {
   get.mockResolvedValue({ status: 503, body: {} });
   await overview.refreshMount('missing');
   expect(get.mock.calls.map(([path]) => path)).toEqual(['/v1/mounts/missing']);
+});
+
+it('refreshes a single session in place and keeps other rows', async () => {
+  overview.sessions = [{ session: { id: 's1', session_key: 'Demo' }, runs: 0, latest: null, preferred: null },
+    { session: { id: 's2', session_key: 'Other' }, runs: 0, latest: null, preferred: null }] as typeof overview.sessions;
+  get.mockImplementation(async (path: string) => path.endsWith('/reductions')
+    ? { status: 200, body: [run('new', '2026-11-13')] }
+    : { status: 200, body: { id: 's1', session_key: 'Updated' } });
+  await overview.refreshSession('s1');
+  expect(overview.sessions[0].session.session_key).toBe('Updated');
+  expect(overview.sessions[0].latest?.id).toBe('new');
+  expect(overview.sessions[1].session.session_key).toBe('Other');
 });

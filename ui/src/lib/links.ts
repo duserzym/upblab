@@ -29,6 +29,7 @@ export type Scheme = (typeof SCHEMES)[number];
 export type Resolution =
   | { kind: 'tab'; tab: ModuleTab; route: string; url: string }
   | { kind: 'studio'; tab: 'reduce'; object: 'session' | 'run'; id: string; url: string }
+  | { kind: 'review-run'; id: string; url: string }
   | { kind: 'auth'; code: string; url: string }
   | { kind: 'auth-error'; error: string; url: string }
   | { kind: 'external'; url: string }
@@ -103,6 +104,7 @@ export function resolve(input: string): Resolution {
         if (!/^[A-Z]{2}(-[A-Z0-9]{1,16}){0,3}$/.test(code)) return refuse(url, 'invalid method code');
         return { kind: 'tab', tab: 'sessions', route: `/app/method-codes/${code}`, url };
       }
+      if (kind === 'run' && parts.length === 2) return { kind: 'review-run', id, url };
       const routes: Record<string, string> = {
         acquisition: 'acquisitions',
         session: 'sessions',
@@ -134,7 +136,15 @@ export function resolve(input: string): Resolution {
     }
     case 'upbr': {
       if ((kind === 'session' || kind === 'run') && parts.length === 2) {
-        return { kind: 'studio', tab: 'reduce', object: kind, id, url };
+        const acquisition = u.searchParams.get('acquisition'), via = u.searchParams.get('via');
+        if (acquisition !== null && !ID.test(acquisition)) return refuse(url, 'invalid acquisition id');
+        if (via !== null && via !== 'upblab') return refuse(url, 'invalid via');
+        const clean = new URL(`upbr://${kind}/${id}`);
+        for (const key of ['server', 'code', 'acquisition', 'via']) {
+          const value = u.searchParams.get(key);
+          if (value !== null) clean.searchParams.set(key, value);
+        }
+        return { kind: 'studio', tab: 'reduce', object: kind, id, url: clean.href };
       }
       return refuse(url, `unknown upbr link "${parts.join('/')}"`);
     }

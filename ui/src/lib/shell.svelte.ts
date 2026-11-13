@@ -7,6 +7,8 @@ import { identity } from './identity.svelte';
 import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
 import { atlasSync } from './atlas-sync.svelte';
+import { appWatch } from './app-watch.svelte';
+import { review } from './review.svelte';
 import { overlays } from './overlays.svelte';
 
 export type View = TabId | 'settings' | 'account';
@@ -53,6 +55,7 @@ export interface StudioRequest {
   error?: string;
   /** Whether a one-time code was minted for it. */
   minted: boolean;
+  from: string;
 }
 
 /** Strip a trailing slash so http://h:8000/ and http://h:8000 compare equal. */
@@ -194,21 +197,25 @@ class Shell {
   async reduce(object: 'session' | 'run', id: string, link: string, from: string): Promise<boolean> {
     this.seq += 1;
     const seq = this.seq;
-    const base = { seq, object, id, shown: redact(link), minted: false };
+    const source = `${identity.target?.server}:${identity.revision}`;
+    const base = { seq, object, id, shown: redact(link), minted: false, from };
+    const guidance = () => from === 'review' ? Promise.resolve(true) : this.show('reduce');
     this.studio = { ...base, state: 'launching' };
-    if (!await this.show('reduce')) return false;
     const what = `${object} ${id}`;
     if (!isDesktop) {
       // The browser hands upbr:// to the OS, which opens Studio (its own installer registers the scheme).
       const h = await withHandoff(link, this.identityTarget?.server ?? null, () => identity.handoff());
       this.studio = { ...base, state: 'web', href: h.url, minted: h.minted, error: h.error };
-      this.record(link, from, `open it in UPbRPy Studio from the Reduce tab`);
+      await guidance();
+      await this.rememberStudio(object, id, source);
+      this.record(link, from, 'Studio link ready');
       return true;
     }
     const status = await studioStatus(this.studioConfig).catch((err) => ({ found: false, path: null, error: String(err) }));
     if (!status.found) {
       this.studio = { ...base, state: 'missing', error: status.error };
-      this.record(link, from, 'UPbRPy Studio not found; see the Reduce tab', true);
+      await guidance();
+      this.record(link, from, 'UPbRPy Studio not found; see launch guidance', true);
       await logWarn(`[studio] not found (${status.error ?? ''}); ${redact(link)} not launched`);
       return true;
     }
@@ -217,15 +224,31 @@ class Shell {
     try {
       const command = await launchStudio(this.studioConfig, h.url);
       if (this.studio?.seq === seq) this.studio = { ...base, shown: redact(h.url), state: 'launched', command, minted: h.minted, error: h.error };
+      await this.rememberStudio(object, id, source);
       this.record(link, from, `UPbRPy Studio launched for ${what}${h.minted ? ' with a handoff code' : ''}`);
       await logInfo(`[studio] ${redact(h.url)} from ${from}: ${command}`);
       return true;
     } catch (err) {
       if (this.studio?.seq === seq) this.studio = { ...base, state: 'failed', error: String(err), minted: h.minted };
+      await guidance();
       this.record(link, from, `Studio launch failed: ${err}`, true);
       await logWarn(`[studio] could not launch for ${redact(link)}: ${err}`);
       return false;
     }
+  }
+
+  private async rememberStudio(object: 'session' | 'run', id: string, source: string) {
+    try {
+      let session = object === 'session' ? id : review.rows.find(row => row.runId === id)?.sessionId;
+      if (!session && object === 'run') {
+        const reply = await identity.get<{ session_id: string }>(`/v1/runs/${encodeURIComponent(id)}`);
+        if (reply.status === 200) session = reply.body?.session_id;
+      }
+      if (session && source === `${identity.target?.server}:${identity.revision}`) {
+        appWatch.session(session);
+        await settings.update({ studioOpened: { ...settings.studioOpened, [session]: new Date().toISOString() } });
+      }
+    } catch { /* A launch remains successful if local persistence or metadata is unavailable. */ }
   }
 
   /** Route a URL from the OS, a module, or the user. Returns false when refused. */
@@ -257,6 +280,19 @@ class Shell {
         this.record(url, from, `${r.tab === 'sessions' ? 'Sessions' : 'Images'} ${r.route}`);
         await logInfo(`[links] ${url} -> ${r.tab} ${r.route}`);
         return true;
+      }
+      case 'review-run': {
+        try {
+          const reply = await identity.get<{ session_id: string }>(`/v1/runs/${encodeURIComponent(r.id)}`);
+          if (reply.status !== 200 || !/^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(reply.body?.session_id ?? '')) throw new Error('Run session unavailable');
+          if (!await this.show('review')) return false;
+          await review.open({ kind: 'session', id: reply.body.session_id, run: r.id });
+          this.record(url, from, `Review run ${r.id}`);
+          return true;
+        } catch (err) {
+          this.record(url, from, `Could not open run: ${err}`, true);
+          return false;
+        }
       }
       case 'studio':
         return this.reduce(r.object, r.id, r.url, from);

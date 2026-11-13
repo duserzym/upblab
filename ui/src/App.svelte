@@ -14,6 +14,7 @@
   import { startScheduler } from './lib/updater.svelte';
   import AtlasQuitDialog from './components/AtlasQuitDialog.svelte';
   import AtlasLeaveDialog from './components/AtlasLeaveDialog.svelte';
+  import { appWatch } from './lib/app-watch.svelte';
   import { checkStandaloneSync } from './lib/atlas-refresh';
   import AccountDialog from './components/AccountDialog.svelte';
   import { identity } from './lib/identity.svelte';
@@ -59,6 +60,9 @@
     const t = shell.identityTarget;
     if (t) untrack(() => void identity.restore(t));
   });
+
+  $effect(() => { void identity.revision; void identity.target?.server; untrack(() => appWatch.syncSource()); });
+  onMount(() => () => appWatch.clear());
 
   // Home and Account use the same session inventory, scoped to the active sign-in.
   $effect(() => {
@@ -154,8 +158,8 @@
 </script>
 
 
-<svelte:window onfocus={() => void checkStandaloneSync()} />
-<svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible') void checkStandaloneSync(); }} />
+<svelte:window onfocus={() => { void checkStandaloneSync(); void appWatch.check(); }} />
+<svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible') { void checkStandaloneSync(); void appWatch.check(); } }} />
 <div class="shell">
   <header class="bar glass">
     <span class="brand"><img class="mark" src="./favicon.svg" alt="" width="22" height="22" />UPb Lab</span>

@@ -272,7 +272,7 @@ export function pickSessionPaths(): Promise<string[]> {
 }
 
 /** One-time code is passed only through IPC, never logged or retained. */
-export async function launchGrainAtlas(project: string, server: string, code: string, revision?: number): Promise<void> {
+export async function launchGrainAtlas(project: string, server: string, code: string, revision?: number, spot?: string | null, grain?: string | null): Promise<void> {
   if (!isDesktop) throw new Error('GrainAtlas can only be launched from the desktop app.');
-  await invoke('grainatlas_launch', { project, server, code, ...(revision === undefined ? {} : { revision }) });
+  await invoke('grainatlas_launch', { project, server, code, ...(revision === undefined ? {} : { revision }), ...(spot ? { spot } : grain ? { grain } : {}) });
 }

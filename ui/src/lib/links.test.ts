@@ -54,7 +54,7 @@ describe('resolve: plan section 4.4 table', () => {
   });
 
   it('upbr run -> launch Studio, query kept', () => {
-    expect(resolve(`upbr://run/${A}?server=http://h:8000`)).toMatchObject({ kind: 'studio', object: 'run', id: A, url: `upbr://run/${A}?server=http://h:8000` });
+    expect(resolve(`upbr://run/${A}?server=http://h:8000`)).toMatchObject({ kind: 'studio', object: 'run', id: A, url: `upbr://run/${A}?server=http%3A%2F%2Fh%3A8000` });
   });
 
   it('laicpmsdb mount -> Sessions tab', () => {
@@ -243,5 +243,25 @@ describe('resolve: laicpmsdb data model and method codes', () => {
     expect(resolve('laicpmsdb://data-model/acquisition/started_at%3Fx')).toMatchObject({ kind: 'refused' });
     expect(resolve('laicpmsdb://method-code/R')).toMatchObject({ kind: 'refused' });
     expect(resolve('laicpmsdb://method-code/RD-DH-POLY-X-Y')).toMatchObject({ kind: 'refused' });
+  });
+});
+
+
+describe('opener links', () => {
+  it('keeps only the four known Studio parameters and strips fragments', () => {
+    const r = resolve(`upbr://run/${A}?acquisition=${B}&via=upblab&extra=ignored&code=C&server=https://lab#ignored`);
+    expect(r.kind).toBe('studio');
+    const url = new URL(r.url);
+    expect([...url.searchParams.keys()]).toEqual(['server', 'code', 'acquisition', 'via']);
+    expect(url.searchParams.get('acquisition')).toBe(B);
+    expect(url.hash).toBe('');
+  });
+  it('refuses invalid acquisition and via parameters', () => {
+    for (const query of ['acquisition=', 'acquisition=../bad', 'acquisition=' + 'x'.repeat(129), 'via=other', 'via='])
+      expect(resolve(`upbr://session/${A}?${query}`).kind).toBe('refused');
+  });
+  it('resolves a submitted run to Review', () => {
+    expect(resolve(`laicpmsdb://run/${A}`)).toEqual({ kind: 'review-run', id: A, url: `laicpmsdb://run/${A}` });
+    expect(resolve('laicpmsdb://run/..%2Fbad').kind).toBe('refused');
   });
 });

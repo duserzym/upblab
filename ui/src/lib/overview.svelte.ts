@@ -64,6 +64,7 @@ export interface SessionRow {
   runs: number | null;
   preferred: RunOut | null;
   latest: RunOut | null;
+  completed?: RunOut | null;
   kindCounts?: Record<string, number> | null;
   access?: { role: 'Owner' | 'Admin' | 'Editor' | 'Viewer'; owner: string | null; canShare: boolean };
 }
@@ -87,12 +88,13 @@ export interface MountRow {
 export type OverviewState = 'idle' | 'signed-out' | 'loading' | 'ready' | 'unreachable' | 'error';
 
 /** Count, preferred and latest run of a session's runs. */
-export function summariseRuns(runs: RunOut[]): Pick<SessionRow, 'runs' | 'preferred' | 'latest'> {
+export function summariseRuns(runs: RunOut[]): Pick<SessionRow, 'runs' | 'preferred' | 'latest' | 'completed'> {
   const byStart = [...runs].sort((a, b) => (b.started_at ?? '').localeCompare(a.started_at ?? ''));
   return {
     runs: runs.length,
     preferred: runs.find((r) => r.is_preferred_for_session) ?? null,
     latest: byStart[0] ?? null,
+    completed: byStart.find(r => r.status === 'completed') ?? null,
   };
 }
 
@@ -209,6 +211,27 @@ class Overview {
     } finally {
       if (gen === this.generation) this.refreshing = false;
     }
+  }
+
+  /** Refresh a session row without disturbing the inventory or Review selection. */
+  async refreshSession(id: string) {
+    if (!identity.target || !identity.signedIn) return;
+    const gen = this.generation, source = `${identity.target.server}:${identity.revision}`;
+    try {
+      const reply = await identity.get<SessionOut>(`/v1/sessions/${encodeURIComponent(id)}`);
+      const existing = this.sessions.find(row => row.session.id === id)?.session;
+      const session = reply.status === 200 && reply.body?.id === id ? reply.body : existing;
+      if (!session) return;
+      const row = await this.sessionRow(session);
+      if (gen !== this.generation || source !== `${identity.target?.server}:${identity.revision}`) return;
+      const index = this.sessions.findIndex(row => row.session.id === id);
+      if (index >= 0) this.sessions[index] = row;
+      else this.sessions = [...this.sessions, row];
+      const listed = this.sessionList.findIndex(s => s.id === id);
+      if (listed >= 0) this.sessionList[listed] = session;
+      else this.sessionList.push(session);
+      this.totalSessions = this.sessionList.length;
+    } catch { /* Keep the last readable row while offline. */ }
   }
 
   /** Refresh one mount in place; keep the visible inventory during the request. */

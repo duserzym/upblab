@@ -202,3 +202,13 @@ describe('resolved theme', () => {
     expect(changes.size).toBe(0);
   });
 });
+
+it('keeps only the newest 200 valid Studio opener timestamps', async () => {
+  const { readStudioOpened } = await import('./settings.svelte');
+  const entries = Object.fromEntries(Array.from({ length: 205 }, (_, i) => [`s-${i}`, new Date(i * 1000).toISOString()]));
+  const kept = readStudioOpened({ ...entries, bad: 'yesterday', '../x': new Date().toISOString() });
+  expect(Object.keys(kept)).toHaveLength(200);
+  expect(kept['s-204']).toBe(entries['s-204']);
+  expect(kept['s-0']).toBeUndefined();
+  expect(readStudioOpened(null)).toEqual({});
+});

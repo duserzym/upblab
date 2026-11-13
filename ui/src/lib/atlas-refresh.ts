@@ -5,6 +5,18 @@ import { overview } from './overview.svelte';
 import { review } from './review.svelte';
 import { sendCommand, moduleSurfaces } from './incoming';
 
+interface AtlasProject { revision: number; mount_id: string; atlas_version: number | null }
+const pendingProjects = new Map<string, ReturnType<typeof identity.get<AtlasProject>>>();
+/** Share focus and opener polling requests for the same identity and project. */
+export function readAtlasProject(project: string) {
+  const key = `${currentSource()}:${project}`;
+  const previous = pendingProjects.get(key);
+  if (previous) return previous;
+  const pending = identity.get<AtlasProject>(`/v1/atlas/projects/${encodeURIComponent(project)}`)
+    .finally(() => { if (pendingProjects.get(key) === pending) pendingProjects.delete(key); });
+  pendingProjects.set(key, pending);
+  return pending;
+}
 interface MountVersion { revision: number; atlasVersion: number | null }
 const versions = new Map<string, MountVersion>();
 const notices = new Map<string, number>();
@@ -18,7 +30,8 @@ function currentSource() {
   return next;
 }
 /** Content revisions and pixel publications advance independently. Ignore stale revisions. */
-function observe(mount: string, next: MountVersion): 'content' | 'pixels' | null {
+export function observe(mount: string, next: MountVersion): 'content' | 'pixels' | null {
+  currentSource();
   const previous = versions.get(mount);
   if (previous && next.revision < previous.revision) return null;
   versions.set(mount, next);
@@ -72,7 +85,7 @@ export async function checkStandaloneSync(now = Date.now()) {
     await Promise.all(projects.map(async ([project, mount]) => {
       if (now < (failedUntil.get(project) ?? 0)) return;
       try {
-        const reply = await identity.get<{ revision: number; mount_id: string; atlas_version: number | null }>(`/v1/atlas/projects/${encodeURIComponent(project)}`);
+        const reply = await readAtlasProject(project);
         if (origin !== currentSource()) return;
         if (reply.status !== 200 || !reply.body || !Number.isInteger(reply.body.revision) || reply.body.revision < 0 || reply.body.mount_id !== mount) throw new Error('unavailable');
         const atlasVersion = reply.body.atlas_version;

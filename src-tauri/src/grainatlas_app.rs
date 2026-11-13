@@ -51,6 +51,20 @@ fn lookup(
     }
 }
 
+fn validate_id(id: &str, kind: &str) -> Result<(), String> {
+    if id.is_empty()
+        || id.len() > 128
+        || !id.as_bytes()[0].is_ascii_alphanumeric()
+        || !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._~-".contains(c))
+    {
+        return Err(format!("Invalid GrainAtlas {kind} id"));
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)] // Mirrors the optional standalone command-line arguments.
 fn argv(
     os: Os,
     path: PathBuf,
@@ -58,7 +72,16 @@ fn argv(
     server: &str,
     code: &str,
     revision: Option<u64>,
+    spot: Option<&str>,
+    grain: Option<&str>,
 ) -> Result<(PathBuf, Vec<String>), String> {
+    validate_id(project, "project")?;
+    if let Some(id) = spot {
+        validate_id(id, "spot")?;
+    }
+    if let Some(id) = grain {
+        validate_id(id, "grain")?;
+    }
     let (program, mut args) = match os {
         Os::Mac => (
             PathBuf::from("/usr/bin/open"),
@@ -77,6 +100,11 @@ fn argv(
     ]);
     if let Some(revision) = revision {
         args.extend(["--revision".into(), revision.to_string()]);
+    }
+    if let Some(id) = spot {
+        args.extend(["--spot".into(), id.into()]);
+    } else if let Some(id) = grain {
+        args.extend(["--grain".into(), id.into()]);
     }
     Ok((program, args))
 }
@@ -135,16 +163,16 @@ pub async fn grainatlas_launch(
     server: String,
     code: String,
     revision: Option<u64>,
+    spot: Option<String>,
+    grain: Option<String>,
 ) -> Result<(), String> {
     // Reject invalid input without echoing it: the one-time code is never logged.
-    if project.is_empty()
-        || project.len() > 128
-        || !project.as_bytes()[0].is_ascii_alphanumeric()
-        || !project
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "._~-".contains(c))
-    {
-        return Err("Invalid GrainAtlas project id".into());
+    validate_id(&project, "project")?;
+    if let Some(id) = &spot {
+        validate_id(id, "spot")?;
+    }
+    if let Some(id) = &grain {
+        validate_id(id, "grain")?;
     }
     let url = url::Url::parse(&server).map_err(|_| "Invalid GrainAtlas server URL")?;
     if !matches!(url.scheme(), "http" | "https")
@@ -179,7 +207,9 @@ pub async fn grainatlas_launch(
                 }
             },
         )?;
-        let (program, args) = argv(os, path, &project, &server, &code, revision)?;
+        let (program, args) = argv(
+            os, path, &project, &server, &code, revision, spot.as_deref(), grain.as_deref(),
+        )?;
         // Do not format argv at all: this also protects codes containing spaces.
         let mut command = Command::new(program);
         command.args(args);
@@ -220,6 +250,8 @@ mod tests {
             "https://lab",
             "secret",
             Some(41),
+            None,
+            None,
         )
         .unwrap();
         assert_eq!(program, PathBuf::from("/usr/bin/open"));
@@ -241,7 +273,7 @@ mod tests {
             ]
         );
         let (program, args) =
-            argv(Os::Windows, EXE.into(), "p", "https://lab", "secret", None).unwrap();
+            argv(Os::Windows, EXE.into(), "p", "https://lab", "secret", None, None, None).unwrap();
         assert_eq!(program, PathBuf::from(EXE));
         assert_eq!(
             args,
@@ -254,7 +286,23 @@ mod tests {
                 "secret"
             ]
         );
-        assert!(argv(Os::Linux, "app".into(), "p", "https://lab", "secret", None).is_err());
+        assert!(argv(Os::Linux, "app".into(), "p", "https://lab", "secret", None, None, None).is_err());
+    }
+
+    #[test]
+    fn focus_arguments_and_validation() {
+        for os in [Os::Mac, Os::Windows] {
+            let (_, args) = argv(os, "app".into(), "p", "https://lab", "code", None, Some("s"), Some("g")).unwrap();
+            assert_eq!(&args[args.len() - 2..], ["--spot", "s"]);
+            assert!(!args.iter().any(|a| a == "--grain"));
+            let (_, args) = argv(os, "app".into(), "p", "https://lab", "code", None, None, Some("g")).unwrap();
+            assert_eq!(&args[args.len() - 2..], ["--grain", "g"]);
+            for bad in ["", "../x", "-bad", "a b", &"a".repeat(129)] {
+                assert!(argv(os, "app".into(), "p", "https://lab", "code", None, Some(bad), None).is_err());
+                assert!(argv(os, "app".into(), "p", "https://lab", "code", None, None, Some(bad)).is_err());
+            }
+            assert!(validate_id(&"a".repeat(128), "spot").is_ok());
+        }
     }
 
     #[test]

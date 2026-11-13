@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./app-watch.svelte', () => ({ appWatch: { session: vi.fn() } }));
+vi.mock('./review.svelte', () => ({ review: { rows: [], open: vi.fn(async () => {}) } }));
 vi.mock('./incoming', () => ({ sendCommand: vi.fn(async () => true) }));
 vi.mock('./platform', () => ({
   isDesktop: true,
@@ -91,10 +93,10 @@ describe('shell.handleLink', () => {
     expect(shell.view).toBe('home');
   });
 
-  it('opens Reduce for upbr links and launches Studio with the link as is when signed out', async () => {
+  it('keeps the active view when Studio launches while signed out', async () => {
     identity.state = { signedIn: false, account: null, offline: false };
     await shell.handleLink(`upbr://session/${A}`, 'laicpmsdb');
-    expect(shell.view).toBe('reduce');
+    expect(shell.view).toBe('home');
     expect(platform.desktopAuth.handoff).not.toHaveBeenCalled();
     expect(platform.launchStudio).toHaveBeenCalledWith({ path: '', checkout: '' }, `upbr://session/${A}?server=http%3A%2F%2Flocalhost%3A8000`);
     expect(shell.studio).toMatchObject({ state: 'launched', object: 'session', id: A, minted: false });
@@ -277,4 +279,52 @@ describe('Images leave guard', () => {
     atlasSync.v4 = false;
     atlasSync.status = null;
   });
+});
+
+
+describe('in-context Studio and submission routing', () => {
+  beforeEach(() => { vi.clearAllMocks(); settings.loaded = false; shell.view = 'review'; });
+  it('keeps Review for missing Studio and failed launches, but sends other callers to Reduce', async () => {
+    vi.mocked(platform.studioStatus).mockResolvedValueOnce({ found: false, path: null, error: 'Missing' });
+    await shell.handleLink('upbr://session/s?via=upblab', 'review');
+    expect(shell.view).toBe('review');
+    expect(shell.studio).toMatchObject({ state: 'missing', from: 'review' });
+    vi.mocked(platform.launchStudio).mockRejectedValueOnce(new Error('Failed'));
+    await shell.handleLink('upbr://session/s?via=upblab', 'review');
+    expect(shell.view).toBe('review');
+    expect(shell.studio?.state).toBe('failed');
+    vi.mocked(platform.studioStatus).mockResolvedValueOnce({ found: false, path: null });
+    await shell.handleLink('upbr://session/s', 'home');
+    expect(shell.view).toBe('reduce');
+  });
+  it('looks up a submitted run and records the link', async () => {
+    const get = vi.spyOn(identity, 'get').mockResolvedValueOnce({ status: 200, body: { session_id: 's' } });
+    const { review } = await import('./review.svelte');
+    expect(await shell.handleLink('laicpmsdb://run/r', 'os')).toBe(true);
+    expect(get).toHaveBeenCalledWith('/v1/runs/r');
+    expect(review.open).toHaveBeenCalledWith({ kind: 'session', id: 's', run: 'r' });
+    expect(shell.links[0]).toMatchObject({ url: 'laicpmsdb://run/r', outcome: 'Review run r' });
+    get.mockRestore();
+  });
+  it('records the successful session opener and watches it', async () => {
+    const { appWatch } = await import('./app-watch.svelte');
+    const update = vi.spyOn(settings, 'update').mockResolvedValueOnce();
+    await shell.handleLink('upbr://session/s?acquisition=a&via=upblab', 'review');
+    expect(shell.view).toBe('review');
+    expect(update).toHaveBeenCalledWith({ studioOpened: expect.objectContaining({ s: expect.stringMatching(/^\d{4}-/) }) });
+    expect(appWatch.session).toHaveBeenCalledWith('s');
+    update.mockRestore();
+  });
+});
+
+it('shows web Studio guidance inline for Review and in Reduce for Home', async () => {
+  vi.resetModules();
+  vi.doMock('./platform', () => ({ ...platform, isDesktop: false }));
+  const { shell: webShell } = await import('./shell.svelte');
+  webShell.view = 'review';
+  await webShell.handleLink('upbr://session/web-session?acquisition=a&via=upblab', 'review');
+  expect(webShell.view).toBe('review');
+  expect(webShell.studio).toMatchObject({ state: 'web', from: 'review', href: expect.stringContaining('acquisition=a&via=upblab') });
+  await webShell.handleLink('upbr://session/web-session?via=upblab', 'home');
+  expect(webShell.view).toBe('reduce');
 });

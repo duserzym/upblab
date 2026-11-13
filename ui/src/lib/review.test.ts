@@ -373,3 +373,11 @@ describe('Review refresh speed', () => {
     expect(get).toHaveBeenCalledWith('/v1/mounts');
   });
 });
+
+it('keeps an acquisition selected when a submitted-run link changes the session run', async () => {
+  await review.open({ kind: 'session', id: session.id });
+  review.select(review.rows[3], false);
+  await review.open({ kind: 'session', id: session.id, run: 'run-newer' });
+  expect(review.selectedKey).toBe('acq-4');
+  expect(review.selected?.runId).toBe('run-newer');
+});

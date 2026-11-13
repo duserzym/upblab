@@ -20,6 +20,7 @@ export interface SettingsData {
   devServicePath: string;
   /** This computer: a PostgreSQL 17 `bin` folder instead of the bundled one (development). */
   pgBin: string;
+  studioOpened: Record<string, string>;
   studioPath: string;
   /** Development: a UPbRPy checkout to run as `python -m GUI` when Studio is not installed. */
   studioCheckout: string;
@@ -48,6 +49,7 @@ export const DEFAULTS: SettingsData = {
   dataRoot: DEFAULT_DATA_ROOT,
   devServicePath: '',
   pgBin: '',
+  studioOpened: {},
   studioPath: '',
   studioCheckout: '',
   theme: 'system',
@@ -141,6 +143,7 @@ export class Settings {
   dataRoot = $state(DEFAULTS.dataRoot);
   devServicePath = $state(DEFAULTS.devServicePath);
   pgBin = $state(DEFAULTS.pgBin);
+  studioOpened = $state<Record<string, string>>({});
   studioPath = $state(DEFAULTS.studioPath);
   studioCheckout = $state(DEFAULTS.studioCheckout);
   theme = $state<ThemePref>(DEFAULTS.theme);
@@ -216,6 +219,7 @@ export class Settings {
       this.dataRoot = data.dataRoot || DEFAULT_DATA_ROOT;
       this.devServicePath = data.devServicePath;
       this.pgBin = data.pgBin;
+      this.studioOpened = readStudioOpened(data.studioOpened);
       this.studioPath = data.studioPath;
       this.studioCheckout = data.studioCheckout;
       this.themeChosen = data.themeChosen === true;
@@ -242,6 +246,7 @@ export class Settings {
       clearTimeout(this.homeSave);
       this.homeSave = undefined;
     }
+    if (patch.studioOpened) patch = { ...patch, studioOpened: readStudioOpened(patch.studioOpened) };
     Object.assign(this, patch);
     if (patch.theme) applyTheme(this.effectiveTheme);
     await this.backend.write(this.snapshot());
@@ -254,6 +259,7 @@ export class Settings {
       dataRoot: this.dataRoot,
       devServicePath: this.devServicePath,
       pgBin: this.pgBin,
+      studioOpened: $state.snapshot(this.studioOpened),
       studioPath: this.studioPath,
       studioCheckout: this.studioCheckout,
       theme: this.theme,
@@ -273,3 +279,11 @@ export class Settings {
 }
 
 export const settings = new Settings();
+
+/** Keep the newest 200 valid opener timestamps, including when loading older settings. */
+export function readStudioOpened(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([id, at]) => /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(id)
+    && typeof at === 'string' && Number.isFinite(Date.parse(at)))
+    .sort((a, b) => Date.parse(b[1] as string) - Date.parse(a[1] as string)).slice(0, 200));
+}
