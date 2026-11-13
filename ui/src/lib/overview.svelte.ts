@@ -203,6 +203,26 @@ class Overview {
     }
   }
 
+  /** Refresh one mount in place; keep the visible inventory during the request. */
+  async refreshMount(id: string) {
+    if (!identity.target || !identity.signedIn) return;
+    const gen = this.generation, server = identity.target.server, access = identity.revision;
+    const current = () => gen === this.generation && server === identity.target?.server && access === identity.revision;
+    try {
+      const reply = await identity.get<MountOut[]>('/v1/mounts');
+      if (!current() || !isList<MountOut>(reply)) return;
+      const mount = reply.body.find(m => m.id === id);
+      if (!mount) return;
+      const row = await this.mountRow(mount, gen);
+      if (!current()) return;
+      this.mountList = reply.body;
+      this.totalMounts = reply.body.length;
+      const index = this.mounts.findIndex(r => r.mount.id === id);
+      if (index >= 0) this.mounts[index] = row;
+      else this.mounts = [...this.mounts, row];
+    } catch { /* An older server or offline connection leaves Home as shown. */ }
+  }
+
   /** The explicit escape hatch for inventories over 500, using the list already read. */
   async loadRest(section: 'sessions' | 'mounts') {
     if (this.refreshing || this.state !== 'ready') return;

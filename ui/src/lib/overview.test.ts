@@ -278,3 +278,38 @@ describe('Home inventory details', () => {
     expect(overview.refreshing).toBe(false);
   });
 });
+
+describe('refreshMount', () => {
+  beforeEach(() => {
+    overview.clear();
+    get.mockReset();
+    identity.target = { server: 'http://h', key: 'http://h' };
+    (identity as unknown as { signedIn: boolean }).signedIn = true;
+    const older = { id: 'm1', label: 'Earlier name', grain_count: 1, spot_count: 2 };
+    overview.mounts = [{ mount: older, atlas: { projectId: 'p1', name: null, version: 1, publishedAt: null } }];
+  });
+  it('keeps the shown row while fetching and replaces just that mount and its atlas', async () => {
+    let finish!: (reply: unknown) => void;
+    const updated = { id: 'm1', label: 'Updated name', grain_count: 3, spot_count: 12 };
+    get.mockImplementation((path: string) => path === '/v1/mounts'
+      ? new Promise(resolve => { finish = resolve; })
+      : Promise.resolve({ status: 200, body: { current: { project_id: 'p1', version: 3 } } }));
+    const refreshing = overview.refreshMount('m1');
+    expect(overview.mounts[0].mount.label).toBe('Earlier name');
+    finish({ status: 200, body: [updated] });
+    await refreshing;
+    expect(overview.mounts[0]).toMatchObject({ mount: updated, atlas: { version: 3 } });
+  });
+  it('ignores an unavailable list and a reply from an old server', async () => {
+    get.mockResolvedValue({ status: 404, body: {} });
+    await overview.refreshMount('m1');
+    expect(overview.mounts[0].mount.label).toBe('Earlier name');
+    let finish!: (reply: unknown) => void;
+    get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const refreshing = overview.refreshMount('m1');
+    identity.target = { server: 'http://other', key: 'http://other' };
+    finish({ status: 200, body: [{ id: 'm1', label: 'Stale response' }] });
+    await refreshing;
+    expect(overview.mounts[0].mount.label).toBe('Earlier name');
+  });
+});

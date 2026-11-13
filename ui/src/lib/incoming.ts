@@ -7,6 +7,8 @@
 //   web      /desk/open?url=… and module iframes posting through @lab/bridge;
 //            files dropped on the shell page (App.svelte)
 
+import { atlasSync } from './atlas-sync.svelte';
+import { atlasSyncedNotice } from './atlas-refresh';
 import { EVENTS, spotSelection, isBridgeCommand, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
 import { createFrameHost, pushOpenFiles, pushCommand } from '@lab/bridge/host';
 import { fileUrlToPath } from './drop';
@@ -52,6 +54,10 @@ export function onModuleEvent(event: BridgeEvent, source: string) {
   source = source === 'images' ? 'grainatlas' : source === 'sessions' || source === 'people' ? 'laicpmsdb' : source;
   void logInfo(`[bridge] ${source}: ${JSON.stringify(event)}`);
   if (SIGN_OUT_EVENTS.includes(event.type) && identity.signedIn) void identity.logout(`${source} signed out`);
+  if (source === 'grainatlas') {
+    const synced = atlasSync.receive(event);
+    if (synced) void atlasSyncedNotice(synced);
+  }
   const selected = spotSelection(event);
   if (selected) selection.fromImages = { ...selected, at: Date.now() };
   if (event.type === 'grainatlas.files.opened') opener.outcome(source, event);
@@ -77,6 +83,8 @@ async function takeOpened() {
   if (paths.length) await opener.openPaths(paths, 'os');
 }
 
+/** Mounted module surfaces, including native surfaces retained on hidden tabs. */
+export const moduleSurfaces = new Set<ModuleTab>();
 /** Module iframes register here so the frame host can tell which module posted. */
 export const frames = new Map<string, Window>();
 const loadingFrames = new Set<ModuleTab>();
@@ -105,6 +113,7 @@ export function unregisterFrame(tab: ModuleTab): void {
 /** Ask a module to focus an object without navigating away from its open project. */
 export async function sendCommand(tab: ModuleTab, command: BridgeCommand): Promise<boolean> {
   if (!isBridgeCommand(command)) return false;
+  if (!atlasSync.v4 && ['open-project', 'set-mode', 'leave-edit', 'sync-draft', 'discard-draft', 'report-status', 'atlas-synced'].includes(command.type)) return false;
   if (isDesktop) return desktopModules.command(tab, command);
   const frame = frames.get(tab);
   if (!frame || loadingFrames.has(tab)) {

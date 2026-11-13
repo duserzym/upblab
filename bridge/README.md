@@ -224,9 +224,9 @@ GrainAtlas sends the shell sync status, hosted drafts and successful sync
 notices through `notify`. The shell sends commands through the existing
 `onCommand` transport. Events are idempotent snapshots: the newest received
 snapshot wins, rather than adding counts to an earlier snapshot. This section
-defines the adoption contract; this change adds the protocol and validators,
-while the shell Home list, refresh handlers and Images toolbar remain to be
-implemented.
+defines the adoption contract. The shell status strip, Home draft list, leave
+guard and refresh handlers activate only after a valid v4 event from Images;
+older modules keep their existing behavior and receive no v4 commands.
 
 ```ts
 import { notify, ATLAS_EVENTS, atlasStatus, atlasDrafts, atlasSynced } from '@lab/bridge';
@@ -328,8 +328,9 @@ start `grainatlas-desktop.exe` with the same arguments. Find it through
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\grainatlas`
 (NSIS, current-user install), then `%LOCALAPPDATA%\grainatlas`, then
 `Program Files\grainatlas` (MSI). Single-instance forwarding works the same
-on Windows. This section records the launch contract; this protocol change
-does not implement the launcher.
+on Windows. The shell implements this launch contract in
+`src-tauri/src/grainatlas_app.rs`; the UI mints the handoff code and enables
+the button only after Images advertises v4.
 
 ## Adopting the bridge in a module
 

@@ -1,12 +1,35 @@
 <script lang="ts">
+  import { atlasSync, statusLabel } from '../lib/atlas-sync.svelte';
+  import { identity } from '../lib/identity.svelte';
+  import { isDesktop, launchGrainAtlas } from '../lib/platform';
   import ModuleSurface from '../components/ModuleSurface.svelte';
   import { shell } from '../lib/shell.svelte';
 
   let { active, layoutKey }: { active: boolean; layoutKey: string } = $props();
   const atlas = $derived(shell.atlas);
+  let busy = $state(false), error = $state('');
+  async function openStandalone() {
+    const status = atlasSync.status;
+    if (!atlasSync.v4 || !status || busy) return;
+    busy = true; error = '';
+    try {
+      const code = await identity.handoff();
+      if (!code) throw new Error('Sign in to open this project in GrainAtlas.');
+      await launchGrainAtlas(status.project, shell.serverUrl, code, status.revision ?? undefined);
+    } catch (err) { error = String(err); }
+    finally { busy = false; }
+  }
 </script>
 
 <section class="view images-view" class:hidden={!active}>
+  {#if atlasSync.v4 && atlasSync.status}
+    <div class="atlas-strip row" data-testid="atlas-status-strip">
+      <strong class="project" title={atlasSync.status.name}>{atlasSync.status.name}</strong>
+      <span class="small status-text" title={statusLabel(atlasSync.status)}>{statusLabel(atlasSync.status)}</span>
+      {#if error}<span class="error small launch-error" role="status" title={error}>{error}</span>{/if}
+      {#if isDesktop}<button class="btn small" disabled={busy} onclick={openStandalone}>{busy ? 'Opening…' : 'Open in GrainAtlas'}</button>{/if}
+    </div>
+  {/if}
   {#if atlas}
     <ModuleSurface module="images" title="grainatlas" home={shell.homeUrl('images')} target={shell.targets.images} {active} {layoutKey} />
   {:else}
@@ -28,3 +51,11 @@
     </div>
   {/if}
 </section>
+
+<style>
+  .atlas-strip { flex: 0 0 36px; height: 36px; min-height: 0; min-width: 0; padding: 2px var(--space-3); border-bottom: 1px solid var(--glass-edge); gap: var(--space-2); }
+  .project { flex: 0 1 16rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; }
+  .status-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .launch-error { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button { flex: 0 0 auto; margin-left: auto; }
+</style>

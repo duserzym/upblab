@@ -176,3 +176,11 @@ describe('Review selection and loading', () => {
     expect(review.selectedKey).toBe('acq-3');
   });
 });
+
+it('reloads results keeping scope, run and the selected spot if still present', async () => {
+  await review.open({ kind: 'session', id: session.id, run: 'run-newer' });
+  review.select(review.rows[3], false);
+  await review.load();
+  expect(review.scope).toEqual({ kind: 'session', id: session.id, run: 'run-newer' });
+  expect(review.selectedKey).toBe('acq-4');
+});

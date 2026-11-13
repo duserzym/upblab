@@ -12,6 +12,8 @@
   import FirstRun from './components/FirstRun.svelte';
   import CheckUpdatesButton from './components/CheckUpdatesButton.svelte';
   import { startScheduler } from './lib/updater.svelte';
+  import AtlasLeaveDialog from './components/AtlasLeaveDialog.svelte';
+  import { checkStandaloneSync } from './lib/atlas-refresh';
   import AccountDialog from './components/AccountDialog.svelte';
   import { identity } from './lib/identity.svelte';
   import { canManagePeople } from './lib/people';
@@ -151,6 +153,8 @@
 </script>
 
 
+<svelte:window onfocus={() => void checkStandaloneSync()} />
+<svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible') void checkStandaloneSync(); }} />
 <div class="shell">
   <header class="bar glass">
     <span class="brand"><img class="mark" src="./favicon.svg" alt="" width="22" height="22" />UPb Lab</span>
@@ -221,4 +225,5 @@
     {/if}
   </main>
   <AccountDialog />
+  <AtlasLeaveDialog />
 </div>

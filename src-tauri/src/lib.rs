@@ -12,6 +12,7 @@ mod auth;
 mod bridge;
 mod files;
 mod geometry;
+mod grainatlas_app;
 pub mod local_service;
 mod menu;
 mod modules;
@@ -89,6 +90,7 @@ pub fn run() {
             probe::probe,
             studio::studio_status,
             studio::studio_launch,
+            grainatlas_app::grainatlas_launch,
             auth::auth_restore,
             auth::auth_login,
             auth::auth_exchange,

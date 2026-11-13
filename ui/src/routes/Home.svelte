@@ -1,4 +1,5 @@
 <script lang="ts">
+  import DraftList from '../components/home/DraftList.svelte';
   import UploadCard from '../components/UploadCard.svelte';
   import { upload } from '../lib/upload.svelte';
   import { identity } from '../lib/identity.svelte';
@@ -171,6 +172,8 @@
       <input bind:this={folderInput} aria-label="Open folder" type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
       <input bind:this={filesInput} aria-label="Open files" type="file" multiple hidden onchange={() => chosen(filesInput)} />
     {/if}
+
+    <DraftList />
 
     <section class="board-section stack" aria-label="Sessions">
       <Toolbar section="Sessions" bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} progress={sessionProgress} cap={sessionCap} refresh={identity.signedIn ? refresh : undefined} busy={overview.refreshing}>

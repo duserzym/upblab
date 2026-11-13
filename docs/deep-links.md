@@ -103,8 +103,9 @@ start `grainatlas-desktop.exe` with the same arguments. Find it through
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\grainatlas`
 (NSIS, current-user install), then `%LOCALAPPDATA%\grainatlas`, then
 `Program Files\grainatlas` (MSI). Single-instance forwarding works the same
-on Windows. This section records the launch contract; bridge v4 does not
-implement the launcher.
+on Windows. The shell implements the launcher in
+`src-tauri/src/grainatlas_app.rs`. Its UI mints the one-time handoff code and
+shows the launch button only after a valid v4 event from the Images module.
 
 
 ## Shell to module: commands (bridge v3)

@@ -366,8 +366,8 @@ pub struct Launched {
     command: String,
 }
 
-/// Replace `code=<value>` so one-time codes stay out of logs.
-fn redact(s: &str) -> String {
+/// Replace `code=<value>` and `--code <value>` so one-time codes stay out of logs.
+pub(crate) fn redact(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
     while let Some(i) = rest.find("code=") {
@@ -378,7 +378,28 @@ fn redact(s: &str) -> String {
         rest = &rest[end..];
     }
     out.push_str(rest);
-    out
+    // Argument form used by GrainAtlas; quoted values may contain spaces.
+    let mut redacted = String::with_capacity(out.len());
+    rest = &out;
+    while let Some(i) = rest.find("--code ") {
+        redacted.push_str(&rest[..i + 7]);
+        rest = rest[i + 7..].trim_start();
+        redacted.push('…');
+        if let Some(quote) = rest.chars().next().filter(|c| *c == '\"' || *c == '\'') {
+            rest = &rest[quote.len_utf8()..];
+            rest = rest
+                .find(quote)
+                .map(|end| &rest[end + quote.len_utf8()..])
+                .unwrap_or("");
+        } else {
+            rest = rest
+                .find(char::is_whitespace)
+                .map(|end| &rest[end..])
+                .unwrap_or("");
+        }
+    }
+    redacted.push_str(rest);
+    redacted
 }
 
 #[tauri::command]
@@ -477,6 +498,9 @@ mod tests {
         assert_eq!(redact("x --open \"upbr://session/s?server=h&code=SECRET\""), "x --open \"upbr://session/s?server=h&code=…\"");
         assert_eq!(redact("upbr://session/s?code=A&server=h"), "upbr://session/s?code=…&server=h");
         assert_eq!(redact("no code here"), "no code here");
+        assert_eq!(redact("app --code SECRET --revision 4"), "app --code … --revision 4");
+        assert_eq!(redact("app --code \"secret words\""), "app --code …");
+        assert_eq!(redact("code=A --code B"), "code=… --code …");
     }
 
     #[test]

@@ -6,6 +6,8 @@ import { isDesktop, launchStudio, logInfo, logWarn, openExternal, studioStatus, 
 import { identity } from './identity.svelte';
 import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
+import { atlasSync } from './atlas-sync.svelte';
+import { sendCommand } from './incoming';
 import { overlays } from './overlays.svelte';
 
 export type View = TabId | 'settings' | 'account';
@@ -135,9 +137,17 @@ class Shell {
     return moduleHome(tab, this.bases);
   }
 
-  show(view: View) {
+  async show(view: View): Promise<boolean> {
+    if (view !== this.view && this.view === 'images' && atlasSync.guardNeeded) {
+      const project = atlasSync.status!.project;
+      const decision = await atlasSync.requestLeave();
+      if (!decision) return false;
+      try { await sendCommand('images', { type: 'leave-edit', project, decision }); }
+      catch { return false; }
+    }
     this.view = view;
     if (view !== 'settings' && view !== 'account' && view !== 'people' && settings.loaded && settings.lastTab !== view) void settings.update({ lastTab: view });
+    return true;
   }
 
   async loadModules() {
@@ -167,9 +177,15 @@ class Shell {
   }
 
   /** Load a module route and show its tab. */
-  go(tab: ModuleTab, route: string) {
-    this.load(tab, route);
-    this.show(tab);
+  async go(tab: ModuleTab, route: string): Promise<boolean> {
+    if (tab !== this.view && this.view === 'images' && atlasSync.guardNeeded) {
+      if (!await this.show(tab)) return false;
+      this.load(tab, route);
+    } else {
+      this.load(tab, route);
+      void this.show(tab);
+    }
+    return true;
   }
 
   /**
@@ -183,7 +199,7 @@ class Shell {
     const seq = this.seq;
     const base = { seq, object, id, shown: redact(link), minted: false };
     this.studio = { ...base, state: 'launching' };
-    this.show('reduce');
+    if (!await this.show('reduce')) return false;
     const what = `${object} ${id}`;
     if (!isDesktop) {
       // The browser hands upbr:// to the OS, which opens Studio (its own installer registers the scheme).
@@ -240,7 +256,7 @@ class Shell {
         await openExternal(r.url);
         return true;
       case 'tab': {
-        this.go(r.tab, r.route);
+        if (!await this.go(r.tab, r.route)) return false;
         this.record(url, from, `${r.tab === 'sessions' ? 'Sessions' : 'Images'} ${r.route}`);
         await logInfo(`[links] ${url} -> ${r.tab} ${r.route}`);
         return true;

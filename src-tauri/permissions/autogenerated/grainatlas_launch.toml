@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-grainatlas-launch"
+description = "Enables the grainatlas_launch command without any pre-configured scope."
+commands.allow = ["grainatlas_launch"]
+
+[[permission]]
+identifier = "deny-grainatlas-launch"
+description = "Denies the grainatlas_launch command without any pre-configured scope."
+commands.deny = ["grainatlas_launch"]

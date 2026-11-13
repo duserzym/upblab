@@ -9,6 +9,7 @@ export interface FakeOptions {
   fixtures?: Record<string, unknown>;
   standards?: { warning: boolean; message: string; changed: string[] };
   signedIn?: boolean;
+  grainatlasLaunchErrors?: string[];
   sessionPaths?: string[];
   folderPaths?: string[];
   projectPackages?: Record<string, unknown>;
@@ -27,6 +28,7 @@ export function installFakeTauri(opts: FakeOptions) {
   let theme: 'light' | 'dark' = 'light';
   let offerSequence = 0;
   let next = 1;
+  const launchErrors = [...(opts.grainatlasLaunchErrors ?? [])];
   const status = {
     phase: 'idle',
     step: '',
@@ -78,6 +80,13 @@ export function installFakeTauri(opts: FakeOptions) {
           return opts.standards ?? null;
         case 'auth_restore':
           return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { username: 'demo', display_name: 'Demo analyst' } : null, offline: false };
+        case 'auth_handoff':
+          return 'ONE-TIME-FIXTURE';
+        case 'grainatlas_launch': {
+          const error = launchErrors.shift();
+          if (error) throw new Error(error);
+          return null;
+        }
         case 'module_theme':
           if (args?.theme !== 'light' && args?.theme !== 'dark') throw new Error('invalid bridge theme');
           theme = args.theme;

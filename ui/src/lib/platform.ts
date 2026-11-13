@@ -270,3 +270,9 @@ export function resetWindowLayout(): Promise<void> {
 export function pickSessionPaths(): Promise<string[]> {
   return invoke<string[]>('files_pick_session');
 }
+
+/** One-time code is passed only through IPC, never logged or retained. */
+export async function launchGrainAtlas(project: string, server: string, code: string, revision?: number): Promise<void> {
+  if (!isDesktop) throw new Error('GrainAtlas can only be launched from the desktop app.');
+  await invoke('grainatlas_launch', { project, server, code, ...(revision === undefined ? {} : { revision }) });
+}

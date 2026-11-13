@@ -25,6 +25,7 @@
     "allow-probe",
     "allow-studio-status",
     "allow-studio-launch",
+    "allow-grainatlas-launch",
     "allow-auth-restore",
     "allow-auth-login",
     "allow-auth-exchange",

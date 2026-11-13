@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { atlasStatusFixture } from '../../tests/fixtures/atlas-sync';
+import { atlasSync } from './atlas-sync.svelte';
 import { MESSAGE_TAG, PROTOCOL_VERSION, type BridgeCommand } from '@lab/bridge';
 
 vi.mock('./platform', () => ({
@@ -19,6 +21,8 @@ const { selection } = await import('./selection.svelte');
 const command: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 's', via: 'review' };
 
 beforeEach(() => {
+  atlasSync.v4 = false;
+  atlasSync.status = null;
   frames.clear();
   selection.fromImages = null;
   vi.clearAllMocks();
@@ -99,5 +103,28 @@ describe('module upload outcomes', () => {
   it('names People notifications as laicpmsdb', () => {
     onModuleEvent({ type: 'lab.people.changed' }, 'people');
     expect(platform.logInfo).toHaveBeenCalledWith('[bridge] laicpmsdb: {"type":"lab.people.changed"}');
+  });
+});
+
+describe('Atlas adoption', () => {
+  it('accepts snapshots only from Images, with both source labels', () => {
+    onModuleEvent(atlasStatusFixture, 'sessions');
+    onModuleEvent(atlasStatusFixture, 'unknown');
+    onModuleEvent({ type: 'lab.atlas.status' }, 'images');
+    expect(atlasSync.v4).toBe(false);
+    onModuleEvent(atlasStatusFixture, 'grainatlas');
+    expect(atlasSync.status).toEqual(atlasStatusFixture);
+    atlasSync.status = null;
+    onModuleEvent(atlasStatusFixture, 'images');
+    expect(atlasSync.status).toEqual(atlasStatusFixture);
+  });
+  it('never queues v4 commands until a valid Images v4 event', async () => {
+    const frame = { postMessage: vi.fn() };
+    registerFrame('images', frame as unknown as Window);
+    expect(await sendCommand('images', { type: 'sync-draft', project: 'p' })).toBe(false);
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    onModuleEvent(atlasStatusFixture, 'images');
+    expect(await sendCommand('images', { type: 'sync-draft', project: 'p' })).toBe(true);
+    expect(frame.postMessage).toHaveBeenCalledOnce();
   });
 });

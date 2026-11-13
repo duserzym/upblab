@@ -11,6 +11,7 @@ fn main() {
             "probe",
             "studio_status",
             "studio_launch",
+            "grainatlas_launch",
             "auth_restore",
             "auth_login",
             "auth_exchange",

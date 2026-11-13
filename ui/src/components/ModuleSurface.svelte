@@ -11,7 +11,7 @@
   import { settings } from '../lib/settings.svelte';
   import { desktopModules, isDesktop, type Bounds } from '../lib/platform';
   import { shell, type ModuleTarget } from '../lib/shell.svelte';
-  import { registerFrame, unregisterFrame } from '../lib/incoming';
+  import { registerFrame, unregisterFrame, moduleSurfaces } from '../lib/incoming';
   import { identity } from '../lib/identity.svelte';
 
   interface Props {
@@ -26,6 +26,12 @@
     layoutKey?: string;
   }
   let { module, home, target, active, title, layoutKey }: Props = $props();
+
+  $effect(() => {
+    const id = module;
+    moduleSurfaces.add(id);
+    return () => { moduleSurfaces.delete(id); };
+  });
 
   let el = $state<HTMLDivElement>();
   let iframe = $state<HTMLIFrameElement>();
@@ -156,6 +162,7 @@
     name={frameName(module === 'people' ? 'laicpmsdb' : module)}
     {src}
     {title}
+    style:visibility={shell.overlay ? 'hidden' : undefined}
     referrerpolicy="same-origin"
     onload={frameLoaded}
   ></iframe>

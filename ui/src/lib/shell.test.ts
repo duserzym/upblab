@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('./incoming', () => ({ sendCommand: vi.fn(async () => true) }));
 vi.mock('./platform', () => ({
   isDesktop: true,
   logWarn: vi.fn(async () => {}),
@@ -250,5 +251,32 @@ describe('theme (System by default, passed to module tabs at load and live)', ()
     expect(shell.homeUrl('sessions')).toBe('http://localhost:8000/app/?theme=dark');
     expect(shell.homeUrl('images')).toBe('tauri://localhost/modules/grainatlas/index.html?theme=dark');
     settings.theme = 'light';
+  });
+});
+
+describe('Images leave guard', () => {
+  it('switches synchronously before v4, then waits for a decision and sends before switching', async () => {
+    const { atlasSync } = await import('./atlas-sync.svelte');
+    const { atlasStatusFixture } = await import('../../tests/fixtures/atlas-sync');
+    const { sendCommand } = await import('./incoming');
+    atlasSync.v4 = false;
+    shell.view = 'images';
+    const unguarded = shell.show('home');
+    expect(shell.view).toBe('home');
+    await unguarded;
+    atlasSync.receive(atlasStatusFixture);
+    shell.view = 'images';
+    const stay = shell.show('review');
+    expect(shell.view).toBe('images');
+    atlasSync.finishLeave(null);
+    expect(await stay).toBe(false);
+    expect(shell.view).toBe('images');
+    const leave = shell.show('review');
+    atlasSync.finishLeave('keep-draft');
+    expect(await leave).toBe(true);
+    expect(sendCommand).toHaveBeenCalledWith('images', { type: 'leave-edit', project: atlasStatusFixture.project, decision: 'keep-draft' });
+    expect(shell.view).toBe('review');
+    atlasSync.v4 = false;
+    atlasSync.status = null;
   });
 });
