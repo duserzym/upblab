@@ -1,14 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import type { AtlasStatusEvent } from '@lab/bridge';
-  import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import { atlasSync, changeCounts, needsLeaveGuard } from '../lib/atlas-sync.svelte';
   import { CONFLICT_NOTE, resultReason } from '../lib/atlas-requests';
   import { isDesktop } from '../lib/platform';
   import { shell } from '../lib/shell.svelte';
   import { openOverlay, closeOverlay } from '../lib/overlays.svelte';
 
-  let quit = $state<{ status: AtlasStatusEvent | null; otherDrafts: number } | null>(null);
+  let quit = $state<{ id: number; status: AtlasStatusEvent | null; otherDrafts: number } | null>(null);
   let busy = $state(false), error = $state(''), progress = $state('');
   let cancel = $state<HTMLButtonElement>();
   let disposed = false;
@@ -16,28 +17,41 @@
   const guardCurrent = $derived(needsLeaveGuard(quit?.status ?? null));
   onMount(() => {
     if (!isDesktop) return;
-    void getCurrentWindow().onCloseRequested(event => {
-      if (quit) { event.preventDefault(); return; }
-      if (!atlasSync.v4 || !atlasSync.guardNeeded && !atlasSync.drafts.length && !atlasSync.leave) return;
-      event.preventDefault();
+    void listen<{ id: number }>('shell://quit-request', async ({ payload: { id } }) => {
+      if (quit) return;
+      if (!atlasSync.v4 || !atlasSync.guardNeeded && !atlasSync.drafts.length && !atlasSync.leave) {
+        await invoke('quit_answer', { id, answer: 'go' });
+        return;
+      }
       // A navigation dialog cannot leave an outstanding navigation after quit Cancel.
       if (atlasSync.leave) {
         atlasSync.finishLeave(null);
       }
-      quit = { status: atlasSync.status, otherDrafts: atlasSync.drafts.filter(draft => draft.project !== atlasSync.status?.project).length };
-      error = ''; progress = '';
+      quit = { id, status: atlasSync.status, otherDrafts: atlasSync.drafts.filter(draft => draft.project !== atlasSync.status?.project).length };
+      busy = false; error = ''; progress = '';
+      await invoke('quit_answer', { id, answer: 'prompting' });
     }).then(stop => { if (disposed) stop(); else unlisten = stop; });
   });
   onDestroy(() => { disposed = true; unlisten?.(); closeOverlay('atlas-quit'); });
   $effect.pre(() => { if (quit) openOverlay('atlas-quit'); else closeOverlay('atlas-quit'); });
   $effect(() => { if (quit) queueMicrotask(() => cancel?.focus()); });
-  function stay() { if (!busy) { quit = null; error = ''; } }
-  async function close() {
+  async function stay() {
+    if (!quit || busy) return;
     busy = true;
     try {
-      // Rust geometry::track saved on the original CloseRequested, even though
-      // the JS listener prevented closing. destroy avoids a second guard loop.
-      await getCurrentWindow().destroy();
+      await invoke('quit_cancel', { id: quit.id });
+      quit = null; error = ''; progress = '';
+    } catch {
+      error = 'Could not cancel quitting. Try again, or press Cmd+Q to quit.';
+    } finally {
+      busy = false;
+    }
+  }
+  async function close() {
+    if (!quit) return;
+    busy = true;
+    try {
+      await invoke('quit_confirm', { id: quit.id });
     } catch {
       error = 'Could not close the window. Your draft is kept.';
       busy = false;
@@ -53,7 +67,7 @@
         busy = false; progress = '';
         if (!('timeout' in result) && result.code === 'conflict') {
           atlasSync.note = CONFLICT_NOTE;
-          quit = null;
+          await stay();
           // Review differences belongs to GrainAtlas; show its surface directly.
           shell.view = 'images';
         } else error = `Sync did not finish: ${resultReason(result, 60)}. Your draft is kept.`;

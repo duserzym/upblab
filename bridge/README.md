@@ -318,6 +318,15 @@ re-reads the mount to catch syncs made in the standalone app. Every shell
 dialog in this flow hides module surfaces first, as required by UX rule 8
 (L3), and restores them when the dialog closes.
 
+On desktop, the quit guard offers Sync and quit, Quit, keep drafts, or Cancel
+when GrainAtlas reports unsynced changes or drafts. Quitting never depends on
+the UI: the Rust shell waits at most 2 s for the UI to answer, and a second
+Cmd+Q quits at once, including while the prompt is open or sync is pending.
+Once the UI answers that it is prompting, the user may take as long as needed
+to decide. A forced quit loses nothing because GrainAtlas persists drafts as
+they are edited: unsynced changes stay as drafts and appear again on Home and
+in GrainAtlas.
+
 Protocol v4 retains every v3 operation, including v3.1 theme behavior; it does
 not require version equality. Older modules ignore unknown commands and the
 shell ignores unknown events. A newer module on an older shell continues

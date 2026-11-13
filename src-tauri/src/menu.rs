@@ -69,13 +69,11 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     app.on_menu_event(|app, event| {
         let id = event.id().0.clone();
         if id == "app:quit" {
-            // Use the same native close event as the title-bar button: geometry
-            // saves first, and the UI may prevent it while its quit guard runs.
+            // Cmd+Q goes straight to the native watchdog, even if the UI hangs.
             if let Some(window) = app.get_window(MAIN_WINDOW) {
-                if let Err(err) = window.close() {
-                    log::warn!("quit close request failed: {err}");
-                }
+                crate::geometry::save(&window);
             }
+            crate::quit::request(app);
         } else if id.starts_with("tab:") || id == "settings" || id == "module:reload" {
             if let Err(err) = app.emit_to(EventTarget::webview(SHELL_WEBVIEW), EVENT_MENU, id) {
                 log::warn!("menu event not delivered: {err}");

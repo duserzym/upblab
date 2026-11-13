@@ -17,6 +17,7 @@ pub mod local_service;
 mod menu;
 mod modules;
 mod probe;
+mod quit;
 mod standards;
 mod studio;
 mod updater;
@@ -76,6 +77,7 @@ pub fn run() {
         .manage(bridge::ThemeState::default())
         .manage(auth::Identity::default())
         .manage(local_service::LocalService::default())
+        .manage(quit::QuitState::default())
         .invoke_handler(tauri::generate_handler![
             updater::update_check,
             updater::update_download,
@@ -112,6 +114,9 @@ pub fn run() {
             files::files_offer,
             files::files_take_opened,
             geometry::window_reset,
+            quit::quit_answer,
+            quit::quit_confirm,
+            quit::quit_cancel,
             local_service::local_service_status,
             local_service::local_service_start,
             local_service::local_service_stop,

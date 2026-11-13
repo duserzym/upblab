@@ -20,6 +20,13 @@ sign-in) and to give them the whole area under the tab bar.
 | 8. Layers stay within their owner | L0 tiles are dock panels in flow. L1 in-tile drawers are pickers kept open while looking at the result: depth channels, geochemistry axis quantities, session and run pickers. They open inside their own tile or toolbar and take layout space; content beside or below shrinks. They never float. L2 anchored menus are short, one-shot choices (move panel, presets, row actions). They may float, using the shared `containedPopover` / `containRect` helper to stay inside the owning tile, flip above or right-align to the anchor near an edge, and clamp every edge. They never extend over another tile or a module surface; a menu for a native surface takes layout space above it. L3 app dialogs and popups outside a tile use the shared overlay registry (`ui/src/lib/overlays.svelte.ts`): every visible module surface is hidden and replaced by a quiet placeholder of the same size before opening, then restored on close. Future toasts use a reserved strip of shell chrome that no module surface covers. Nothing relies on z-index to paint over a native module surface. |
 | 9. Ages read the same everywhere | Shared with GrainAtlas and Studio (sync plan 2026-11-12, Part A). Any age colour scale is oriented so its lighter end is the younger end, whatever colormap is chosen (measure CIELAB L* of both ends; only monotonic-lightness colormaps are offered for ages; no reverse switch that can break this); legends run young to old, light to dark, left to right. Where spots on an image are labelled or coloured by date, the default is the 206Pb/238U date, with 207Pb/206Pb, 207Pb/235U and Preferred (207Pb/206Pb above 1000 Ma) offered and the legend naming the date shown. Review's preferred date and exports are unchanged. Today the shell has no age colour scale (Review colours by sample; the spot tree's date badge is coloured by pass or discordance) and shows image spots' dates only inside the GrainAtlas module, so this rule binds future shell work. |
 
+The desktop quit guard is an L3 dialog. Quitting never depends on the UI: the
+Rust shell waits at most 2 s for its answer, and a second Cmd+Q quits at once,
+even while the prompt is open or sync is pending. Once the UI answers that
+the prompt is open, there is no decision timeout. A forced quit loses nothing
+because GrainAtlas persists drafts as they are edited; unsynced changes stay
+as drafts and appear again on Home and in GrainAtlas.
+
 ## What the modules still adopt
 
 - **grainatlas**: register `onOpenFiles` when hosted and pass the set to its

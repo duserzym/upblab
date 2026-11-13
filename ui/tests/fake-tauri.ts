@@ -27,6 +27,7 @@ export function installFakeTauri(opts: FakeOptions) {
   const fixtures = { ...opts.fixtures };
   let theme: 'light' | 'dark' = 'light';
   let offerSequence = 0;
+  let quitSequence = 0;
   let next = 1;
   const launchErrors = [...(opts.grainatlasLaunchErrors ?? [])];
   const status = {
@@ -47,7 +48,8 @@ export function installFakeTauri(opts: FakeOptions) {
     await Promise.all((listeners.get(event) ?? []).map(id => callbacks.get(id)?.({ event, id, payload })));
   };
   w.__emit = emit;
-  w.__closeRequest = () => emit('tauri://close-requested', null);
+  const quitRequest = () => emit('shell://quit-request', { id: ++quitSequence });
+  w.__quitRequest = quitRequest;
   w.__commandResult = (id: string, command: string, result: Record<string, unknown>, source = 'images') =>
     emit('lab-bridge://notify', { source, event: { type: 'lab.command.result', id, command, ...result } });
   w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
@@ -74,10 +76,12 @@ export function installFakeTauri(opts: FakeOptions) {
           return null;
         }
         case 'plugin:window|close':
-          await emit('tauri://close-requested', null);
+          await quitRequest();
           return null;
-        case 'plugin:window|destroy':
-          return null; // recorded in calls; keep the page alive for assertions
+        case 'quit_answer':
+        case 'quit_confirm':
+        case 'quit_cancel':
+          return null; // recorded in calls; native watchdog is covered by Rust tests
         case 'plugin:store|load':
           return 1;
         case 'plugin:store|get':

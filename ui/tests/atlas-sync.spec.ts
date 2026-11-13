@@ -32,9 +32,10 @@ async function complete(page: Page, type: string, result: Record<string, unknown
   await page.evaluate(({ id, type, result }) =>
     (window as unknown as { __commandResult: (id: string, type: string, result: Record<string, unknown>) => Promise<void> }).__commandResult(id, type, result), { id: command.id, type, result });
 }
-const closeRequest = (page: Page) => page.evaluate(() =>
-  (window as unknown as { __closeRequest: () => Promise<void> }).__closeRequest());
-const destroys = async (page: Page) => (await calls(page)).filter(([name]) => name === 'plugin:window|destroy');
+const quitRequest = (page: Page) => page.evaluate(() =>
+  (window as unknown as { __quitRequest: () => Promise<void> }).__quitRequest());
+const quitCalls = async (page: Page, command: 'quit_answer' | 'quit_confirm' | 'quit_cancel') =>
+  (await calls(page)).filter(([name]) => name === command).map(([, args]) => args);
 
 for (const [width, height] of [[1440, 900], [1280, 800]]) {
   test.describe(`Atlas sync ${width} × ${height}`, () => {
@@ -54,9 +55,9 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(page.getByRole('region', { name: 'Changes not yet in the database' })).toHaveCount(0);
       await expect(page.getByRole('dialog')).toHaveCount(0);
       expect((await commands(page)).filter(command => ['leave-edit', 'sync-draft', 'discard-draft', 'report-status', 'set-mode', 'open-project', 'atlas-synced'].includes((command as { type: string }).type))).toEqual([]);
-      await closeRequest(page);
+      await quitRequest(page);
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      expect(await destroys(page)).toHaveLength(1);
+      expect(await quitCalls(page, 'quit_answer')).toEqual([{ id: 1, answer: 'go' }]);
       expect((await calls(page)).filter(([name, args]) => name === 'api_get' && String(args?.path).startsWith('/v1/atlas/projects/'))).toEqual([]);
     });
 
@@ -247,86 +248,103 @@ test('Home shows sync failure, conflict, timeout and completion even after the d
   await expect(sync).toBeEnabled();
 });
 
-test('quit Cancel preserves the window and keep-drafts destroys only after completion', async ({ page }) => {
+test('quit Cancel preserves the window and keep-drafts confirms only after completion', async ({ page }) => {
   await openAtlas(page);
   await emit(page, status);
   await emit(page, { ...drafts, drafts: [...drafts.drafts, { ...drafts.drafts[0], project: 'other-project', name: 'Other draft' }] });
-  await closeRequest(page);
+  await quitRequest(page);
   const dialog = page.getByRole('dialog', { name: 'Quit with unsynced changes?' });
   await expect(dialog).toContainText('12 spots, 2 grains, 1 label, new images');
   await expect(dialog).toContainText('1 other draft');
+  expect(await quitCalls(page, 'quit_answer')).toEqual([{ id: 1, answer: 'prompting' }]);
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  expect(await destroys(page)).toEqual([]);
-  await closeRequest(page);
+  expect(await quitCalls(page, 'quit_cancel')).toEqual([{ id: 1 }]);
+  expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
+  await quitRequest(page);
+  expect(await quitCalls(page, 'quit_answer')).toEqual([
+    { id: 1, answer: 'prompting' }, { id: 2, answer: 'prompting' },
+  ]);
   await dialog.getByRole('button', { name: 'Quit, keep drafts' }).click();
   await expect.poll(() => commands(page)).toContainEqual(expect.objectContaining({ type: 'leave-edit', decision: 'keep-draft', id: expect.any(String) }));
-  expect(await destroys(page)).toEqual([]);
+  expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
   await complete(page, 'leave-edit');
-  await expect.poll(() => destroys(page)).toHaveLength(1);
+  await expect.poll(() => quitCalls(page, 'quit_confirm')).toEqual([{ id: 2 }]);
 });
 
-test('Sync and quit failure keeps the draft and Quit anyway destroys without another command', async ({ page }) => {
+test('v4 without unsynced changes or drafts answers go immediately', async ({ page }) => {
+  await openAtlas(page);
+  await emit(page, { ...status, mode: 'view', state: 'in-sync', changes: null });
+  await emit(page, { type: 'lab.atlas.drafts', drafts: [] });
+  await quitRequest(page);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(await quitCalls(page, 'quit_answer')).toEqual([{ id: 1, answer: 'go' }]);
+  expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
+  expect(await quitCalls(page, 'quit_cancel')).toEqual([]);
+});
+
+test('Sync and quit failure keeps the draft and Quit anyway confirms without another module command', async ({ page }) => {
   await openAtlas(page);
   await emit(page, status);
-  await closeRequest(page);
+  await quitRequest(page);
   const dialog = page.getByRole('dialog', { name: 'Quit with unsynced changes?' });
   await dialog.getByRole('button', { name: 'Sync and quit' }).click();
   await complete(page, 'leave-edit', { ok: false, code: 'offline', error: 'Server unreachable' });
   await expect(dialog.getByRole('status')).toHaveText('Sync did not finish: Server unreachable. Your draft is kept.');
-  expect(await destroys(page)).toEqual([]);
+  expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
   const before = await commands(page);
   await dialog.getByRole('button', { name: 'Quit anyway (draft kept)' }).click();
-  await expect.poll(() => destroys(page)).toHaveLength(1);
+  await expect.poll(() => quitCalls(page, 'quit_confirm')).toHaveLength(1);
   expect(await commands(page)).toEqual(before);
 });
 
 test('Sync and quit conflict shows GrainAtlas differences, and drafts-only quit offers no sync', async ({ page }) => {
   await openAtlas(page);
   await emit(page, status);
-  await closeRequest(page);
+  await quitRequest(page);
   const dialog = page.getByRole('dialog', { name: 'Quit with unsynced changes?' });
   await dialog.getByRole('button', { name: 'Sync and quit' }).click();
   await complete(page, 'leave-edit', { ok: false, code: 'conflict' });
   await expect(dialog).toHaveCount(0);
-  expect(await destroys(page)).toEqual([]);
+  expect(await quitCalls(page, 'quit_cancel')).toEqual([{ id: 1 }]);
+  expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
   await expect(page.getByTestId('atlas-status-strip')).toContainText('Both changed: review the differences in GrainAtlas');
   await emit(page, { ...status, mode: 'view', changes: null });
   await emit(page, drafts);
-  await closeRequest(page);
+  await quitRequest(page);
   await expect(dialog.getByRole('button', { name: 'Sync and quit' })).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Quit, keep drafts' }).click();
-  await expect.poll(() => destroys(page)).toHaveLength(1);
+  await expect.poll(() => quitCalls(page, 'quit_confirm')).toHaveLength(1);
 });
 
 test('Sync and quit timeout reports the draft kept; keep-drafts timeout still quits', async ({ page }) => {
   await openAtlas(page, 'images', 80);
   await emit(page, status);
-  await closeRequest(page);
+  await quitRequest(page);
   const dialog = page.getByRole('dialog', { name: 'Quit with unsynced changes?' });
   await dialog.getByRole('button', { name: 'Sync and quit' }).click();
   await expect(dialog.getByRole('status')).toHaveText('Sync did not finish: no reply in 60 s. Your draft is kept.');
   await dialog.getByRole('button', { name: 'Stay', exact: true }).click();
-  expect(await destroys(page)).toEqual([]);
-  await closeRequest(page);
+  await expect.poll(() => quitCalls(page, 'quit_cancel')).toEqual([{ id: 1 }]);
+  expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
+  await quitRequest(page);
   await dialog.getByRole('button', { name: 'Quit, keep drafts' }).click();
   await expect(dialog.getByRole('status')).toHaveText('No reply in 10 s. Quitting; drafts already stored by the module stay.');
-  await expect.poll(() => destroys(page)).toHaveLength(1);
+  await expect.poll(() => quitCalls(page, 'quit_confirm')).toHaveLength(1);
 });
 
-test('Sync and quit waits for its result even when snapshots clear before a repeated close request', async ({ page }) => {
+test('Sync and quit waits for its result even when snapshots clear', async ({ page }) => {
   await openAtlas(page);
   await emit(page, status);
-  await closeRequest(page);
+  await quitRequest(page);
   const dialog = page.getByRole('dialog', { name: 'Quit with unsynced changes?' });
   await dialog.getByRole('button', { name: 'Sync and quit' }).click();
   await emit(page, { ...status, mode: 'view', state: 'in-sync', changes: null });
   await emit(page, { type: 'lab.atlas.drafts', drafts: [] });
-  await closeRequest(page);
   await expect(dialog).toBeVisible();
-  expect(await destroys(page)).toEqual([]);
+  expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
   await complete(page, 'leave-edit');
-  await expect.poll(() => destroys(page)).toHaveLength(1);
+  await expect.poll(() => quitCalls(page, 'quit_confirm')).toHaveLength(1);
 });
 
 test('quit cancels an outstanding navigation; a late leave result cannot switch tabs after Cancel', async ({ page }) => {
@@ -335,11 +353,11 @@ test('quit cancels an outstanding navigation; a late leave result cannot switch 
   await tab(page, 'Home').click();
   await page.getByRole('button', { name: 'Sync and leave' }).click();
   await expect.poll(() => commands(page)).toContainEqual(expect.objectContaining({ type: 'leave-edit', id: expect.any(String) }));
-  await closeRequest(page);
+  await quitRequest(page);
   const dialog = page.getByRole('dialog', { name: 'Quit with unsynced changes?' });
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await complete(page, 'leave-edit');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
-  expect(await destroys(page)).toEqual([]);
+  expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
 });

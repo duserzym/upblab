@@ -145,7 +145,11 @@ pub fn track<R: Runtime>(w: &Window<R>) {
                 save(&win);
             });
         }
-        WindowEvent::CloseRequested { .. } => save(&win),
+        WindowEvent::CloseRequested { api, .. } => {
+            save(&win);
+            api.prevent_close();
+            crate::quit::request(win.app_handle());
+        }
         _ => {}
     });
 }
