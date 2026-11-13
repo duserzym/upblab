@@ -213,6 +213,7 @@ class Overview {
       if (!current() || !isList<MountOut>(reply)) return;
       const mount = reply.body.find(m => m.id === id);
       if (!mount) return;
+      const reloadThumbnails = this.thumbnailSources.get(id)?.started === true;
       const row = await this.mountRow(mount, gen);
       if (!current()) return;
       this.mountList = reply.body;
@@ -220,6 +221,8 @@ class Overview {
       const index = this.mounts.findIndex(r => r.mount.id === id);
       if (index >= 0) this.mounts[index] = row;
       else this.mounts = [...this.mounts, row];
+      // Already visible cards need a fresh manifest even if their project is unchanged.
+      if (reloadThumbnails) await this.loadThumbnails(id);
     } catch { /* An older server or offline connection leaves Home as shown. */ }
   }
 
@@ -289,6 +292,7 @@ class Overview {
       if (r.status === 200) {
         const atlas = parseAtlas(r.body);
         const access = (r.body as { access?: unknown } | null)?.access;
+        if (gen === this.generation) this.thumbnailSources.delete(mount.id);
         if (gen === this.generation && atlas && server && typeof access === 'string' && access)
           this.thumbnailSources.set(mount.id, { server, atlas, access, started: false });
         return { mount, atlas };
@@ -311,12 +315,12 @@ class Overview {
     // The host's authenticated proxy only permits /v1/. Atlas files use the
     // project-scoped read token directly, also in desktop webviews.
     try {
-      const response = await fetch(atlasFileUrl(server, atlas.projectId, 'atlas.json', access), { referrerPolicy: 'no-referrer', signal: controller.signal });
+      const response = await fetch(atlasFileUrl(server, atlas.projectId, 'atlas.json', access), { cache: 'no-store', referrerPolicy: 'no-referrer', signal: controller.signal });
       if (response.ok)
         thumbnails = thumbnailPaths(await response.json()).map(path => atlasFileUrl(server, atlas.projectId, path, access));
     } catch { /* A missing thumbnail must never hide the mount. */ }
     finally { clearTimeout(timeout); }
-    if (gen !== this.generation) return;
+    if (gen !== this.generation || source !== this.thumbnailSources.get(mountId)) return;
     const row = this.mounts.find(row => row.mount.id === mountId);
     if (row) row.thumbnails = thumbnails;
   }

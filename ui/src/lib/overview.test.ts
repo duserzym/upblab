@@ -283,6 +283,7 @@ describe('refreshMount', () => {
   beforeEach(() => {
     overview.clear();
     get.mockReset();
+    vi.unstubAllGlobals();
     identity.target = { server: 'http://h', key: 'http://h' };
     (identity as unknown as { signedIn: boolean }).signedIn = true;
     const older = { id: 'm1', label: 'Earlier name', grain_count: 1, spot_count: 2 };
@@ -299,6 +300,60 @@ describe('refreshMount', () => {
     finish({ status: 200, body: [updated] });
     await refreshing;
     expect(overview.mounts[0]).toMatchObject({ mount: updated, atlas: { version: 3 } });
+  });
+  it('refetches the manifest for loaded thumbnails on the same project without reusing the cached list', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ files: { 'pyramid/old/0/0_0.webp': 'invented' } }) });
+    vi.stubGlobal('fetch', fetch);
+    const mounts = [overview.mounts[0].mount, { id: 'm2', label: 'Other', grain_count: 1, spot_count: 1 }];
+    let version = 1;
+    get.mockImplementation(async (path: string) => {
+      if (path === '/v1/sessions') return { status: 200, body: [] };
+      if (path === '/v1/mounts') return { status: 200, body: mounts };
+      return { status: 200, body: { current: { project_id: path.includes('/m1/') ? 'p1' : 'p2', version }, access: 'read-token' } };
+    });
+    await overview.load();
+    await overview.loadThumbnails('m1');
+    await overview.loadThumbnails('m2');
+    const otherThumbnails = [...overview.mounts[1].thumbnails!];
+    expect(overview.mounts[0].thumbnails).toEqual(['http://h/atlas/projects/p1/pyramid/old/0/0_0.webp?access=read-token']);
+    fetch.mockClear();
+    fetch.mockResolvedValue({ ok: true, json: async () => ({ files: { 'pyramid/new/0/0_0.webp': 'invented' } }) });
+    version = 2;
+    await overview.refreshMount('m1');
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('http://h/atlas/projects/p1/atlas.json?access=read-token', expect.objectContaining({ cache: 'no-store' }));
+    expect(overview.mounts[0]).toMatchObject({ atlas: { version: 2 }, thumbnails: ['http://h/atlas/projects/p1/pyramid/new/0/0_0.webp?access=read-token'] });
+    expect(overview.mounts[1].thumbnails).toEqual(otherThumbnails);
+    await overview.loadThumbnails('m1');
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+  it('keeps unrequested thumbnails lazy after refreshing a mount', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ files: {} }) });
+    vi.stubGlobal('fetch', fetch);
+    get.mockImplementation(async (path: string) => path === '/v1/mounts'
+      ? { status: 200, body: [overview.mounts[0].mount] }
+      : { status: 200, body: { current: { project_id: 'p1', version: 2 }, access: 'read-token' } });
+    await overview.refreshMount('m1');
+    expect(fetch).not.toHaveBeenCalled();
+    await overview.loadThumbnails('m1');
+    expect(fetch).toHaveBeenCalledExactlyOnceWith('http://h/atlas/projects/p1/atlas.json?access=read-token', expect.objectContaining({ cache: 'no-store' }));
+  });
+  it('ignores an older in-flight manifest after refreshing just its mount', async () => {
+    let finish!: (reply: unknown) => void;
+    const fetch = vi.fn()
+      .mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue({ ok: true, json: async () => ({ files: { 'pyramid/new/0/0_0.webp': 'invented' } }) });
+    vi.stubGlobal('fetch', fetch);
+    get.mockImplementation(async (path: string) => path === '/v1/mounts'
+      ? { status: 200, body: [overview.mounts[0].mount] }
+      : { status: 200, body: { current: { project_id: 'p1' }, access: 'read-token' } });
+    await overview.refreshMount('m1');
+    const stale = overview.loadThumbnails('m1');
+    await overview.refreshMount('m1');
+    const latest = [...overview.mounts[0].thumbnails!];
+    expect(latest).toEqual(['http://h/atlas/projects/p1/pyramid/new/0/0_0.webp?access=read-token']);
+    finish({ ok: true, json: async () => ({ files: { 'pyramid/old/0/0_0.webp': 'invented' } }) });
+    await stale;
+    expect(overview.mounts[0].thumbnails).toEqual(latest);
   });
   it('ignores an unavailable list and a reply from an old server', async () => {
     get.mockResolvedValue({ status: 404, body: {} });
