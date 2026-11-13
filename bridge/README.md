@@ -222,9 +222,9 @@ and legacy selection events from modules of any version.
 
 GrainAtlas sends the shell sync status, hosted drafts and successful sync
 notices through `notify`. The shell sends commands through the existing
-`onCommand` transport. Events are idempotent snapshots: the newest received
-snapshot wins, rather than adding counts to an earlier snapshot. This section
-defines the adoption contract. The shell status strip, Home draft list, leave
+`onCommand` transport. Status and draft events are idempotent snapshots:
+the newest received snapshot wins, rather than adding counts to an earlier
+snapshot. This section defines the adoption contract. The shell status strip, Home draft list, leave
 guard and refresh handlers activate only after a valid v4 event from Images;
 older modules keep their existing behavior and receive no v4 commands.
 
@@ -272,13 +272,43 @@ to `atlas_version`, the mount's current published bundle (integer or null).
 
 | Shell → module command | Payload and when to send |
 | --- | --- |
-| `open-project` | `{ type, project, server?: string, mode?: 'view' \| 'edit', revision?: number }`. Open a project, optionally at a revision. `server` follows `focus-spot`: an HTTP or HTTPS URL of at most 2048 characters, with no whitespace or control characters. |
-| `set-mode` | `{ type, project, mode: 'view' \| 'edit' }`. Request a mode change in the project. |
-| `leave-edit` | `{ type, project, decision: 'sync' \| 'keep-draft' \| 'discard' }`. Send after the shell's own leave guard has asked the user. The module acts without asking again and keeps a one-step undo snapshot in memory after discard. |
-| `sync-draft` | `{ type, project }`. Sync a hosted draft from the shell Home list. |
-| `discard-draft` | `{ type, project }`. Discard a hosted draft from Home after confirmation in a shell dialog. |
+| `open-project` | `{ type, id?: string, project, server?: string, mode?: 'view' \| 'edit', revision?: number }`. Open a project, optionally at a revision. `server` follows `focus-spot`: an HTTP or HTTPS URL of at most 2048 characters, with no whitespace or control characters. |
+| `set-mode` | `{ type, id?: string, project, mode: 'view' \| 'edit' }`. Request a mode change in the project. |
+| `leave-edit` | `{ type, id?: string, project, decision: 'sync' \| 'keep-draft' \| 'discard' }`. Send after the shell's own leave guard has asked the user. The module acts without asking again and keeps a one-step undo snapshot in memory after discard. |
+| `sync-draft` | `{ type, id?: string, project }`. Sync a hosted draft from the shell Home list. |
+| `discard-draft` | `{ type, id?: string, project }`. Discard a hosted draft from Home after confirmation in a shell dialog. |
 | `report-status` | `{ type }`. Request that GrainAtlas re-send both `lab.atlas.status` and `lab.atlas.drafts`, for example when a shell consumer needs current snapshots. |
 | `atlas-synced` | `{ type, project, mount, revision }`. Forward a successful sync notice to other modules, such as Sessions, so they refresh. Both ids and the non-negative integer revision are required. |
+
+The five commands with optional `id` accept 1–64 ASCII characters from
+`[A-Za-z0-9_-]`. Without an id their behavior is unchanged. With an id the
+module sends exactly one `lab.command.result` (`ATLAS_EVENTS.commandResult`)
+through `notify` after the action has really finished:
+
+```ts
+{ type: 'lab.command.result', id,
+  command: 'open-project' | 'set-mode' | 'leave-edit' | 'sync-draft' | 'discard-draft',
+  ok: boolean, code?: 'offline' | 'conflict' | 'unauthorized' | 'not-found' | 'failed',
+  error?: string, project?: string, mount?: string | null, revision?: number | null }
+```
+
+`commandResult(event)` returns a normalised result or null. Failure requires
+`code`; success must carry neither `code` nor `error`. The optional user-facing
+`error` is at most 300 characters. Project and mount use the existing id rule;
+revision is a non-negative integer or null. Unknown fields are ignored.
+
+For `leave-edit` with `sync` and for `sync-draft`, success means the server
+confirmed the sync and the draft is cleared. For `keep-draft`, it means the
+draft is persisted; discard finishes after removal. `open-project` and
+`set-mode` finish once the project lands in a state after the B1 server lookup.
+An offline lookup is still `ok: true`, with `state: 'offline'` in the status
+event. On a conflict (HTTP 409 / “Both changed”), the module opens its own
+Review differences, remains in edit, and returns `ok: false, code: 'conflict'`.
+
+The shell serialises identified requests to Images, waiting for a matching
+result or timeout before sending the next request. Sync waits up to 60 s;
+other actions wait up to 10 s. A timeout does not imply cancellation or success:
+the draft is kept and any late result cannot complete another request.
 
 The Edit switch, status chip, Sync control and split tool live in the
 GrainAtlas module. The shell owns the leave guard and Home draft actions. On
@@ -293,7 +323,8 @@ not require version equality. Older modules ignore unknown commands and the
 shell ignores unknown events. A newer module on an older shell continues
 using the operations that shell supports and degrades silently for v4. The
 command queue still retains only the newest untaken command per module; no
-additional queue or acknowledgement is introduced.
+transport-level queue is introduced; the shell serialises completion requests
+above this one-slot transport.
 
 ### Open in GrainAtlas (standalone)
 

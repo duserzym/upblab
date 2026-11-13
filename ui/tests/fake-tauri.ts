@@ -18,7 +18,7 @@ export interface FakeOptions {
 }
 
 export function installFakeTauri(opts: FakeOptions) {
-  type Cb = (msg: unknown) => void;
+  type Cb = (msg: unknown) => unknown;
   const w = window as unknown as Record<string, unknown>;
   const callbacks = new Map<number, Cb>();
   const listeners = new Map<string, number[]>();
@@ -43,8 +43,13 @@ export function installFakeTauri(opts: FakeOptions) {
     dataDir: '/Users/lab/Library/Application Support/edu.umn.upbstudio',
   };
   w.__fake = { calls, store, listeners, fixtures };
-  w.__emit = (event: string, payload: unknown) =>
-    (listeners.get(event) ?? []).forEach((id) => callbacks.get(id)?.({ event, id, payload }));
+  const emit = async (event: string, payload: unknown) => {
+    await Promise.all((listeners.get(event) ?? []).map(id => callbacks.get(id)?.({ event, id, payload })));
+  };
+  w.__emit = emit;
+  w.__closeRequest = () => emit('tauri://close-requested', null);
+  w.__commandResult = (id: string, command: string, result: Record<string, unknown>, source = 'images') =>
+    emit('lab-bridge://notify', { source, event: { type: 'lab.command.result', id, command, ...result } });
   w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: () => {} };
   w.__TAURI_INTERNALS__ = {
     metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'shell' } },
@@ -63,6 +68,16 @@ export function installFakeTauri(opts: FakeOptions) {
           listeners.set(event, [...(listeners.get(event) ?? []), args!.handler as number]);
           return args!.handler;
         }
+        case 'plugin:event|unlisten': {
+          const event = args!.event as string;
+          listeners.set(event, (listeners.get(event) ?? []).filter(id => id !== args!.eventId));
+          return null;
+        }
+        case 'plugin:window|close':
+          await emit('tauri://close-requested', null);
+          return null;
+        case 'plugin:window|destroy':
+          return null; // recorded in calls; keep the page alive for assertions
         case 'plugin:store|load':
           return 1;
         case 'plugin:store|get':

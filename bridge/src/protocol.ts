@@ -80,6 +80,7 @@ export const ATLAS_EVENTS = {
   status: 'lab.atlas.status',
   drafts: 'lab.atlas.drafts',
   synced: 'lab.atlas.synced',
+  commandResult: 'lab.command.result',
 } as const;
 
 /** A module event for the shell (timeline entries, status, title changes). */
@@ -174,7 +175,20 @@ export interface AtlasSyncedEvent extends BridgeEvent {
   at: string;
 }
 
+export type AtlasCommandName = 'open-project' | 'set-mode' | 'leave-edit' | 'sync-draft' | 'discard-draft';
+export type AtlasResultCode = 'offline' | 'conflict' | 'unauthorized' | 'not-found' | 'failed';
+export type CommandResult = {
+  type: typeof ATLAS_EVENTS.commandResult;
+  id: string;
+  command: AtlasCommandName;
+  project?: string;
+  mount?: string | null;
+  revision?: number | null;
+} & ({ ok: true; code?: never; error?: never } | { ok: false; code: AtlasResultCode; error?: string });
+
 export interface OpenProjectCommand {
+  /** Optional completion acknowledgement id (1–64 ASCII letters, digits, _ or -). */
+  id?: string;
   type: 'open-project';
   project: string;
   server?: string;
@@ -183,23 +197,31 @@ export interface OpenProjectCommand {
 }
 
 export interface SetModeCommand {
+  /** Optional completion acknowledgement id (1–64 ASCII letters, digits, _ or -). */
+  id?: string;
   type: 'set-mode';
   project: string;
   mode: AtlasMode;
 }
 
 export interface LeaveEditCommand {
+  /** Optional completion acknowledgement id (1–64 ASCII letters, digits, _ or -). */
+  id?: string;
   type: 'leave-edit';
   project: string;
   decision: 'sync' | 'keep-draft' | 'discard';
 }
 
 export interface SyncDraftCommand {
+  /** Optional completion acknowledgement id (1–64 ASCII letters, digits, _ or -). */
+  id?: string;
   type: 'sync-draft';
   project: string;
 }
 
 export interface DiscardDraftCommand {
+  /** Optional completion acknowledgement id (1–64 ASCII letters, digits, _ or -). */
+  id?: string;
   type: 'discard-draft';
   project: string;
 }
@@ -230,6 +252,11 @@ export interface SpotSelectedEvent extends BridgeEvent {
   via: 'user' | 'shell';
 }
 
+const isCommandId = (x: unknown): x is string =>
+  typeof x === 'string' && x.length >= 1 && x.length <= 64 && !/[^A-Za-z0-9_-]/.test(x);
+const isAtlasCommandName = (x: unknown): x is AtlasCommandName =>
+  x === 'open-project' || x === 'set-mode' || x === 'leave-edit' || x === 'sync-draft' || x === 'discard-draft';
+
 const ID = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/;
 const isId = (x: unknown): x is string => typeof x === 'string' && ID.test(x);
 const isCount = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0;
@@ -256,6 +283,7 @@ function isServer(x: unknown): boolean {
 export function isBridgeCommand(x: unknown): x is BridgeCommand {
   if (!x || typeof x !== 'object') return false;
   const c = x as Record<string, unknown>;
+  if (isAtlasCommandName(c.type) && c.id !== undefined && !isCommandId(c.id)) return false;
   if (c.type === 'report-status') return true;
   if (c.type === 'open-project') return isId(c.project) &&
     (c.server === undefined || isServer(c.server)) &&
@@ -287,6 +315,24 @@ export function isBridgeCommand(x: unknown): x is BridgeCommand {
   if (c.type === 'focus-spot') return isId(c.spot);
   if (c.type === 'focus-grain') return isGrain(c.grain) && (c.spot === undefined || isId(c.spot));
   return false;
+}
+
+/** v4: completion of an identified command; unknown fields are ignored. */
+export function commandResult(event: unknown): CommandResult | null {
+  if (!isRecord(event) || event.type !== ATLAS_EVENTS.commandResult || !isCommandId(event.id) ||
+      !isAtlasCommandName(event.command) || typeof event.ok !== 'boolean' ||
+      (event.project !== undefined && !isId(event.project)) ||
+      (event.mount !== undefined && event.mount !== null && !isId(event.mount)) ||
+      (event.revision !== undefined && event.revision !== null && !isCount(event.revision))) return null;
+  if (event.ok ? event.code !== undefined || event.error !== undefined :
+      !['offline', 'conflict', 'unauthorized', 'not-found', 'failed'].includes(event.code as string) ||
+      (event.error !== undefined && (typeof event.error !== 'string' || event.error.length > 300))) return null;
+  return { type: ATLAS_EVENTS.commandResult, id: event.id, command: event.command, ok: event.ok,
+    ...(event.code === undefined ? {} : { code: event.code }),
+    ...(event.error === undefined ? {} : { error: event.error }),
+    ...(event.project === undefined ? {} : { project: event.project }),
+    ...(event.mount === undefined ? {} : { mount: event.mount }),
+    ...(event.revision === undefined ? {} : { revision: event.revision }) } as CommandResult;
 }
 
 /** Normalise current and legacy spot selections; reject malformed ids and fields. */

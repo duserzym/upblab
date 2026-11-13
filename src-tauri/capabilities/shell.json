@@ -6,6 +6,7 @@
   "permissions": [
     "allow-module-theme",
     "core:default",
+    "core:window:allow-destroy",
     "deep-link:default",
     "store:default",
     "log:default",

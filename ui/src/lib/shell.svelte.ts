@@ -7,7 +7,6 @@ import { identity } from './identity.svelte';
 import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
 import { atlasSync } from './atlas-sync.svelte';
-import { sendCommand } from './incoming';
 import { overlays } from './overlays.svelte';
 
 export type View = TabId | 'settings' | 'account';
@@ -139,11 +138,8 @@ class Shell {
 
   async show(view: View): Promise<boolean> {
     if (view !== this.view && this.view === 'images' && atlasSync.guardNeeded) {
-      const project = atlasSync.status!.project;
       const decision = await atlasSync.requestLeave();
       if (!decision) return false;
-      try { await sendCommand('images', { type: 'leave-edit', project, decision }); }
-      catch { return false; }
     }
     this.view = view;
     if (view !== 'settings' && view !== 'account' && view !== 'people' && settings.loaded && settings.lastTab !== view) void settings.update({ lastTab: view });

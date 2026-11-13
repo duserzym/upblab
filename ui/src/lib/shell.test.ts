@@ -255,10 +255,9 @@ describe('theme (System by default, passed to module tabs at load and live)', ()
 });
 
 describe('Images leave guard', () => {
-  it('switches synchronously before v4, then waits for a decision and sends before switching', async () => {
+  it('switches synchronously before v4, then waits for the dialog to approve leaving', async () => {
     const { atlasSync } = await import('./atlas-sync.svelte');
     const { atlasStatusFixture } = await import('../../tests/fixtures/atlas-sync');
-    const { sendCommand } = await import('./incoming');
     atlasSync.v4 = false;
     shell.view = 'images';
     const unguarded = shell.show('home');
@@ -274,7 +273,6 @@ describe('Images leave guard', () => {
     const leave = shell.show('review');
     atlasSync.finishLeave('keep-draft');
     expect(await leave).toBe(true);
-    expect(sendCommand).toHaveBeenCalledWith('images', { type: 'leave-edit', project: atlasStatusFixture.project, decision: 'keep-draft' });
     expect(shell.view).toBe('review');
     atlasSync.v4 = false;
     atlasSync.status = null;

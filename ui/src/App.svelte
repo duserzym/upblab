@@ -12,6 +12,7 @@
   import FirstRun from './components/FirstRun.svelte';
   import CheckUpdatesButton from './components/CheckUpdatesButton.svelte';
   import { startScheduler } from './lib/updater.svelte';
+  import AtlasQuitDialog from './components/AtlasQuitDialog.svelte';
   import AtlasLeaveDialog from './components/AtlasLeaveDialog.svelte';
   import { checkStandaloneSync } from './lib/atlas-refresh';
   import AccountDialog from './components/AccountDialog.svelte';
@@ -226,4 +227,5 @@
   </main>
   <AccountDialog />
   <AtlasLeaveDialog />
+  <AtlasQuitDialog />
 </div>

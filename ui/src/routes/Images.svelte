@@ -26,6 +26,7 @@
     <div class="atlas-strip row" data-testid="atlas-status-strip">
       <strong class="project" title={atlasSync.status.name}>{atlasSync.status.name}</strong>
       <span class="small status-text" title={statusLabel(atlasSync.status)}>{statusLabel(atlasSync.status)}</span>
+      {#if atlasSync.note}<span class="small launch-error" role="status" title={atlasSync.note}>{atlasSync.note}</span>{/if}
       {#if error}<span class="error small launch-error" role="status" title={error}>{error}</span>{/if}
       {#if isDesktop}<button class="btn small" disabled={busy} onclick={openStandalone}>{busy ? 'Opening…' : 'Open in GrainAtlas'}</button>{/if}
     </div>

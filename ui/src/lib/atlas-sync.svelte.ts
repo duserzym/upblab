@@ -1,3 +1,4 @@
+import { createAtlasRequests, requestTimeout, type AtlasRequest } from './atlas-requests';
 import { atlasStatus, atlasDrafts, atlasSynced, type AtlasStatusEvent, type AtlasDraft, type AtlasSyncedEvent, type AtlasChanges } from '@lab/bridge';
 
 export function changeCounts(changes: AtlasChanges | null): string {
@@ -33,14 +34,23 @@ class AtlasSync {
   status = $state<AtlasStatusEvent | null>(null);
   drafts = $state<AtlasDraft[]>([]);
   lastSynced = $state<AtlasSyncedEvent | null>(null);
+  note = $state('');
+  private requests = createAtlasRequests(async command => (await import('./incoming')).sendCommand('images', command), () => this.v4);
+  request(command: AtlasRequest, timeoutMs = requestTimeout(command)) {
+    // Development specs can shorten timeouts without changing production behavior.
+    const testMs = import.meta.env.DEV && typeof location !== 'undefined'
+      ? Number(new URLSearchParams(location.search).get('atlas-command-timeout')) : 0;
+    return this.requests.request(command, Number.isFinite(testMs) && testMs > 0 ? testMs : timeoutMs);
+  }
   snapshot = $state(0);
   leave = $state<{ status: AtlasStatusEvent } | null>(null);
   private resolveLeave: ((decision: LeaveDecision | null) => void) | null = null;
   receive(event: unknown): AtlasSyncedEvent | null {
+    this.requests.receive(event);
     const status = atlasStatus(event), drafts = atlasDrafts(event), synced = atlasSynced(event);
     if (!status && !drafts && !synced) return null;
     this.v4 = true;
-    if (status) { this.status = status; this.snapshot++; }
+    if (status) { if (this.status?.project !== status.project || status.state === 'in-sync') this.note = ''; this.status = status; this.snapshot++; }
     if (drafts) { this.drafts = drafts.drafts; this.snapshot++; }
     if (synced) this.lastSynced = synced;
     return synced;

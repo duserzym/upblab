@@ -228,6 +228,20 @@ fn valid_atlas_mode(value: Option<&Value>) -> bool {
 }
 
 fn valid_command(command: &Value) -> bool {
+    if matches!(
+        command.get("type").and_then(Value::as_str),
+        Some("open-project" | "set-mode" | "leave-edit" | "sync-draft" | "discard-draft")
+    ) && command.get("id").is_some_and(|id| {
+        !id.as_str().is_some_and(|id| {
+            !id.is_empty()
+                && id.len() <= 64
+                && id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
+        })
+    }) {
+        return false;
+    }
     match command.get("type").and_then(Value::as_str) {
         Some("report-status") => return true,
         Some("open-project") => {
@@ -570,6 +584,37 @@ mod tests {
         assert!(valid_command(
             &json!({"type": "report-status", "future": true, "project": null})
         ));
+    }
+
+    #[test]
+    fn atlas_command_completion_ids() {
+        for mut command in [
+            json!({"type": "open-project", "project": "p"}),
+            json!({"type": "set-mode", "project": "p", "mode": "edit"}),
+            json!({"type": "leave-edit", "project": "p", "decision": "sync"}),
+            json!({"type": "sync-draft", "project": "p"}),
+            json!({"type": "discard-draft", "project": "p"}),
+        ] {
+            assert!(valid_command(&command));
+            for id in [json!("a"), json!("_-A09"), json!("x".repeat(64))] {
+                command["id"] = id;
+                assert!(valid_command(&command));
+            }
+            for id in [
+                json!(""),
+                json!("x".repeat(65)),
+                json!("a.b"),
+                json!("a/b"),
+                json!("é"),
+                json!("a\n"),
+                json!(null),
+                json!(42),
+                json!(true),
+            ] {
+                command["id"] = id;
+                assert!(!valid_command(&command), "accepted {command}");
+            }
+        }
     }
 
     #[test]

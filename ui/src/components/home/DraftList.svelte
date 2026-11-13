@@ -3,33 +3,31 @@
   import type { AtlasDraft } from '@lab/bridge';
   import { atlasSync, changeCounts } from '../../lib/atlas-sync.svelte';
   import { overview } from '../../lib/overview.svelte';
-  import { sendCommand } from '../../lib/incoming';
+  import { resultReason } from '../../lib/atlas-requests';
   import { openOverlay, closeOverlay } from '../../lib/overlays.svelte';
   let confirm = $state<AtlasDraft | null>(null);
   let cancel = $state<HTMLButtonElement>();
   let pending = $state<Record<string, boolean>>({});
-  let error = $state('');
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
-  // The bridge retains only one waiting command. Lock every row during the
-  // acknowledgement window, so an action on another draft cannot replace it.
+  let results = $state<Record<string, { name: string; message: string }>>({});
   const busy = $derived(Object.values(pending).some(Boolean));
-  $effect(() => {
-    void atlasSync.snapshot;
-    pending = {};
-    for (const timer of timers.values()) clearTimeout(timer);
-    timers.clear();
-  });
   $effect.pre(() => { if (confirm) openOverlay('atlas-discard'); else closeOverlay('atlas-discard'); });
   $effect(() => { if (confirm) queueMicrotask(() => cancel?.focus()); });
-  onDestroy(() => { closeOverlay('atlas-discard'); for (const timer of timers.values()) clearTimeout(timer); });
+  onDestroy(() => closeOverlay('atlas-discard'));
   async function command(type: 'sync-draft' | 'discard-draft', draft: AtlasDraft) {
     if (!atlasSync.v4 || busy) return;
     pending = { [draft.project]: true };
-    confirm = null; error = '';
-    timers.set(draft.project, setTimeout(() => { pending = {}; timers.delete(draft.project); }, 5000));
-    try { await sendCommand('images', { type, project: draft.project }); }
-    catch (err) { error = String(err); }
+    confirm = null;
+    delete results[draft.project];
+    const result = await atlasSync.request({ type, project: draft.project });
+    pending = {};
+    const message = 'timeout' in result || !result.ok
+      ? !('timeout' in result) && result.code === 'conflict'
+        ? 'Both changed: open it in Images to review the differences'
+        : `${type === 'sync-draft' ? 'Sync' : 'Discard'} did not finish: ${resultReason(result, type === 'sync-draft' ? 60 : 10)}. Draft kept.`
+      : type === 'sync-draft' ? `Synced${result.revision == null ? '' : ` r${result.revision}`}` : 'Draft discarded';
+    results[draft.project] = { name: draft.name, message };
   }
+
   function loss(draft: AtlasDraft) {
     const c = draft.changes;
     const parts = ([['spots', 'spot'], ['grains', 'grain'], ['labels', 'label']] as const)
@@ -43,7 +41,7 @@
   }
 </script>
 <svelte:window onkeydown={e => { if (e.key === 'Escape') confirm = null; }} />
-{#if atlasSync.v4 && atlasSync.drafts.length}
+{#if atlasSync.v4 && (atlasSync.drafts.length || Object.keys(results).length)}
   <section class="board-section stack" aria-label="Changes not yet in the database">
     <h2>Changes not yet in the database</h2>
     {#each atlasSync.drafts as draft}
@@ -53,12 +51,15 @@
           <strong title={draft.name}>{draft.name}</strong>
           <span class="muted small">{mount?.label ?? ''}{mount ? ' · ' : ''}{changeCounts(draft.changes)}</span>
           <span class="faint small">changed {changed(draft.updatedAt)}</span>
+          {#if results[draft.project]}<span class="small" role="status">{results[draft.project].message}</span>{/if}
         </div>
         <button class="btn small" disabled={busy} onclick={() => command('sync-draft', draft)}>Sync</button>
         <button class="btn small" disabled={busy} onclick={() => confirm = draft}>Discard</button>
       </div>
     {/each}
-    {#if error}<p class="error small" role="status">{error}</p>{/if}
+    {#each Object.entries(results).filter(([project]) => !atlasSync.drafts.some(draft => draft.project === project)) as [project, result] (project)}
+      <p class="small" role="status">{result.name}: {result.message}</p>
+    {/each}
   </section>
 {/if}
 {#if confirm}

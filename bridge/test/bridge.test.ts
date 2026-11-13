@@ -10,6 +10,7 @@ import {
   atlasStatus,
   atlasDrafts,
   atlasSynced,
+  commandResult,
   type BridgeCommand,
   MESSAGE_TAG,
   OPEN_FILES_EVENT,
@@ -745,5 +746,45 @@ describe('atlas sync (protocol v4)', () => {
     expect(atlasSynced({ ...synced, changed: null })).toBeNull();
     for (const parse of [atlasStatus, atlasDrafts, atlasSynced])
       for (const value of [null, undefined, [], true, 'bad', {}]) expect(parse(value)).toBeNull();
+  });
+});
+
+describe('v4 command completion', () => {
+  const commands = [
+    { type: 'open-project', project: 'p' }, { type: 'set-mode', project: 'p', mode: 'edit' },
+    { type: 'leave-edit', project: 'p', decision: 'sync' },
+    { type: 'sync-draft', project: 'p' }, { type: 'discard-draft', project: 'p' },
+  ];
+  it('accepts optional completion ids on all five commands, preserving older commands', () => {
+    for (const command of commands) {
+      expect(isBridgeCommand(command)).toBe(true);
+      for (const id of ['a', '_-A09', 'x'.repeat(64)]) expect(isBridgeCommand({ ...command, id })).toBe(true);
+      for (const id of ['', 'x'.repeat(65), 'a.b', 'a/b', 'a b', 'é', 'a\n', null, 1, true, {}])
+        expect(isBridgeCommand({ ...command, id })).toBe(false);
+    }
+  });
+  it('normalises successes and failures, ignoring unknown fields', () => {
+    for (const command of commands) {
+      const success = { type: ATLAS_EVENTS.commandResult, id: '_request-1', command: command.type, ok: true };
+      expect(commandResult({ ...success, future: true })).toEqual(success);
+      expect(commandResult({ ...success, project: 'p', mount: null, revision: null })).toEqual({ ...success, project: 'p', mount: null, revision: null });
+      expect(commandResult({ ...success, mount: 'm', revision: 43 })).toEqual({ ...success, mount: 'm', revision: 43 });
+      for (const code of ['offline', 'conflict', 'unauthorized', 'not-found', 'failed']) {
+        const failure = { ...success, ok: false, code, error: 'x'.repeat(300) };
+        expect(commandResult(failure)).toEqual(failure);
+        expect(commandResult({ ...success, ok: false, code })).toEqual({ ...success, ok: false, code });
+      }
+    }
+  });
+  it('rejects malformed results and inconsistent ok/code/error fields', () => {
+    const result = { type: ATLAS_EVENTS.commandResult, id: 'request-1', command: 'sync-draft', ok: true };
+    for (const patch of [
+      { type: 'unknown' }, { id: '' }, { id: 'a\n' }, { id: 'x'.repeat(65) }, { id: null }, { command: 'report-status' },
+      { command: null }, { ok: 1 }, { ok: undefined }, { ok: false }, { ok: false, code: 'unknown' },
+      { ok: false, code: null }, { ok: false, code: 'failed', error: 2 },
+      { ok: false, code: 'failed', error: 'x'.repeat(301) }, { code: 'offline' }, { error: '' },
+      { project: 'a/b' }, { mount: '' }, { revision: -1 }, { revision: 1.5 }, { revision: '43' },
+    ]) expect(commandResult({ ...result, ...patch })).toBeNull();
+    for (const event of [null, [], {}, 'result']) expect(commandResult(event)).toBeNull();
   });
 });
