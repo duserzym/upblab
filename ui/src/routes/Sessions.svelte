@@ -39,7 +39,7 @@
 
   $effect(() => {
     const url = appUrl;
-    if (!active || !settings.loaded || local) return;
+    if (!active || !settings.loaded || local || !shell.serverUrl) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Retry quickly while down; re-check slowly while up so a stopped server is noticed.
@@ -65,6 +65,10 @@
     {:else}
       <div class="center"><LocalStatusPanel /></div>
     {/if}
+  {:else if !shell.serverUrl}
+    <div class="center">
+      <p class="glass panel muted">No laicpmsdb server configured.</p>
+    </div>
   {:else if status === 'reachable'}
     <ModuleSurface {module} {title} home={appUrl} target={shell.targets[module]} {active} />
   {:else}

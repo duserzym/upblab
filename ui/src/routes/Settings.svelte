@@ -119,89 +119,94 @@
   <div class="page stack narrow">
     <h1>Settings</h1>
 
-    <form class="glass panel stack" onsubmit={saveConnection}>
-      <h3>laicpmsdb</h3>
-      {#if isDesktop}
+    {#if isDesktop}
+      <form class="glass panel stack" onsubmit={saveConnection}>
+        <h3>laicpmsdb</h3>
         <div class="row" role="radiogroup" aria-label="Where laicpmsdb runs">
           <button type="button" class="chip" role="radio" aria-checked={mode === 'local'} onclick={() => (mode = 'local')}>This computer</button>
           <button type="button" class="chip" role="radio" aria-checked={mode === 'server'} onclick={() => (mode = 'server')}>Lab server</button>
         </div>
-      {/if}
 
-      {#if mode === 'server'}
-        <label class="field">
-          Server URL
-          <input type="url" bind:value={server} placeholder="http://localhost:8000" spellcheck="false" required />
-          <span class="faint">The Sessions tab opens <code>&lt;server&gt;/app/</code>.</span>
-          {#if serverError}<span class="error">{serverError}</span>{/if}
-        </label>
-      {:else}
-        <p class="faint small">{localNote}</p>
-        <label class="field">
-          Data root
-          <input type="text" bind:value={dataRoot} placeholder={DEFAULT_DATA_ROOT} spellcheck="false" />
-          <span class="faint">Raw files, attachments and exports. The database is in <code>{status?.dataDir}</code>.</span>
-        </label>
-        {#if !status?.bundle}
+        {#if mode === 'server'}
           <label class="field">
-            laicpmsdb checkout
-            <input type="text" bind:value={devPath} placeholder={status?.devDefault ?? '/path/to/laicpmsdb'} spellcheck="false" />
-            <span class="faint">Development fallback: a checkout with <code>make venv</code> and <code>make ui</code> done.{status?.devDefault ? ' Empty uses the one pinned in modules.lock.json.' : ''}</span>
+            Server URL
+            <input type="url" bind:value={server} placeholder="http://localhost:8000" spellcheck="false" required />
+            <span class="faint">The Sessions tab opens <code>&lt;server&gt;/app/</code>.</span>
+            {#if serverError}<span class="error">{serverError}</span>{/if}
           </label>
-        {/if}
-        <label class="field">
-          PostgreSQL bin folder
-          <input type="text" bind:value={pgBin} placeholder="bundled PostgreSQL" spellcheck="false" />
-          <span class="faint">Leave empty for the bundled PostgreSQL. Development only: a PostgreSQL 17 <code>bin</code> folder, e.g. <code>/opt/homebrew/opt/postgresql@17/bin</code>. The <code>PG_BIN</code> environment variable wins over this.</span>
-        </label>
+        {:else}
+          <p class="faint small">{localNote}</p>
+          <label class="field">
+            Data root
+            <input type="text" bind:value={dataRoot} placeholder={DEFAULT_DATA_ROOT} spellcheck="false" />
+            <span class="faint">Raw files, attachments and exports. The database is in <code>{status?.dataDir}</code>.</span>
+          </label>
+          {#if !status?.bundle}
+            <label class="field">
+              laicpmsdb checkout
+              <input type="text" bind:value={devPath} placeholder={status?.devDefault ?? '/path/to/laicpmsdb'} spellcheck="false" />
+              <span class="faint">Development fallback: a checkout with <code>make venv</code> and <code>make ui</code> done.{status?.devDefault ? ' Empty uses the one pinned in modules.lock.json.' : ''}</span>
+            </label>
+          {/if}
+          <label class="field">
+            PostgreSQL bin folder
+            <input type="text" bind:value={pgBin} placeholder="bundled PostgreSQL" spellcheck="false" />
+            <span class="faint">Leave empty for the bundled PostgreSQL. Development only: a PostgreSQL 17 <code>bin</code> folder, e.g. <code>/opt/homebrew/opt/postgresql@17/bin</code>. The <code>PG_BIN</code> environment variable wins over this.</span>
+          </label>
 
-        {#if status}
-          <dl class="grid-kv">
-            <dt>State</dt>
-            <dd>
-              <span class="dot" style="background: {status.phase === 'ready' ? 'var(--ok)' : status.phase === 'failed' ? 'var(--danger)' : 'var(--text-faint)'}"></span>
-              {status.phase === 'ready' ? 'running' : status.phase}{status.phase === 'starting' && status.step ? ` · ${status.step}` : ''}
-            </dd>
-            <dt>PostgreSQL</dt>
-            <dd>{status.postgres.running ? `127.0.0.1:${status.postgres.port}` : 'stopped'}{status.postgres.source ? ` · ${status.postgres.source}` : ''}</dd>
-            <dt>Service</dt>
-            <dd>{status.url ?? (status.service.running ? `127.0.0.1:${status.service.port}` : 'stopped')}{status.service.source ? ` · ${status.service.source === 'dev' ? status.service.path : `bundle ${status.service.version}`}` : ''}</dd>
-            {#if status.error}<dt>Error</dt><dd class="error">{status.error}</dd>{/if}
-          </dl>
-        {/if}
-      {/if}
-
-      <div class="row">
-        <button class="btn primary" type="submit">Save</button>
-        {#if mode === 'local' && settings.mode === 'local'}
-          {#if running}
-            <button class="btn" type="button" onclick={() => void localService.restart()}>Restart</button>
-            <button class="btn" type="button" onclick={() => void localService.stop()}>Stop</button>
-          {:else}
-            <button class="btn" type="button" onclick={() => void localService.start()}>Start</button>
+          {#if status}
+            <dl class="grid-kv">
+              <dt>State</dt>
+              <dd>
+                <span class="dot" style="background: {status.phase === 'ready' ? 'var(--ok)' : status.phase === 'failed' ? 'var(--danger)' : 'var(--text-faint)'}"></span>
+                {status.phase === 'ready' ? 'running' : status.phase}{status.phase === 'starting' && status.step ? ` · ${status.step}` : ''}
+              </dd>
+              <dt>PostgreSQL</dt>
+              <dd>{status.postgres.running ? `127.0.0.1:${status.postgres.port}` : 'stopped'}{status.postgres.source ? ` · ${status.postgres.source}` : ''}</dd>
+              <dt>Service</dt>
+              <dd>{status.url ?? (status.service.running ? `127.0.0.1:${status.service.port}` : 'stopped')}{status.service.source ? ` · ${status.service.source === 'dev' ? status.service.path : `bundle ${status.service.version}`}` : ''}</dd>
+              {#if status.error}<dt>Error</dt><dd class="error">{status.error}</dd>{/if}
+            </dl>
           {/if}
         {/if}
-        {#if isDesktop}
-          <button class="btn" type="button" aria-pressed={!!logs} onclick={showLogs}>Logs</button>
-        {/if}
-        <span class="small ok">{saved}</span>
-      </div>
 
-      {#if logs}
-        <div class="stack logs">
-          <div class="row">
-            <span class="faint small">In <code>{logs.dir}</code></span>
-            <span class="spacer"></span>
-            <button class="btn" type="button" onclick={refreshLogs}>Refresh</button>
-            <button class="btn" type="button" onclick={() => void localServiceApi.openLogs()}>Open log folder</button>
-          </div>
-          <h4>laicpmsdb.log</h4>
-          <pre class="log-tail">{logs.service || '(empty)'}</pre>
-          <h4>postgres.log</h4>
-          <pre class="log-tail">{logs.postgres || '(empty)'}</pre>
+        <div class="row">
+          <button class="btn primary" type="submit">Save</button>
+          {#if mode === 'local' && settings.mode === 'local'}
+            {#if running}
+              <button class="btn" type="button" onclick={() => void localService.restart()}>Restart</button>
+              <button class="btn" type="button" onclick={() => void localService.stop()}>Stop</button>
+            {:else}
+              <button class="btn" type="button" onclick={() => void localService.start()}>Start</button>
+            {/if}
+          {/if}
+          <button class="btn" type="button" aria-pressed={!!logs} onclick={showLogs}>Logs</button>
+          <span class="small ok">{saved}</span>
         </div>
-      {/if}
-    </form>
+
+        {#if logs}
+          <div class="stack logs">
+            <div class="row">
+              <span class="faint small">In <code>{logs.dir}</code></span>
+              <span class="spacer"></span>
+              <button class="btn" type="button" onclick={refreshLogs}>Refresh</button>
+              <button class="btn" type="button" onclick={() => void localServiceApi.openLogs()}>Open log folder</button>
+            </div>
+            <h4>laicpmsdb.log</h4>
+            <pre class="log-tail">{logs.service || '(empty)'}</pre>
+            <h4>postgres.log</h4>
+            <pre class="log-tail">{logs.postgres || '(empty)'}</pre>
+          </div>
+        {/if}
+      </form>
+    {:else}
+      <div class="glass panel stack">
+        <h3>laicpmsdb</h3>
+        <dl class="grid-kv">
+          <dt>Server</dt><dd><code>{settings.serverUrl}</code></dd>
+        </dl>
+      </div>
+    {/if}
 
     <form class="glass panel stack" onsubmit={saveStudio}>
       <h3>UPbRPy Studio</h3>

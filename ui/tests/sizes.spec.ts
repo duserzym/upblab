@@ -56,7 +56,7 @@ const manifest = {
 async function serveModules(page: Page) {
   await page.route('**/modules/manifest.json', (r) => r.fulfill({ json: manifest }));
   await page.route('**/modules/grainatlas/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>grainatlas</title><p>grainatlas</p>' }));
-  await page.route('http://localhost:8000/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>laicpmsdb</title><p>laicpmsdb</p>' }));
+  await page.route('**/app/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>laicpmsdb</title><p>laicpmsdb</p>' }));
 }
 
 async function desktop(page: Page, store: Record<string, string>) {
@@ -136,14 +136,20 @@ for (const [w, h] of SIZES) {
     });
 
     test('web delivery: Home, Settings and module frames', async ({ page }) => {
+      const server = 'http://localhost:8000';
+      await page.route('http://localhost:8000/**', r => r.fulfill({ json: {} }));
       await serveModules(page);
-      await page.goto('./');
+      await page.addInitScript(() => localStorage.setItem('upbstudio.settings', JSON.stringify({
+        mode: 'server', serverUrl: 'https://stored.example.test',
+      })));
+      await page.goto('./?server=http://localhost:8000');
       await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
       expect(await problems(page, 'web Home')).toEqual([]);
       for (const tab of ['Images', 'Sessions']) {
         await page.getByRole('tab', { name: tab }).click();
         const frame = page.locator('iframe.surface:visible');
         await expect(frame).toBeVisible();
+        if (tab === 'Sessions') expect(new URL((await frame.getAttribute('src'))!).origin).toBe(server);
         const box = (await frame.boundingBox())!;
         expect({ x: box.x, y: box.y, width: box.width, height: box.height }).toEqual({ x: 0, y: BAR, width: w, height: h - BAR });
       }
@@ -151,6 +157,33 @@ for (const [w, h] of SIZES) {
       expect(await problems(page, 'web Review')).toEqual([]);
       await page.getByRole('button', { name: 'Settings' }).click();
       expect(await problems(page, 'web Settings')).toEqual([]);
+      await expect(page.getByLabel('Server URL', { exact: true })).toHaveCount(0);
+      await expect(page.locator('.view:visible').getByText(server, { exact: true })).toBeVisible();
+    });
+
+    test('web development without an override leaves the server unconfigured', async ({ page }) => {
+      const serverRequests: string[] = [];
+      await page.route('http://localhost:8000/**', r => {
+        serverRequests.push(r.request().url());
+        return r.fulfill({ json: {} });
+      });
+      await page.route('**/app/**', r => {
+        serverRequests.push(r.request().url());
+        return r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Unexpected module request</title>' });
+      });
+      await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [] } }));
+      await page.addInitScript(() => localStorage.setItem('upbstudio.settings', JSON.stringify({
+        mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'home',
+      })));
+      await page.goto('./');
+      await expect(page.locator('.view:visible').getByText('No laicpmsdb server configured.', { exact: true })).toBeVisible();
+      for (const tab of ['Sessions', 'Review']) {
+        await page.getByRole('tab', { name: tab, exact: true }).click();
+        await expect(page.locator('.view:visible')).toContainText('No laicpmsdb server configured.');
+        expect(await problems(page, `web ${tab} without a server`)).toEqual([]);
+      }
+      await expect(page.locator('iframe[title="laicpmsdb"]')).toHaveCount(0);
+      expect(serverRequests).toEqual([]);
     });
   });
 }

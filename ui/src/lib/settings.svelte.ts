@@ -4,6 +4,7 @@
 // Web: localStorage. System is the default; an explicit choice is kept per viewer.
 
 import { isDesktop } from './platform';
+import { resolveServerUrl } from './server-url';
 
 export type ThemePref = 'dark' | 'light' | 'system';
 /** '' until the first-run wizard has run. */
@@ -128,7 +129,12 @@ function prefersDark(): boolean {
 
 export class Settings {
   mode = $state<Mode>(DEFAULTS.mode);
-  serverUrl = $state(DEFAULTS.serverUrl);
+  private storedServerUrl = $state(DEFAULTS.serverUrl);
+  /** Every consumer sees the same web origin; persisted URLs are desktop settings. */
+  get serverUrl(): string {
+    return resolveServerUrl(this.storedServerUrl, isDesktop, typeof location === 'undefined' ? '' : location.href);
+  }
+  set serverUrl(value: string) { this.storedServerUrl = value; }
   dataRoot = $state(DEFAULTS.dataRoot);
   devServicePath = $state(DEFAULTS.devServicePath);
   pgBin = $state(DEFAULTS.pgBin);
@@ -214,7 +220,7 @@ export class Settings {
   snapshot(): SettingsData {
     return {
       mode: this.mode,
-      serverUrl: this.serverUrl,
+      serverUrl: this.storedServerUrl,
       dataRoot: this.dataRoot,
       devServicePath: this.devServicePath,
       pgBin: this.pgBin,

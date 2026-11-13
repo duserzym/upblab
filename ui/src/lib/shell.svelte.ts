@@ -125,7 +125,8 @@ class Shell {
   /** Which laicpmsdb to sign in to; null while the local instance is not up yet. */
   get identityTarget(): AuthTarget | null {
     if (this.local) return localService.url ? { server: localService.url, key: LOCAL_KEY } : null;
-    return settings.serverUrl ? { server: settings.serverUrl, key: settings.serverUrl } : null;
+    const server = this.serverUrl;
+    return server ? { server, key: server } : null;
   }
 
   get studioConfig(): StudioConfig {

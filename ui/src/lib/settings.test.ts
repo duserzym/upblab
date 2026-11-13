@@ -36,6 +36,18 @@ function system(value: boolean) {
   for (const fn of changes) fn({ matches: value });
 }
 
+describe('web server settings', () => {
+  it('uses the page origin before load, after load and after updates', async () => {
+    vi.stubGlobal('location', new URL('http://127.0.0.1:8765/desk/?server=http://localhost:8000'));
+    stored = { serverUrl: 'http://localhost:8000' };
+    expect(settings.serverUrl).toBe('http://127.0.0.1:8765');
+    await settings.load();
+    expect(settings.serverUrl).toBe('http://127.0.0.1:8765');
+    await settings.update({ serverUrl: 'https://other.example.test' });
+    expect(settings.serverUrl).toBe('http://127.0.0.1:8765');
+  });
+});
+
 describe('theme preference and migration', () => {
   it('defaults to System and does not turn unrelated saves into a theme choice', async () => {
     expect(DEFAULTS.theme).toBe('system');

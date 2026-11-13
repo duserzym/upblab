@@ -9,7 +9,7 @@ async function openPreview(page: Page, theme: 'light' | 'dark', state: string) {
     { name: 'grainatlas', version: '0.11.0-test', source: 'local', sha256: 'invented', entry: 'modules/grainatlas/index.html' },
   ] } }));
   await page.route('http://localhost:8000/**', (route) => route.fulfill({ json: {} }));
-  await page.goto(`./?update-preview=${state}`);
+  await page.goto(`./?server=http://localhost:8000&update-preview=${state}`);
 }
 async function insideViewport(page: Page) {
   for (const selector of ['[data-testid="check-updates"]', 'header .account', 'header button[aria-label="Settings"]']) {

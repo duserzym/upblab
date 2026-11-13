@@ -42,6 +42,24 @@ The resolver is `ui/src/lib/links.ts`; its tests are the specification.
   `open-files` (bridge/README.md); `ui/src/lib/drop.ts` decides where.
 - **The web delivery.** `/desk/open?url=<encoded link>`.
 
+## Web delivery
+
+Except on the shell development ports described below, the shell served by
+laicpmsdb at `/desk/` always uses the page's own origin
+(`location.origin`) for its database server. Stored server URLs and the
+desktop default are ignored, including before settings load. Web Settings
+shows this server read-only. This keeps tests and scratch servers from ever
+reaching the working service at `localhost:8000`.
+
+On the shell's own development ports (`localhost` or `127.0.0.1`, port 1420
+or 1431), the page origin is the shell, not laicpmsdb. Pass `?server=<url>`
+explicitly to select a server, or leave it out to show the normal no-server
+states. The override must be an HTTP or HTTPS URL; an invalid override also
+leaves no server configured. This applies to every path on those ports,
+including `/desk/` and `/desk/open`. Other web origins use the page origin
+and ignore the override. Web delivery never falls back to a stored URL or
+`http://localhost:8000`. Desktop server selection is unchanged.
+
 ## Trying a link
 
 macOS (a built app; Launch Services learns the schemes once the `.app` has

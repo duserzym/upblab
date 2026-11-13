@@ -79,7 +79,7 @@
   $effect(() => {
     if (!active || !settings.loaded) return;
     const url = shell.homeUrl('sessions');
-    if (!shell.local) void probe(url).then((r) => (server = r.reachable));
+    if (url && !shell.local) void probe(url).then((r) => (server = r.reachable));
     void studioStatus(shell.studioConfig).then((s) => (studio = s));
   });
 

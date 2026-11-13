@@ -19,7 +19,7 @@ window.addEventListener('message', (event) => {
       (m.theme === 'light' || m.theme === 'dark')) {
     window.themePushes.push(m.theme);
     // Images deliberately ignores the push for styling, testing the host's
-    // same-origin attribute fallback; Sessions exercises the cross-origin push.
+    // same-origin attribute fallback; Sessions applies the push.
     if (window.name !== 'lab-shell:images') document.documentElement.dataset.theme = m.theme;
   }
 });
@@ -29,9 +29,10 @@ window.addEventListener('message', (event) => {
 </style></head><body>Module theme stub</body></html>`;
 
 async function serveModules(page: Page) {
+  await page.route('http://localhost:8000/**', route => route.fulfill({ json: {} }));
   await page.route('**/modules/manifest.json', (route) => route.fulfill({ json: manifest }));
   await page.route('**/modules/grainatlas/**', (route) => route.fulfill({ contentType: 'text/html', body: stub }));
-  await page.route('http://localhost:8000/**', (route) => route.fulfill({ contentType: 'text/html', body: stub }));
+  await page.route('**/app/**', (route) => route.fulfill({ contentType: 'text/html', body: stub }));
 }
 
 const shellTheme = (page: Page, theme: string) => expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -74,7 +75,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme: scheme });
       await serveModules(page);
       // Playwright supplies a fresh context; no theme or settings are seeded.
-      await page.goto('./');
+      await page.goto('./?server=http://localhost:8000');
       await expect(page.getByRole('tab', { name: 'Home', exact: true })).toBeVisible();
       await visitTabs(page, scheme);
       await expect(page.getByRole('radio', { name: 'System', exact: true })).toBeChecked();

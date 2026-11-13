@@ -3,7 +3,7 @@
   import type { AtlasDraft, AtlasSyncConfirmation } from '@lab/bridge';
   import { atlasSync, changeCounts } from '../../lib/atlas-sync.svelte';
   import { overview } from '../../lib/overview.svelte';
-  import { confirmationSummary, resultReason } from '../../lib/atlas-requests';
+  import { confirmationSummary, resultMessage } from '../../lib/atlas-requests';
   import { openOverlay, closeOverlay } from '../../lib/overlays.svelte';
   let confirm = $state<AtlasDraft | null>(null);
   let cancel = $state<HTMLButtonElement>();
@@ -28,7 +28,7 @@
     const message = 'timeout' in result || !result.ok
       ? !('timeout' in result) && result.code === 'conflict'
         ? 'Both changed: open it in Images to review the differences'
-        : `${type === 'sync-draft' ? 'Sync' : 'Discard'} did not finish: ${resultReason(result, type === 'sync-draft' ? 60 : 10)}. Draft kept.`
+        : resultMessage(result, type === 'sync-draft' ? 60 : 10, type === 'sync-draft' ? 'Sync' : 'Discard')
       : type === 'sync-draft' ? `Synced${result.revision == null ? '' : ` r${result.revision}`}` : 'Draft discarded';
     results[draft.project] = { name: draft.name, message };
   }

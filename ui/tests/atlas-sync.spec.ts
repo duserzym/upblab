@@ -262,13 +262,31 @@ test('Sync and leave conflict stays in Images with a review note and no leave-an
   await expect(page.getByRole('button', { name: /Leave anyway/ })).toHaveCount(0);
 });
 
+for (const [code, message] of [
+  ['offline', 'The database server could not be reached. Your draft is kept.'],
+  ['unauthorized', 'Sign in again to sync. Your draft is kept.'],
+  ['not-found', 'This project is not in the database. Your draft is kept.'],
+  ['failed', 'Sync did not finish: Failed to fetch. Your draft is kept.'],
+]) {
+  test(`Sync and leave words ${code} from the result code`, async ({ page }) => {
+    await openAtlas(page);
+    await emit(page, status);
+    await tab(page, 'Home').click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('button', { name: 'Sync and leave' }).click();
+    await complete(page, 'leave-edit', { ok: false, code, error: 'Failed to fetch.' });
+    await expect(dialog.getByRole('status')).toHaveText(message);
+    await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
+  });
+}
+
 test('Sync and leave timeout keeps the dialog and leaves only when explicitly requested', async ({ page }) => {
   await openAtlas(page, 'images', 80);
   await emit(page, status);
   await tab(page, 'Home').click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: 'Sync and leave' }).click();
-  await expect(dialog.getByRole('status')).toHaveText('Sync did not finish: no reply in 60 s. Your draft is kept.');
+  await expect(dialog.getByRole('status')).toHaveText('No reply from GrainAtlas in 60 s. Your draft is kept.');
   await expect(dialog.getByRole('button', { name: 'Stay', exact: true })).toHaveClass(/primary/);
   const before = await commands(page);
   await dialog.getByRole('button', { name: 'Leave anyway (draft kept)' }).click();
@@ -299,9 +317,18 @@ test('Home shows sync failure, conflict, timeout and completion even after the d
   const section = page.getByRole('region', { name: 'Changes not yet in the database' });
   const sync = section.getByRole('button', { name: 'Sync', exact: true });
   await sync.click();
-  await complete(page, 'sync-draft', { ok: false, code: 'offline', error: 'Server unreachable' });
-  await expect(section.getByRole('status')).toHaveText('Sync did not finish: Server unreachable. Draft kept.');
+  await complete(page, 'sync-draft', { ok: false, code: 'offline', error: 'Failed to fetch.' });
+  await expect(section.getByRole('status')).toHaveText('The database server could not be reached. Your draft is kept.');
   await expect(sync).toBeEnabled();
+  for (const [code, message] of [
+    ['unauthorized', 'Sign in again to sync. Your draft is kept.'],
+    ['not-found', 'This project is not in the database. Your draft is kept.'],
+    ['failed', 'Sync did not finish: Failed to fetch. Your draft is kept.'],
+  ]) {
+    await sync.click();
+    await complete(page, 'sync-draft', { ok: false, code, error: 'Failed to fetch.' });
+    await expect(section.getByRole('status')).toHaveText(message);
+  }
   await sync.click();
   await complete(page, 'sync-draft', { ok: false, code: 'conflict' });
   await expect(section.getByRole('status')).toHaveText('Both changed: open it in Images to review the differences');
@@ -313,7 +340,7 @@ test('Home shows sync failure, conflict, timeout and completion even after the d
   await page.waitForFunction(() => (window as unknown as { __fake: { listeners: Map<string, unknown> } }).__fake.listeners.has('lab-bridge://notify'));
   await emit(page, drafts);
   await sync.click();
-  await expect(section.getByRole('status')).toHaveText('Sync did not finish: no reply in 60 s. Draft kept.');
+  await expect(section.getByRole('status')).toHaveText('No reply from GrainAtlas in 60 s. Your draft is kept.');
   await expect(sync).toBeEnabled();
 });
 
@@ -358,8 +385,8 @@ test('Sync and quit failure keeps the draft and Quit anyway confirms without ano
   await quitRequest(page);
   const dialog = page.getByRole('dialog', { name: 'Quit with unsynced changes?' });
   await dialog.getByRole('button', { name: 'Sync and quit' }).click();
-  await complete(page, 'leave-edit', { ok: false, code: 'offline', error: 'Server unreachable' });
-  await expect(dialog.getByRole('status')).toHaveText('Sync did not finish: Server unreachable. Your draft is kept.');
+  await complete(page, 'leave-edit', { ok: false, code: 'offline', error: 'Failed to fetch.' });
+  await expect(dialog.getByRole('status')).toHaveText('The database server could not be reached. Your draft is kept.');
   expect(await quitCalls(page, 'quit_confirm')).toEqual([]);
   const before = await commands(page);
   await dialog.getByRole('button', { name: 'Quit anyway (draft kept)' }).click();
@@ -392,7 +419,7 @@ test('Sync and quit timeout reports the draft kept; keep-drafts timeout still qu
   await quitRequest(page);
   const dialog = page.getByRole('dialog', { name: 'Quit with unsynced changes?' });
   await dialog.getByRole('button', { name: 'Sync and quit' }).click();
-  await expect(dialog.getByRole('status')).toHaveText('Sync did not finish: no reply in 60 s. Your draft is kept.');
+  await expect(dialog.getByRole('status')).toHaveText('No reply from GrainAtlas in 60 s. Your draft is kept.');
   await dialog.getByRole('button', { name: 'Stay', exact: true }).click();
   await expect.poll(() => quitCalls(page, 'quit_cancel')).toEqual([{ id: 1 }]);
   expect(await quitCalls(page, 'quit_confirm')).toEqual([]);

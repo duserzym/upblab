@@ -3,13 +3,14 @@ import { MESSAGE_TAG, PROTOCOL_VERSION, SHELL_EVENTS } from '@lab/bridge';
 import { problems } from './problems';
 
 async function people(page: Page, canManage: boolean, displayName = 'Demo staff') {
+  await page.route('http://localhost:8000/**', r => r.fulfill({ json: {} }));
   await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [] } }));
   await page.route('**/v1/**', r => {
     const path = new URL(r.request().url()).pathname;
     const body = path === '/v1/accounts/me'
       ? { username: 'demo', display_name: displayName, can_manage_people: canManage, is_lab_staff: true }
       : path === '/v1/auth/logout' ? {} : [];
-    return r.fulfill({ json: body });
+    return r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Accept' }, json: body });
   });
   await page.route('**/app/**', r => r.fulfill({
     contentType: 'text/html', body: '<!doctype html><title>People fixture</title><h1>People fixture</h1>',
@@ -17,11 +18,11 @@ async function people(page: Page, canManage: boolean, displayName = 'Demo staff'
   await page.addInitScript(() => {
     if (window !== window.top) return;
     localStorage.setItem('upbstudio.settings', JSON.stringify({
-      mode: 'server', serverUrl: location.origin, lastTab: 'home', theme: 'light', themeChosen: true,
+      mode: 'server', lastTab: 'home', theme: 'light', themeChosen: true,
     }));
-    sessionStorage.setItem(`upbstudio.token:${location.origin}`, 'invented-token');
+    sessionStorage.setItem('upbstudio.token:http://localhost:8000', 'invented-token');
   });
-  await page.goto('./');
+  await page.goto('./?server=http://localhost:8000');
   await expect(page.getByRole('button', { name: displayName, exact: true })).toBeVisible();
 }
 
@@ -51,9 +52,12 @@ test('signing out from the hosted page removes People and returns Home', async (
   const frame = page.frameLocator('iframe[title="People & access"]');
   await expect(frame.getByRole('heading', { name: 'People fixture' })).toBeVisible();
   // The hosted module signs the shell out through the normal bridge notification.
-  await frame.locator('body').evaluate((_, message) => parent.postMessage(message, location.origin), {
-    tag: MESSAGE_TAG, v: PROTOCOL_VERSION, id: 'people-sign-out', op: 'notify',
-    event: { type: SHELL_EVENTS.signedOut },
+  await frame.locator('body').evaluate((_, { message, origin }) => parent.postMessage(message, origin), {
+    origin: new URL(page.url()).origin,
+    message: {
+      tag: MESSAGE_TAG, v: PROTOCOL_VERSION, id: 'people-sign-out', op: 'notify',
+      event: { type: SHELL_EVENTS.signedOut },
+    },
   });
   await expect(page.getByRole('tab', { name: 'People & access', exact: true })).toHaveCount(0);
   await expect(page.locator('iframe[title="People & access"]')).toHaveCount(0);

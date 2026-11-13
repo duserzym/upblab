@@ -26,6 +26,7 @@ type Call = [string, Record<string, unknown> | undefined];
 const calls = (page: Page) => page.evaluate(() => (window as unknown as { __fake: { calls: Call[] } }).__fake.calls);
 
 async function home(page: Page, desktop: boolean, inventory = fixtures, brokenThumbnail = false, detailsReady?: Promise<void>) {
+  await page.route('http://localhost:8000/**', r => r.fulfill({ json: {} }));
   await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [{ name: 'grainatlas', version: 'demo', source: 'fixture', sha256: 'demo', entry: 'modules/grainatlas/index.html' }] } }));
   await page.route('**/modules/grainatlas/**', r => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Images fixture</title>' }));
   await page.route('**/atlas/projects/**', r => {
@@ -47,11 +48,11 @@ async function home(page: Page, desktop: boolean, inventory = fixtures, brokenTh
     await page.addInitScript(installFakeTauri, { store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'home', theme: 'light', themeChosen: true }, fixtures: inventory, signedIn: true });
   } else {
     await page.addInitScript(() => {
-      localStorage.setItem('upbstudio.settings', JSON.stringify({ mode: 'server', serverUrl: location.origin, lastTab: 'home', theme: 'light', themeChosen: true }));
-      sessionStorage.setItem(`upbstudio.token:${location.origin}`, 'invented-token');
+      localStorage.setItem('upbstudio.settings', JSON.stringify({ mode: 'server', lastTab: 'home', theme: 'light', themeChosen: true }));
+      sessionStorage.setItem('upbstudio.token:http://localhost:8000', 'invented-token');
     });
   }
-  await page.goto('./');
+  await page.goto(desktop ? './' : './?server=http://localhost:8000');
   await expect(page.getByTestId('session-card')).toHaveCount(Math.min(500, (inventory['/v1/sessions'] as unknown[]).length));
 }
 

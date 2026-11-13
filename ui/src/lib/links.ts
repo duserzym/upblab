@@ -169,6 +169,7 @@ function joinBase(base: string, rest: string): string {
 /** Entry URL of a module tab with no particular route. */
 export function moduleHome(tab: ModuleTab, bases: ModuleBases): string {
   if (tab === 'people') return moduleUrl(tab, '/app/people', bases);
+  if (tab === 'sessions' && !bases.server.trim()) return '';
   return withTheme(tab === 'sessions' ? joinBase(bases.server, '/app/') : joinBase(bases.atlas, 'index.html'), bases.theme);
 }
 
@@ -178,6 +179,9 @@ export function moduleHome(tab: ModuleTab, bases: ModuleBases): string {
  * becomes `<server>/app/#/acquisitions/x`. grainatlas reads its query string.
  */
 export function moduleUrl(tab: ModuleTab, route: string, bases: ModuleBases): string {
+  // Without a laicpmsdb server there is no laicpmsdb page: never fall back to
+  // a bare /app/ on the shell's own origin (in development that is the shell).
+  if (tab !== 'images' && !bases.server.trim()) return '';
   return withTheme(routeUrl(tab, route, bases), bases.theme);
 }
 

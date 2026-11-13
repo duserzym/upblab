@@ -15,6 +15,16 @@ export function requestTimeout(command: AtlasRequest): number {
 export function resultReason(result: RequestResult, seconds: number): string {
   return 'timeout' in result ? `no reply in ${seconds} s` : result.error || result.code || 'unknown failure';
 }
+/** User-facing failure sentences; result codes take precedence over module wording. */
+export function resultMessage(result: RequestResult, seconds: number, action = 'Sync'): string {
+  if ('timeout' in result) return `No reply from GrainAtlas in ${seconds} s. Your draft is kept.`;
+  switch (result.code) {
+    case 'offline': return 'The database server could not be reached. Your draft is kept.';
+    case 'unauthorized': return 'Sign in again to sync. Your draft is kept.';
+    case 'not-found': return 'This project is not in the database. Your draft is kept.';
+    default: return `${action} did not finish: ${resultReason(result, seconds).replace(/\.+$/, '')}. Your draft is kept.`;
+  }
+}
 
 /** One identified command in flight, above the transport's one waiting slot. */
 export function createAtlasRequests(send: (command: AtlasRequest) => Promise<unknown>, enabled: () => boolean) {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { CONFLICT_NOTE, resultReason } from '../lib/atlas-requests';
+  import { CONFLICT_NOTE, resultMessage } from '../lib/atlas-requests';
   import { atlasSync, changeCounts, type LeaveDecision } from '../lib/atlas-sync.svelte';
   import { openOverlay, closeOverlay } from '../lib/overlays.svelte';
   let busy = $state(false), error = $state(''), busyLabel = $state('');
@@ -20,7 +20,7 @@
       atlasSync.note = CONFLICT_NOTE; atlasSync.finishLeave(null);
     } else {
       const action = decision === 'sync' ? 'Sync' : decision === 'keep-draft' ? 'Keeping draft' : 'Discard';
-      error = `${action} did not finish: ${resultReason(result, decision === 'sync' ? 60 : 10)}. Your draft is kept.`;
+      error = resultMessage(result, decision === 'sync' ? 60 : 10, action);
     }
   }
   $effect(() => { if (!atlasSync.leave) { error = ''; busy = false; } });

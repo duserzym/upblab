@@ -12,7 +12,7 @@ async function preview(page: Page, scenario: string, manifest = true) {
     { name: 'laicpmsdb', version: '0.3.0', source: 'release', sha256: 'b'.repeat(64), entry: 'modules/laicpmsdb/index.html' },
   ] } }) : route.fulfill({ status: 404, body: '' }));
   await page.route('http://localhost:8000/**', (route) => route.fulfill({ json: {} }));
-  await page.goto(`./?update-preview=${scenario}`);
+  await page.goto(`./?server=http://localhost:8000&update-preview=${scenario}`);
   await expect(page.getByTestId('check-updates')).toBeVisible();
 }
 

@@ -4,7 +4,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import { atlasSync, changeCounts, needsLeaveGuard } from '../lib/atlas-sync.svelte';
-  import { CONFLICT_NOTE, resultReason } from '../lib/atlas-requests';
+  import { CONFLICT_NOTE, resultMessage } from '../lib/atlas-requests';
   import { isDesktop } from '../lib/platform';
   import { shell } from '../lib/shell.svelte';
   import { openOverlay, closeOverlay } from '../lib/overlays.svelte';
@@ -74,7 +74,7 @@
           await stay();
           // Review differences belongs to GrainAtlas; show its surface directly.
           shell.view = 'images';
-        } else error = `Sync did not finish: ${resultReason(result, 60)}. Your draft is kept.`;
+        } else error = resultMessage(result, 60);
         return;
       }
       if (decision === 'keep-draft' && 'timeout' in result) {

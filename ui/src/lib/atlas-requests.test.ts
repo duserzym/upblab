@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confirmationSummary, createAtlasRequests, requestTimeout, resultReason } from './atlas-requests';
+import { confirmationSummary, createAtlasRequests, requestTimeout, resultMessage, resultReason } from './atlas-requests';
 import type { AtlasRequest } from './atlas-requests';
 
 const command = { type: 'sync-draft', project: 'p' } as const;
@@ -93,6 +93,27 @@ describe('identified Atlas requests', () => {
     expect(requestTimeout({ type: 'set-mode', project: 'p', mode: 'edit' })).toBe(10_000);
     expect(resultReason({ timeout: true }, 60)).toBe('no reply in 60 s');
     expect(resultReason({ type: 'lab.command.result', id: 'a', command: 'sync-draft', ok: false, code: 'offline', error: 'Server unreachable' }, 10)).toBe('Server unreachable');
+  });
+});
+
+describe('command failure wording', () => {
+  it.each([
+    ['offline', 'The database server could not be reached. Your draft is kept.'],
+    ['unauthorized', 'Sign in again to sync. Your draft is kept.'],
+    ['not-found', 'This project is not in the database. Your draft is kept.'],
+    ['failed', 'Sync did not finish: Failed to fetch. Your draft is kept.'],
+  ] as const)('uses the %s code with a raw fetch error', (code, message) => {
+    expect(resultMessage({ type: 'lab.command.result', id: 'a', command: 'sync-draft', ok: false, code, error: 'Failed to fetch.' }, 60))
+      .toBe(message);
+  });
+  it.each([10, 60])('states the %s s timeout without a module error', seconds => {
+    expect(resultMessage({ timeout: true }, seconds)).toBe(`No reply from GrainAtlas in ${seconds} s. Your draft is kept.`);
+  });
+  it('keeps useful failure detail and the non-sync action', () => {
+    const failed = { type: 'lab.command.result', id: 'a', command: 'discard-draft', ok: false, code: 'failed' } as const;
+    expect(resultMessage({ ...failed, error: 'Storage unavailable' }, 10, 'Discard'))
+      .toBe('Discard did not finish: Storage unavailable. Your draft is kept.');
+    expect(resultMessage(failed, 60)).toBe('Sync did not finish: failed. Your draft is kept.');
   });
 });
 
