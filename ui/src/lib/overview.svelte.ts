@@ -302,7 +302,7 @@ class Overview {
     return { mount, atlas: 'error' };
   }
 
-  /** Called on intersection; mount and atlas cards share one manifest request. */
+  /** Called on intersection; remounted cards reuse the same manifest request. */
   async loadThumbnails(mountId: string) {
     const source = this.thumbnailSources.get(mountId);
     if (!source || source.started) return;

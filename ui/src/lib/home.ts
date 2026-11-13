@@ -1,4 +1,5 @@
 import type { MountOut, MountRow, SessionRow } from './overview.svelte';
+import type { AtlasFilter } from './home-sections';
 
 /** Large inventories are explicitly expandable; ordinary inventories are complete. */
 export function capInventory<T>(items: T[]): T[] {
@@ -45,11 +46,30 @@ export function newestMounts(rows: MountOut[]): MountOut[] {
     ? [...rows].sort((a, b) => b.id.localeCompare(a.id)) : rows;
 }
 
-export function mountsShown(rows: MountRow[], query: string, sort: Sort, atlases = false): MountRow[] {
-  return select(atlases ? rows.filter(r => r.atlas && r.atlas !== 'error') : rows, query, sort,
-    r => atlases && r.atlas && r.atlas !== 'error' ? r.atlas.name ?? r.mount.label : r.mount.label,
-    r => [r.mount.label, r.mount.mount_type, atlases && r.atlas && r.atlas !== 'error' ? r.atlas.name : ''].join(' '),
+export function mountsShown(rows: MountRow[], query: string, sort: Sort, filter: AtlasFilter = 'all'): MountRow[] {
+  const filtered = rows.filter(r => filter === 'all' || (filter === 'with'
+    ? !!r.atlas && r.atlas !== 'error'
+    : !r.detailsPending && r.atlas === null));
+  return select(filtered, query, sort, r => r.mount.label,
+    r => [r.mount.label, r.mount.mount_type, r.atlas && r.atlas !== 'error' ? r.atlas.name : ''].join(' '),
     r => r.atlas && r.atlas !== 'error' ? r.atlas.publishedAt : null);
+}
+
+/** Unknown and pending lookups must never be presented as an absent atlas. */
+export function atlasStatus(row: MountRow): { text: string; label: string } {
+  const atlas = row.atlas && row.atlas !== 'error' ? row.atlas : null;
+  if (atlas) {
+    const timestamp = Date.parse(atlas.publishedAt ?? '');
+    const parts = Number.isFinite(timestamp) ? new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).formatToParts(timestamp) : [];
+    const published = parts.length ? `${parts.find(p => p.type === 'day')?.value} ${parts.find(p => p.type === 'month')?.value}` : '';
+    return {
+      text: `Atlas${atlas.version != null ? ` v${atlas.version}` : ''}${published ? ` · ${published}` : ''}`,
+      label: `Has a published atlas${atlas.version != null ? `, version ${atlas.version}` : ''}`,
+    };
+  }
+  if (row.detailsPending) return { text: 'checking…', label: 'Checking for a published atlas' };
+  if (row.atlas === 'error') return { text: 'atlas unknown', label: 'Published atlas status unknown' };
+  return { text: 'No atlas', label: 'No published atlas' };
 }
 
 export function runStatus(row: SessionRow): { tone: 'ok' | 'warning' | 'text-faint'; text: string } {

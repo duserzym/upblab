@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atlasFileUrl, capInventory, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsByMineral, sessionsShown, thumbnailPaths } from './home';
+import { atlasFileUrl, atlasStatus, capInventory, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsByMineral, sessionsShown, thumbnailPaths } from './home';
 import type { MountRow, RunOut, SessionRow } from './overview.svelte';
 
 const run: RunOut = { id: 'r', session_id: 's', pipeline_name: 'UPbRPy', pipeline_version: '0.1', status: 'completed', started_at: '2026-11-05', completed_at: '2026-11-05', upbrpy_version: '0.1', is_preferred_for_session: true, run_by: null, result_count: 2 };
@@ -36,8 +36,37 @@ describe('Home filtering and sorting', () => {
     const rows = [mount('B'), mount('A', '2026-11-05'), mount('C', '2026-11-01')];
     expect(mountsShown(rows, 'epoxy', 'newest').map(r => r.mount.label)).toEqual(['A', 'C', 'B']);
     expect(mountsShown(rows, '', 'oldest').map(r => r.mount.label)).toEqual(['C', 'A', 'B']);
-    expect(mountsShown(rows, 'images', 'az', true).map(r => r.mount.label)).toEqual(['A', 'C']);
-    expect(mountsShown(rows, 'B', 'newest', true)).toEqual([]);
+    expect(mountsShown(rows, 'images', 'az').map(r => r.mount.label)).toEqual(['A', 'C']);
+    expect(mountsShown(rows, 'C images', 'az')).toEqual([rows[2]]);
+    expect(mountsShown(rows, '', 'az', 'with').map(r => r.mount.label)).toEqual(['A', 'C']);
+    expect(mountsShown(rows, 'B', 'newest', 'with')).toEqual([]);
+    expect(mountsShown(rows, '', 'newest', 'without')).toEqual([rows[0]]);
+    expect(rows.map(r => r.mount.label)).toEqual(['B', 'A', 'C']);
+  });
+  it('excludes pending and failed atlas lookups from both definite filters', () => {
+    const pending = { ...mount('Pending'), detailsPending: true };
+    const failed: MountRow = { ...mount('Failed'), atlas: 'error' };
+    expect(mountsShown([pending, failed], '', 'az')).toEqual([failed, pending]);
+    for (const filter of ['with', 'without'] as const) expect(mountsShown([pending, failed], '', 'az', filter)).toEqual([]);
+  });
+  it('sorts atlas matches by mount label even when atlas names sort differently', () => {
+    const a = mount('A', '2026-11-05'), b = mount('B', '2026-11-01');
+    if (a.atlas && a.atlas !== 'error') a.atlas.name = 'Z images';
+    expect(mountsShown([b, a], 'images', 'az', 'with')).toEqual([a, b]);
+  });
+});
+describe('Home atlas status', () => {
+  it('labels published, absent, pending and unknown atlases separately', () => {
+    const published = mount('A', '2026-11-11T12:00:00Z');
+    expect(atlasStatus(published)).toEqual({ text: 'Atlas v3 · 11 Nov', label: 'Has a published atlas, version 3' });
+    expect(atlasStatus(mount('B'))).toEqual({ text: 'No atlas', label: 'No published atlas' });
+    expect(atlasStatus({ ...mount('C'), detailsPending: true })).toEqual({ text: 'checking…', label: 'Checking for a published atlas' });
+    expect(atlasStatus({ ...mount('D'), atlas: 'error' })).toEqual({ text: 'atlas unknown', label: 'Published atlas status unknown' });
+  });
+  it('handles older published atlases without a version, date or name', () => {
+    expect(atlasStatus({ ...mount('A'), atlas: { projectId: 'p', name: null, version: null, publishedAt: null } }))
+      .toEqual({ text: 'Atlas', label: 'Has a published atlas' });
+    expect(atlasStatus(mount('A', 'invalid date')).text).toBe('Atlas v3');
   });
 });
 describe('Home run status', () => {
@@ -104,6 +133,6 @@ describe('Home inventory cap', () => {
     const mounts = Array.from({ length: 40 }, (_, i) => mount(`Zircon_mount_${i}`, '2026-11-01'));
     expect(sessionsShown(capInventory(sessions), 'Session 14', 'az')).toEqual([sessions[14]]);
     expect(mountsShown(capInventory(mounts), 'Zircon_mount_37', 'az')).toEqual([mounts[37]]);
-    expect(mountsShown(capInventory(mounts), 'Zircon_mount_37', 'az', true)).toEqual([mounts[37]]);
+    expect(mountsShown(capInventory(mounts), 'Zircon_mount_37 images', 'az', 'with')).toEqual([mounts[37]]);
   });
 });

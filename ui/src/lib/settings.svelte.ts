@@ -5,6 +5,7 @@
 
 import { isDesktop } from './platform';
 import { resolveServerUrl } from './server-url';
+import { readHomeSections, type HomeSection, type HomeSectionLayout, type HomeSections } from './home-sections';
 
 export type ThemePref = 'dark' | 'light' | 'system';
 /** '' until the first-run wizard has run. */
@@ -26,6 +27,7 @@ export interface SettingsData {
   /** True only after a theme is explicitly picked in Settings. */
   themeChosen: boolean;
   lastTab: string;
+  homeSections: HomeSections;
   reviewScope: string;
   reviewSplit: boolean;
   reviewDataWidth: number;
@@ -51,6 +53,7 @@ export const DEFAULTS: SettingsData = {
   theme: 'system',
   themeChosen: false,
   lastTab: 'home',
+  homeSections: {},
   reviewScope: '',
   reviewSplit: false,
   reviewDataWidth: 50,
@@ -143,6 +146,7 @@ export class Settings {
   theme = $state<ThemePref>(DEFAULTS.theme);
   themeChosen = $state(DEFAULTS.themeChosen);
   lastTab = $state(DEFAULTS.lastTab);
+  homeSections = $state<HomeSections>({});
   reviewScope = $state(DEFAULTS.reviewScope);
   reviewSplit = $state(DEFAULTS.reviewSplit);
   reviewDataWidth = $state(DEFAULTS.reviewDataWidth);
@@ -163,8 +167,29 @@ export class Settings {
   }
 
   private stopMedia: (() => void) | undefined;
+  private homeSave: ReturnType<typeof setTimeout> | undefined;
+
+  /** Drag updates render immediately; persistence waits until the pointer settles. */
+  async updateHomeSection(section: HomeSection, patch: HomeSectionLayout, debounce = false) {
+    this.homeSections = { ...this.homeSections, [section]: { ...this.homeSections[section], ...patch } };
+    clearTimeout(this.homeSave);
+    this.homeSave = undefined;
+    if (debounce) {
+      this.homeSave = setTimeout(() => { void this.flushHomeSections(); }, 300);
+    } else {
+      await this.update({ homeSections: this.homeSections });
+    }
+  }
+
+  async flushHomeSections() {
+    if (this.homeSave === undefined) return;
+    clearTimeout(this.homeSave);
+    this.homeSave = undefined;
+    await this.update({ homeSections: this.homeSections });
+  }
 
   dispose() {
+    void this.flushHomeSections();
     this.stopMedia?.();
     this.stopMedia = undefined;
   }
@@ -196,6 +221,7 @@ export class Settings {
       this.themeChosen = data.themeChosen === true;
       this.theme = this.themeChosen && (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'system';
       this.lastTab = data.lastTab;
+      this.homeSections = readHomeSections(data.homeSections, typeof window === 'undefined' ? undefined : window.innerHeight);
       this.reviewScope = typeof data.reviewScope === 'string' ? data.reviewScope : '';
       this.reviewSplit = data.reviewSplit === true;
       this.reviewDataWidth = clampReviewDataWidth(data.reviewDataWidth);
@@ -212,6 +238,10 @@ export class Settings {
   }
 
   async update(patch: Partial<SettingsData>) {
+    if (patch.homeSections !== undefined) {
+      clearTimeout(this.homeSave);
+      this.homeSave = undefined;
+    }
     Object.assign(this, patch);
     if (patch.theme) applyTheme(this.effectiveTheme);
     await this.backend.write(this.snapshot());
@@ -229,6 +259,7 @@ export class Settings {
       theme: this.theme,
       themeChosen: this.themeChosen,
       lastTab: this.lastTab,
+      homeSections: $state.snapshot(this.homeSections),
       reviewScope: this.reviewScope,
       reviewSplit: this.reviewSplit,
       reviewDataWidth: this.reviewDataWidth,

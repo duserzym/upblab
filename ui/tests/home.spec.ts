@@ -65,7 +65,8 @@ for (const desktop of [true, false]) {
       const rows = await page.getByTestId('session-card').evaluateAll(cards => cards.map(c => ({ x: Math.round(c.getBoundingClientRect().x), y: Math.round(c.getBoundingClientRect().y) })));
       expect(new Set(rows.filter(r => r.y === rows[0].y).map(r => r.x)).size).toBe(columns);
       await expect(page.getByTestId('mount-card')).toHaveCount(6);
-      await expect(page.getByTestId('atlas-card')).toHaveCount(3);
+      await expect(page.getByRole('img', { name: 'Has a published atlas, version 3', exact: true })).toHaveCount(3);
+      await expect(page.getByRole('img', { name: 'No published atlas', exact: true })).toHaveCount(3);
       expect(await problems(page, 'Home board')).toEqual([]);
       await page.getByRole('button', { name: 'Upload LA-ICP-MS session…', exact: true }).click();
       await expect(page.getByTestId('upload-sessions')).toBeVisible();
@@ -121,9 +122,11 @@ for (const desktop of [true, false]) {
     await page.getByRole('tab', { name: 'Home', exact: true }).click();
     await page.getByLabel('Search mounts').fill('glass');
     await expect(page.getByTestId('mount-card')).toHaveCount(3);
-    await page.getByLabel('Search atlases').fill('Demo atlas 1');
-    await expect(page.getByTestId('atlas-card')).toHaveCount(1);
-    await page.getByRole('button', { name: 'Open atlas Demo atlas 1', exact: true }).click();
+    await page.getByLabel('Search mounts').fill('Demo atlas 1');
+    await expect(page.getByTestId('mount-card')).toHaveCount(1);
+    await expect(page.getByTestId('mount-card')).toContainText('Atlas: Demo atlas 1');
+    await page.getByRole('button', { name: 'Open images for Demo mount 1', exact: true }).focus();
+    await page.keyboard.press('Enter');
     await expect(page.getByRole('tab', { name: 'Images', exact: true })).toHaveAttribute('aria-selected', 'true');
     if (desktop) await expect.poll(async () => (await calls(page)).filter(([c, a]) => c === 'module_open' && a?.module === 'images').pop()?.[1]?.url).toContain('project-0');
     else await expect(page.locator('iframe.surface:visible')).toHaveAttribute('src', /project-0/);
@@ -136,7 +139,7 @@ test('eight sessions and eight mounts leave the first row of every section in vi
   const inventory: Record<string, unknown> = { ...fixtures, '/v1/sessions': sessions.slice(0, 8), '/v1/mounts': eightMounts };
   for (const m of eightMounts.slice(6)) inventory[`/v1/mounts/${m.id}/atlas`] = { current: null };
   await home(page, true, inventory);
-  for (const id of ['open-panel', 'session-card', 'mount-card', 'atlas-card']) {
+  for (const id of ['open-panel', 'session-card', 'mount-card']) {
     const box = (await page.getByTestId(id).first().boundingBox())!;
     expect(box.y).toBeGreaterThanOrEqual(48);
     expect(box.y + box.height).toBeLessThanOrEqual(900);
@@ -164,28 +167,53 @@ for (const desktop of [true, false]) {
       await home(page, desktop, largeHomeFixtures);
       const sessions = page.getByRole('region', { name: 'Sessions', exact: true });
       const mounts = page.getByRole('region', { name: 'Mounts', exact: true });
-      const atlases = page.getByRole('region', { name: 'Atlases', exact: true });
+      await expect(mounts).toHaveCount(1);
+      await expect(page.getByRole('region', { name: 'Atlases', exact: true })).toHaveCount(0);
+      await expect(page.locator('.board-section')).toHaveCount(2); // Sessions and the single Mounts section.
       await expect(page.getByTestId('session-card')).toHaveCount(homeSessions.length);
       await expect(page.getByTestId('mount-card')).toHaveCount(homeMounts.length);
       await expect(mounts.locator('.toolbar')).toContainText('Mounts 40');
       await expect(sessions.locator('.toolbar')).toContainText('Sessions 15');
       await expect(page.getByRole('button', { name: 'Show all', exact: true })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Load the rest', exact: true })).toHaveCount(0);
-      await expect(page.getByTestId('atlas-card')).toHaveCount(homeAtlasMounts.length);
-      await expect(atlases.getByRole('status')).toHaveCount(0);
-      await expect(atlases.locator('.toolbar')).toContainText(`Atlases ${homeAtlasMounts.length}`);
-      for (const mount of homeAtlasMounts) {
-        await expect(page.getByTestId('atlas-card').getByText(mount.label, { exact: true })).toHaveCount(1);
+      await expect(mounts.getByRole('status')).toHaveCount(0);
+      await expect(mounts.locator('.toolbar')).toContainText(`Mounts 40 · ${homeAtlasMounts.length} with atlas`);
+      for (const mount of homeMounts) {
+        const card = page.getByTestId('mount-card').filter({ has: page.getByText(mount.label, { exact: true }) });
+        const published = homeAtlasMounts.includes(mount);
+        await expect(card.getByTestId('atlas-symbol')).toHaveAttribute('aria-label', published ? 'Has a published atlas, version 1' : 'No published atlas');
+        await expect(card.getByTestId('atlas-symbol').locator('title')).toHaveText(published ? 'Has a published atlas, version 1' : 'No published atlas');
+        if (!published) {
+          await expect(card).toContainText('No atlas');
+          await expect(card.getByRole('img', { name: `No thumbnail for ${mount.label}`, exact: true })).toHaveCount(1);
+        }
       }
+      const heights = await page.getByTestId('mount-card').evaluateAll(cards => cards.map(card => card.getBoundingClientRect().height));
+      expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
+      const filter = mounts.getByRole('group', { name: 'Filter mounts by atlas' });
+      await expect(filter.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await filter.getByRole('button', { name: 'With atlas', exact: true }).click();
+      await expect(filter.getByRole('button', { name: 'With atlas', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByTestId('mount-card')).toHaveCount(homeAtlasMounts.length);
+      await expect(page.getByTestId('atlas-symbol')).toHaveCount(homeAtlasMounts.length);
+      await expect(page.getByRole('img', { name: 'No published atlas', exact: true })).toHaveCount(0);
+      await expect(mounts.locator('.toolbar')).toContainText(`${homeAtlasMounts.length} matching`);
+      expect(await problems(page, 'Home with atlas filter')).toEqual([]);
+      await filter.getByRole('button', { name: 'Without atlas', exact: true }).click();
+      await expect(page.getByTestId('mount-card')).toHaveCount(homeMounts.length - homeAtlasMounts.length);
+      await expect(page.getByRole('img', { name: 'Has a published atlas, version 1', exact: true })).toHaveCount(0);
+      expect(await problems(page, 'Home without atlas filter')).toEqual([]);
+      await filter.getByRole('button', { name: 'All', exact: true }).click();
+      await expect(page.getByTestId('mount-card')).toHaveCount(40);
       expect(await problems(page, 'Home full inventory before searching')).toEqual([]);
       await page.getByLabel('Search mounts').fill('Zircon_mount_37');
       await expect(page.getByTestId('mount-card')).toHaveCount(1);
       await expect(page.getByTestId('mount-card')).toContainText('Zircon_mount_37');
       await expect(mounts.locator('.toolbar')).toContainText('Mounts 40');
-      await page.getByLabel('Search atlases').fill('Zircon_mount_37');
-      await expect(page.getByTestId('atlas-card')).toHaveCount(1);
-      await expect(page.getByTestId('atlas-card')).toContainText('Published images 37');
-      await expect(page.getByTestId('atlas-card')).toContainText('Zircon_mount_37');
+      await page.getByLabel('Search mounts').fill('Published images 37');
+      await expect(page.getByTestId('mount-card')).toHaveCount(1);
+      await expect(page.getByTestId('mount-card')).toContainText('Atlas: Published images 37');
+      await expect(page.getByTestId('mount-card')).toContainText('Zircon_mount_37');
       await page.getByLabel('Search sessions').fill('Board session 14');
       await expect(page.getByTestId('session-card')).toHaveCount(1);
       expect(await problems(page, 'Home full inventory')).toEqual([]);
@@ -199,34 +227,39 @@ test('base rows and section progress appear while detail requests are pending', 
   await home(page, false, largeHomeFixtures, false, detailsReady);
   const sessions = page.getByRole('region', { name: 'Sessions', exact: true });
   const mounts = page.getByRole('region', { name: 'Mounts', exact: true });
-  const atlases = page.getByRole('region', { name: 'Atlases', exact: true });
   try {
     await expect(page.getByTestId('session-card')).toHaveCount(15);
     await expect(page.getByTestId('mount-card')).toHaveCount(40);
     await expect(sessions.getByRole('status')).toHaveText('loading 0 of 15');
-    await expect(mounts.getByRole('status')).toHaveText('loading 0 of 40');
-    await expect(atlases.getByRole('status')).toHaveText('checking 0 of 40 mounts for atlases');
+    await expect(mounts.getByRole('status')).toHaveText('checking 0 of 40 mounts for atlases');
+    await expect(page.getByTestId('atlas-symbol').first()).toHaveAttribute('aria-label', 'Checking for a published atlas');
+    await mounts.getByRole('button', { name: 'Without atlas', exact: true }).click();
+    await expect(page.getByTestId('mount-card')).toHaveCount(0);
+    await mounts.getByRole('button', { name: 'With atlas', exact: true }).click();
+    await expect(page.getByTestId('mount-card')).toHaveCount(0);
+    await mounts.getByRole('button', { name: 'All', exact: true }).click();
     await page.getByLabel('Search mounts').fill('Zircon_mount_37');
     await expect(page.getByTestId('mount-card')).toHaveCount(1);
     await expect(page.getByTestId('mount-card')).toContainText('39 grains · 47 spots');
-    await expect(atlases.getByText('No published atlases.', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('mount-card')).toContainText('checking…');
   } finally {
     release();
   }
   await expect(sessions.getByRole('status')).toHaveCount(0);
   await expect(mounts.getByRole('status')).toHaveCount(0);
-  await expect(atlases.getByRole('status')).toHaveCount(0);
-  await expect(page.getByTestId('atlas-card')).toHaveCount(homeAtlasMounts.length);
+  await expect(page.getByTestId('mount-card').getByTestId('atlas-symbol')).toHaveAttribute('aria-label', 'Has a published atlas, version 1');
+  await expect(page.getByTestId('mount-card')).toContainText('Atlas: Published images 37');
 });
 
-test('thumbnail manifests wait for a card to approach the viewport and are shared between sections', async ({ page }) => {
+test('thumbnail manifests wait for a card to approach the viewport and survive filtering', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const manifests: string[] = [];
   page.on('request', request => {
     if (new URL(request.url()).pathname.endsWith('/atlas.json')) manifests.push(request.url());
   });
   await home(page, true, largeHomeFixtures);
-  await expect(page.getByTestId('atlas-card')).toHaveCount(homeAtlasMounts.length);
+  await expect(page.getByTestId('mount-card')).toHaveCount(homeMounts.length);
+  await expect(page.getByRole('region', { name: 'Mounts', exact: true }).getByRole('status')).toHaveCount(0);
   const lastManifest = '/atlas/projects/board-project-37/atlas.json';
   expect(manifests.some(url => url.includes(lastManifest))).toBe(false);
   await page.getByLabel('Search mounts').fill('Zircon_mount_37');
@@ -234,10 +267,12 @@ test('thumbnail manifests wait for a card to approach the viewport and are share
   await mount.scrollIntoViewIfNeeded();
   await expect(mount.getByRole('img', { name: 'Atlas overview for Zircon_mount_37', exact: true })).toBeVisible();
   expect(manifests.filter(url => url.includes(lastManifest))).toHaveLength(1);
-  await page.getByLabel('Search atlases').fill('Zircon_mount_37');
-  const atlas = page.getByTestId('atlas-card');
-  await atlas.scrollIntoViewIfNeeded();
-  await expect(atlas.getByRole('img', { name: 'Atlas overview for Zircon_mount_37', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Without atlas', exact: true }).click();
+  await expect(page.getByTestId('mount-card')).toHaveCount(0);
+  await page.getByRole('button', { name: 'With atlas', exact: true }).click();
+  await expect(page.getByTestId('mount-card')).toHaveCount(1);
+  await mount.scrollIntoViewIfNeeded();
+  await expect(mount.getByRole('img', { name: 'Atlas overview for Zircon_mount_37', exact: true })).toBeVisible();
   expect(manifests.filter(url => url.includes(lastManifest))).toHaveLength(1);
 });
 
