@@ -224,7 +224,7 @@ export class Settings {
       this.studioCheckout = data.studioCheckout;
       this.themeChosen = data.themeChosen === true;
       this.theme = this.themeChosen && (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'system';
-      this.lastTab = data.lastTab;
+      this.lastTab = data.lastTab === 'images' ? 'home' : data.lastTab;
       this.homeSections = readHomeSections(data.homeSections, typeof window === 'undefined' ? undefined : window.innerHeight);
       this.reviewScope = typeof data.reviewScope === 'string' ? data.reviewScope : '';
       this.reviewSplit = data.reviewSplit === true;

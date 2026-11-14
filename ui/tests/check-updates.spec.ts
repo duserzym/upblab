@@ -144,7 +144,7 @@ test('desktop standards warning survives the fold and the popover hides native m
   await page.goto('./');
   // The shell listens for host events once settings, modules and links are set up.
   await page.waitForFunction(() => (window as unknown as { __fake: { listeners: Map<string, unknown> } }).__fake.listeners.has('shell://drop'));
-  await page.getByRole('tab', { name: 'Images', exact: true }).click();
+  await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.some(([c]) => c === 'module_open'))).toBe(true);
   const button = page.getByTestId('check-updates');
   await button.click();

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { containedPopover } from '../../lib/contained-popover';
-  import { editInAtlas, openInStudio, showInImages } from '../../lib/apps.svelte';
+  import { editInAtlas, openInStudio } from '../../lib/apps.svelte';
   import uPlot from 'uplot';
   import { untrack, getContext, tick, type Snippet } from 'svelte';
   import { review } from '../../lib/review.svelte';
@@ -75,7 +75,6 @@
     const atlas = { project: spot.atlasProjectId, mount: spot.mountId, spot: spot.atlasSpotId };
     if (action === 'atlas' && spot.atlasProjectId) void editInAtlas(atlas, 'review');
     if (action === 'studio' && (spot.sessionId || spot.runId)) void openInStudio({ session: spot.sessionId, run: spot.runId, acquisition: spot.acquisitionId }, 'review');
-    if (action === 'images') void showInImages(atlas, 'review');
     if (action === 'hide') ontoggle?.(spot);
   }
   const visible = getContext<() => boolean>('upbstudio.review-visible') ?? (() => true);
@@ -488,7 +487,6 @@
 <div popover="manual" role="menu" tabindex="-1" aria-label="Spot actions" class="panel stack spot-menu" bind:this={menu} use:containedPopover={{ anchor: () => menuAnchor, w: 220, h: ontoggle ? 190 : 150 }} onkeydown={menuKey}>
   <button class="btn" role="menuitem" disabled={!menuSpot?.atlasProjectId} title={menuSpot?.atlasProjectId ? 'Edit in grainatlas (E)' : 'No published images'} onclick={() => act('atlas')}>Edit in grainatlas <kbd>E</kbd></button>
   <button class="btn" role="menuitem" disabled={!menuSpot?.sessionId && !menuSpot?.runId} title={menuSpot?.sessionId || menuSpot?.runId ? 'Open in Studio (S)' : 'Not measured yet'} onclick={() => act('studio')}>Open in Studio <kbd>S</kbd></button>
-  <button class="btn" role="menuitem" disabled={!menuSpot?.atlasProjectId && !menuSpot?.mountId} onclick={() => act('images')}>Show in Images</button>
   {#if ontoggle}<button class="btn" role="menuitem" onclick={() => act('hide')}>Hide spot</button>{/if}
 </div>
 {#if onbox}

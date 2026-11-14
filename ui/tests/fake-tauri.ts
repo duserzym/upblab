@@ -46,6 +46,10 @@ export function installFakeTauri(opts: FakeOptions) {
     logDir: '/Users/lab/Library/Logs/edu.umn.upbstudio',
     dataDir: '/Users/lab/Library/Application Support/edu.umn.upbstudio',
   };
+  // Notices standalone grainatlas and Studio leave for the shell; a spec
+  // pushes onto window.__inbox and the next `inbox_take` empties it.
+  const inbox: unknown[] = [];
+  w.__inbox = inbox;
   w.__fake = { calls, store, listeners, fixtures };
   const emit = async (event: string, payload: unknown) => {
     await Promise.all((listeners.get(event) ?? []).map(id => callbacks.get(id)?.({ event, id, payload })));
@@ -114,6 +118,10 @@ export function installFakeTauri(opts: FakeOptions) {
           if (error) throw new Error(error);
           return null;
         }
+        case 'grainatlas_open_paths':
+          return null; // recorded in calls; the standalone app takes the files
+        case 'inbox_take':
+          return inbox.splice(0);
         case 'module_theme':
           if (args?.theme !== 'light' && args?.theme !== 'dark') throw new Error('invalid bridge theme');
           theme = args.theme;

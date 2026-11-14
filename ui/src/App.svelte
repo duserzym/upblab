@@ -4,7 +4,7 @@
   import Home from './routes/Home.svelte';
   import Account from './routes/Account.svelte';
   import { overview } from './lib/overview.svelte';
-  import Images from './routes/Images.svelte';
+  import AtlasViewer from './components/AtlasViewer.svelte';
   import Sessions from './routes/Sessions.svelte';
   import Reduce from './routes/Reduce.svelte';
   import Review from './routes/Review.svelte';
@@ -12,10 +12,7 @@
   import FirstRun from './components/FirstRun.svelte';
   import CheckUpdatesButton from './components/CheckUpdatesButton.svelte';
   import { startScheduler } from './lib/updater.svelte';
-  import AtlasQuitDialog from './components/AtlasQuitDialog.svelte';
-  import AtlasLeaveDialog from './components/AtlasLeaveDialog.svelte';
   import { appWatch } from './lib/app-watch.svelte';
-  import { checkStandaloneSync } from './lib/atlas-refresh';
   import AccountDialog from './components/AccountDialog.svelte';
   import { identity } from './lib/identity.svelte';
   import { canManagePeople } from './lib/people';
@@ -29,7 +26,6 @@
 
   const fixedTabs: { id: View; label: string; hint: string }[] = [
     { id: 'home', label: 'Home', hint: 'Overview and links' },
-    { id: 'images', label: 'Images', hint: 'grainatlas' },
     { id: 'sessions', label: 'Sessions', hint: 'laicpmsdb' },
     { id: 'review', label: 'Review', hint: 'Results with their images' },
     { id: 'reduce', label: 'Reduce', hint: 'UPbRPy Studio' },
@@ -62,7 +58,7 @@
   });
 
   $effect(() => { void identity.revision; void identity.target?.server; untrack(() => appWatch.syncSource()); });
-  onMount(() => () => appWatch.clear());
+  onMount(() => { appWatch.start(); return () => appWatch.clear(); });
 
   // Home and Account use the same session inventory, scoped to the active sign-in.
   $effect(() => {
@@ -84,7 +80,7 @@
     if (isDesktop && settings.loaded) void publishTheme(settings.effectiveTheme);
   });
 
-  // Images and Home work without starting the local database processes.
+  // Home works without starting the local database processes.
   $effect(() => {
     if (isDesktop && settings.loaded && localService.initialised && !firstRun &&
         settings.mode === 'local' && (shell.view === 'sessions' || shell.view === 'review' || shell.view === 'people')) {
@@ -113,13 +109,36 @@
     const { listen } = await import('@tauri-apps/api/event');
     await listen<string>('shell://menu', (e) => {
       const id = e.payload;
+      if (id === 'shell:close') { closeCurrent(); return; }
       if (firstRun || identity.dialog) return;
       if (id.startsWith('tab:')) shell.show(id.slice(4) as View);
       else if (id === 'settings') shell.show('settings');
-      else if (id === 'module:reload' && (shell.view === 'images' || shell.view === 'sessions' || shell.view === 'people')) {
+      else if (id === 'module:reload' && (shell.view === 'sessions' || shell.view === 'people')) {
         void desktopModules.reload(shell.view);
+      } else if (id === 'module:reload' && shell.view === 'review') {
+        void reviewRefresh();
       }
     });
+  }
+
+  async function reviewRefresh() {
+    const { review } = await import('./lib/review.svelte');
+    await review.load();
+    if (settings.reviewSplit) await desktopModules.reload('images');
+  }
+
+  // Cmd+W (native menu, src-tauri/src/menu.rs): close what is open, never the window.
+  // The sign-in dialog, then Settings or Account (back to the last tab), else an
+  // open menu or popover through Escape. With nothing open it does nothing.
+  function closeCurrent() {
+    if (firstRun) return;
+    if (identity.dialog) { identity.dialog = false; return; }
+    if (shell.view === 'settings' || shell.view === 'account') {
+      shell.show(fixedTabs.find(t => t.id === settings.lastTab)?.id ?? 'home');
+      return;
+    }
+    const target = document.activeElement ?? document.body;
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
   }
 
   // Web delivery: page-level shortcuts.
@@ -158,8 +177,8 @@
 </script>
 
 
-<svelte:window onfocus={() => { void checkStandaloneSync(); void appWatch.check(); }} />
-<svelte:document onvisibilitychange={() => { if (document.visibilityState === 'visible') { void checkStandaloneSync(); void appWatch.check(); } }} />
+<svelte:window onfocus={() => { void appWatch.check(); }} />
+<svelte:document onvisibilitychange={() => { appWatch.visibilityChanged(); }} />
 <div class="shell">
   <header class="bar glass">
     <span class="brand"><img class="mark" src="./favicon.svg" alt="" width="22" height="22" />UPb Lab</span>
@@ -178,7 +197,7 @@
     <span class="spacer"></span>
     <CheckUpdatesButton />
     {#if opener.dragging}
-      <span class="drop-hint" role="status">Drop to open: images go to Images, Qtegra exports to Sessions</span>
+      <span class="drop-hint" role="status">Drop to open: images go to grainatlas, Qtegra exports to Sessions</span>
     {/if}
     {#if identity.target}
       <button
@@ -196,7 +215,7 @@
       aria-label="Settings"
       title="Settings (Ctrl/⌘ ,)"
       aria-pressed={shell.view === 'settings'}
-      onclick={() => shell.show(shell.view === 'settings' ? (settings.lastTab as View) : 'settings')}
+      onclick={() => shell.show(shell.view === 'settings' ? (fixedTabs.find(t => t.id === settings.lastTab)?.id ?? 'home') : 'settings')}
     >
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
         ><path
@@ -219,9 +238,9 @@
         <Sessions module="people" title="People & access" active={shell.view === 'people'}
           unreachable="The People & access tab shows laicpmsdb’s accounts, groups and access page from" />
       {/if}
-      <Review active={shell.view === 'review'} imagesOnly={shell.view === 'images'} split={reviewSplit}>
+      <Review active={shell.view === 'review'} split={reviewSplit}>
         {#snippet images(active, layoutKey)}
-          <Images {active} {layoutKey} />
+          <AtlasViewer {active} {layoutKey} />
         {/snippet}
       </Review>
       <Reduce active={shell.view === 'reduce'} />
@@ -230,6 +249,4 @@
     {/if}
   </main>
   <AccountDialog />
-  <AtlasLeaveDialog />
-  <AtlasQuitDialog />
 </div>

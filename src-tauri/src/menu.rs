@@ -10,27 +10,35 @@ use crate::{MAIN_WINDOW, SHELL_WEBVIEW};
 
 /// Event the shell listens on; the payload is the menu item id.
 pub const EVENT_MENU: &str = "shell://menu";
+/// Menu id for Cmd+W, handled by the shell page (never closes the window).
+pub const MENU_CLOSE: &str = "shell:close";
 
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     // The platform default (app, Edit with copy/paste, Window) plus a Tabs menu.
     let menu = Menu::default(app)?;
     // Native Quit invokes terminate: on macOS, bypassing window CloseRequested.
     // Replace that predefined action, preserving its platform label and place.
+    // Native Close Window (Cmd+W) closes the only window, which ends the app.
+    // Cmd+W closes what the shell page has open instead (Settings, Account,
+    // a maximised Review panel, an open menu); with nothing open it does nothing.
     let quit_text = PredefinedMenuItem::quit(app, None)?.text()?;
+    let close_text = PredefinedMenuItem::close_window(app, None)?.text()?;
     for item in menu.items()? {
         if let Some(submenu) = item.as_submenu() {
             for (at, item) in submenu.items()?.iter().enumerate() {
                 if let Some(predefined) = item.as_predefined_menuitem() {
-                    if predefined.text()? == quit_text {
+                    let text = predefined.text()?;
+                    let replacement = if text == quit_text {
+                        Some(("app:quit", quit_text.as_str(), "CmdOrCtrl+Q"))
+                    } else if text == close_text {
+                        Some((MENU_CLOSE, "Close Tab", "CmdOrCtrl+W"))
+                    } else {
+                        None
+                    };
+                    if let Some((id, label, accelerator)) = replacement {
                         submenu.remove_at(at)?;
                         submenu.insert(
-                            &MenuItem::with_id(
-                                app,
-                                "app:quit",
-                                &quit_text,
-                                true,
-                                Some("CmdOrCtrl+Q"),
-                            )?,
+                            &MenuItem::with_id(app, id, label, true, Some(accelerator))?,
                             at,
                         )?;
                     }
@@ -44,10 +52,9 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         true,
         &[
             &MenuItem::with_id(app, "tab:home", "Home", true, Some("CmdOrCtrl+1"))?,
-            &MenuItem::with_id(app, "tab:images", "Images", true, Some("CmdOrCtrl+2"))?,
-            &MenuItem::with_id(app, "tab:sessions", "Sessions", true, Some("CmdOrCtrl+3"))?,
-            &MenuItem::with_id(app, "tab:review", "Review", true, Some("CmdOrCtrl+4"))?,
-            &MenuItem::with_id(app, "tab:reduce", "Reduce", true, Some("CmdOrCtrl+5"))?,
+            &MenuItem::with_id(app, "tab:sessions", "Sessions", true, Some("CmdOrCtrl+2"))?,
+            &MenuItem::with_id(app, "tab:review", "Review", true, Some("CmdOrCtrl+3"))?,
+            &MenuItem::with_id(app, "tab:reduce", "Reduce", true, Some("CmdOrCtrl+4"))?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,
@@ -74,7 +81,11 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                 crate::geometry::save(&window);
             }
             crate::quit::request(app);
-        } else if id.starts_with("tab:") || id == "settings" || id == "module:reload" {
+        } else if id.starts_with("tab:")
+            || id == "settings"
+            || id == "module:reload"
+            || id == MENU_CLOSE
+        {
             if let Err(err) = app.emit_to(EventTarget::webview(SHELL_WEBVIEW), EVENT_MENU, id) {
                 log::warn!("menu event not delivered: {err}");
             }

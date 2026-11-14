@@ -6,7 +6,8 @@ import { isDesktop, launchStudio, logInfo, logWarn, openExternal, studioStatus, 
 import { identity } from './identity.svelte';
 import { localService } from './localService.svelte';
 import { settings } from './settings.svelte';
-import { atlasSync } from './atlas-sync.svelte';
+import { editInAtlas } from './apps.svelte';
+import { overview } from './overview.svelte';
 import { appWatch } from './app-watch.svelte';
 import { review } from './review.svelte';
 import { overlays } from './overlays.svelte';
@@ -141,10 +142,6 @@ class Shell {
   }
 
   async show(view: View): Promise<boolean> {
-    if (view !== this.view && this.view === 'images' && atlasSync.guardNeeded) {
-      const decision = await atlasSync.requestLeave();
-      if (!decision) return false;
-    }
     this.view = view;
     if (view !== 'settings' && view !== 'account' && view !== 'people' && settings.loaded && settings.lastTab !== view) void settings.update({ lastTab: view });
     return true;
@@ -177,14 +174,9 @@ class Shell {
   }
 
   /** Load a module route and show its tab. */
-  async go(tab: ModuleTab, route: string): Promise<boolean> {
-    if (tab !== this.view && this.view === 'images' && atlasSync.guardNeeded) {
-      if (!await this.show(tab)) return false;
-      this.load(tab, route);
-    } else {
-      this.load(tab, route);
-      void this.show(tab);
-    }
+  async go(tab: Exclude<ModuleTab, 'images'>, route: string): Promise<boolean> {
+    this.load(tab, route);
+    await this.show(tab as Exclude<ModuleTab, 'images'>);
     return true;
   }
 
@@ -275,9 +267,12 @@ class Shell {
         this.record(url, from, 'opened in the system browser');
         await openExternal(r.url);
         return true;
+      case 'atlas':
+        await editInAtlas({ project: r.project, mount: null, spot: r.spot }, from);
+        return true;
       case 'tab': {
-        if (!await this.go(r.tab, r.route)) return false;
-        this.record(url, from, `${r.tab === 'sessions' ? 'Sessions' : 'Images'} ${r.route}`);
+        if (!await this.go(r.tab as Exclude<ModuleTab, 'images'>, r.route)) return false;
+        this.record(url, from, `${r.tab} ${r.route}`);
         await logInfo(`[links] ${url} -> ${r.tab} ${r.route}`);
         return true;
       }
@@ -286,6 +281,7 @@ class Shell {
           const reply = await identity.get<{ session_id: string }>(`/v1/runs/${encodeURIComponent(r.id)}`);
           if (reply.status !== 200 || !/^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(reply.body?.session_id ?? '')) throw new Error('Run session unavailable');
           if (!await this.show('review')) return false;
+          await overview.refreshSession(reply.body.session_id);
           await review.open({ kind: 'session', id: reply.body.session_id, run: r.id });
           this.record(url, from, `Review run ${r.id}`);
           return true;

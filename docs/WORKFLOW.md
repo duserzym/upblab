@@ -1,6 +1,6 @@
 # The lab workflow and the hand-offs between the apps
 
-**Status:** v1.2, 2026-11-13. This is the cross-repository contract for how a
+**Status:** v1.3, 2026-11-14. This is the cross-repository contract for how a
 sample travels through the four applications. Each repository's own plan
 points here for the hand-offs and keeps its internal design to itself:
 `laicpmsdb/docs/DATABASE_ARCHITECTURE_PLAN.md` section 8,
@@ -8,10 +8,14 @@ points here for the hand-offs and keeps its internal design to itself:
 and `ARCHITECTURE_PLAN.md` here (decision 10, phases 3 and 4). Change this
 page first, bump the version line, then the app plans.
 
-Changed in v1.1: results appear in the Review tab with plots linked both ways to Images.
+Changed in v1.1: results appear in the Review tab with plots linked both ways to the images.
 
 Changed in v1.2: UPb Lab is the upload and review portal; edits open the
 standalone apps in context (section 4a).
+
+Changed in v1.3: UPb Lab has no Images tab. Uploads and edits go to
+standalone grainatlas; Review shows the images read-only; grainatlas and
+Studio leave a notice file when they change the database (section 4a).
 
 ## 1. The workflow
 
@@ -29,7 +33,7 @@ standalone apps in context (section 4a).
 | --- | --- | --- | --- |
 | 0. Register samples | laicpmsdb (SESAR/IGSN sheet import or form) | `sample` | sample names used in spot names |
 | 1. Mount and polish | laicpmsdb mount page | `mount`, `mount_slot` (which sample sits where) | mount id |
-| 2. Image | Home’s **Upload image set** opens the SEM package or `.grainatlas` project in grainatlas; stitch, correct, segment, scale | grainatlas project (local folder) **published** to laicpmsdb as an *atlas bundle* attached to the mount | `atlas://` project id; grain rows |
+| 2. Image | Home’s **Upload image set** hands the SEM package, `.grainatlas` folder or `.gaproj` file to standalone grainatlas (web: the hosted build in a new tab); stitch, correct, segment, scale | grainatlas project (local folder) **published** to laicpmsdb as an *atlas bundle* attached to the mount | `atlas://` project id; grain rows |
 | 3. Place spots | grainatlas, with the mount's sample names | `physical_spot` rows in laicpmsdb (spot sync) with `atlas_project_id`, `atlas_spot_id` | laser spot list (registered to the laser stage) |
 | 4. Laser session | instrument; Qtegra per-spot export with the spot name as the acquisition label | nothing yet | the export folder |
 | 5. Upload | Home’s **Upload LA-ICP-MS session** opens laicpmsdb ingest (also UI drag-drop, or the command) | `session`, `acquisition` (matched to `physical_spot` by label), raw assets, sweep Parquet | "Reduce in UPbRPy Studio" |
@@ -158,13 +162,23 @@ links the pipeline and never reduces.
    `upbr://run/<id>` or `upbr://session/<id>` plus `acquisition=<id>` and
    `via=upblab`. Studio opens at that analysis with its raw sweep shown; an
    open project is raised, not fetched again.
-3. Coming back: the database is the channel. UPb Lab rereads the atlas
-   revision and the session's runs when its window gains focus and every
-   20 s for two hours after an opener, refreshing Review and Home with the
-   selection kept. After a submission from a `via=upblab` project Studio
-   opens `laicpmsdb://run/<id>`, which shows that run in Review.
+3. Coming back: the database is the channel. After a sync or publish,
+   standalone grainatlas leaves `inbox/atlas-synced/<mount>.json` in UPb
+   Lab's data folder; after a submit Studio leaves
+   `inbox/run-submitted/<session>.json`. UPb Lab reads them every 5 s while
+   visible and rereads the database. As a fallback it rereads the atlas
+   revision and the session's runs on focus and every 60 s while visible,
+   for each app it opened in the last two hours and for Review's current
+   scope, refreshing Review and Home with the selection kept. After a
+   submission from a `via=upblab` project Studio also opens
+   `laicpmsdb://run/<id>`, which shows that run in Review.
+4. **Upload image set** (Home, or image folders dropped on the window)
+   hands the paths to standalone grainatlas, which opens each as a mount
+   tab; segmenting and publishing happen there (decision of 2026-11-14,
+   which removed UPb Lab's Images tab).
 
-Arguments and links are specified in `docs/deep-links.md` (Openers).
+Arguments, links and notice files are specified in `docs/deep-links.md`
+(Openers; Notices from the standalone apps).
 Older apps ignore the additions and open the mount, session or run.
 
 ## 5. Results as attributes
@@ -189,7 +203,7 @@ Older apps ignore the additions and open the mount, session or run.
 | --- | --- |
 | `laicpmsdb://acquisition/<id>`, `session/<id>`, `sample/<id>`, `mount/<id>`, `search?label=` | Sessions tab routes |
 | `laicpmsdb://ingest?path=…` (desktop) | the ingest dialog with the folder prefilled |
-| `grainatlas://project/<id>/spot/<id>` | Images tab; the project from the recent list, else from `server/atlas/projects/<id>/` |
+| `grainatlas://project/<id>/spot/<id>` | standalone grainatlas on that project and spot (desktop); the hosted build in a new tab (web) |
 | `upbr://session/<id>?server=&code=` | launch Studio in database mode |
 | `upbr://run/<id>?server=` | Studio opens the project of that run from its cache or re-fetches the bundle |
 | `upbr://session/<id>` or `run/<id>` with `&acquisition=<id>&via=upblab` | the same, at one analysis with its raw sweep (section 4a) |

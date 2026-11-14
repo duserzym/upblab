@@ -11,8 +11,8 @@
 //   laicpmsdb://search?label=<label>      -> Sessions, /app/search?label=<label>
 //   laicpmsdb://data-model[/<table>[/<column>]] -> Sessions, /app/data-model[/…] (laicpmsdb's Data Model tab)
 //   laicpmsdb://method-code/<CODE>        -> Sessions, /app/method-codes/<CODE> (laicpmsdb's Method Codes tab)
-//   grainatlas://project/<id>             -> Images,   /atlas/?project=<id>
-//   grainatlas://project/<id>/spot/<id>   -> Images,   /atlas/?project=<id>&spot=<id>
+//   grainatlas://project/<id>             -> standalone or hosted grainatlas
+//   grainatlas://project/<id>/spot/<id>   -> standalone or hosted grainatlas, with spot
 //   upbr://session/<id>?server=&code=     -> launch UPbRPy Studio in database mode (docs/WORKFLOW.md 4)
 //   upbr://run/<id>?server=               -> launch Studio on the project of that reduction run
 //   laicpmsdb://auth/callback?code=…      -> finish the shell's ORCID or Google sign-in
@@ -20,15 +20,16 @@
 //
 // Anything else is refused; the caller logs the refusal.
 
-export type TabId = 'home' | 'images' | 'sessions' | 'review' | 'reduce' | 'people';
+export type TabId = 'home' | 'sessions' | 'review' | 'reduce' | 'people';
 export type ModuleTab = 'images' | 'sessions' | 'people';
 
 export const SCHEMES = ['laicpmsdb', 'grainatlas', 'upbr'] as const;
 export type Scheme = (typeof SCHEMES)[number];
 
 export type Resolution =
-  | { kind: 'tab'; tab: ModuleTab; route: string; url: string }
+  | { kind: 'tab'; tab: Exclude<ModuleTab, 'images'>; route: string; url: string }
   | { kind: 'studio'; tab: 'reduce'; object: 'session' | 'run'; id: string; url: string }
+  | { kind: 'atlas'; project: string; spot?: string; url: string }
   | { kind: 'review-run'; id: string; url: string }
   | { kind: 'auth'; code: string; url: string }
   | { kind: 'auth-error'; error: string; url: string }
@@ -127,10 +128,10 @@ export function resolve(input: string): Resolution {
     }
     case 'grainatlas': {
       if (kind === 'project' && parts.length === 2) {
-        return { kind: 'tab', tab: 'images', route: `/atlas/?project=${id}`, url };
+        return { kind: 'atlas', project: id, url };
       }
       if (kind === 'project' && parts.length === 4 && sub === 'spot') {
-        return { kind: 'tab', tab: 'images', route: `/atlas/?project=${id}&spot=${subId}`, url };
+        return { kind: 'atlas', project: id, spot: subId, url };
       }
       return refuse(url, `unknown grainatlas link "${parts.join('/')}"`);
     }
@@ -231,4 +232,12 @@ export function withoutTheme(url: string): string {
   params.delete('theme');
   const search = params.toString();
   return `${head.slice(0, query)}${search ? `?${search}` : ''}${url.includes('#') ? `#${tail}` : ''}`;
+}
+
+/** Reuse the module's configured home, preserving server and theme parameters. */
+export function atlasEditorUrl(home: string, project: string, spot?: string | null): string {
+  const url = new URL(home, location.href);
+  url.searchParams.set('project', project);
+  if (spot) url.searchParams.set('spot', spot);
+  return url.href;
 }

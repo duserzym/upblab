@@ -112,8 +112,8 @@ for (const [w, h] of SIZES) {
       expect(await problems(page, 'tab bar while dragging')).toEqual([]);
       await emit(page, 'shell://drag', false);
 
+      await expect(page.getByRole('tab', { name: 'Images' })).toHaveCount(0);
       for (const [tab, module] of [
-        ['Images', 'images'],
         ['Sessions', 'sessions'],
       ] as const) {
         await page.getByRole('tab', { name: tab }).click();
@@ -145,7 +145,8 @@ for (const [w, h] of SIZES) {
       await page.goto('./?server=http://localhost:8000');
       await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
       expect(await problems(page, 'web Home')).toEqual([]);
-      for (const tab of ['Images', 'Sessions']) {
+      await expect(page.getByRole('tab', { name: 'Images' })).toHaveCount(0);
+      for (const tab of ['Sessions']) {
         await page.getByRole('tab', { name: tab }).click();
         const frame = page.locator('iframe.surface:visible');
         await expect(frame).toBeVisible();
@@ -193,7 +194,7 @@ test(`the smallest window (${MIN[0]} x ${MIN[1]}) has no sideways overflow`, asy
   await desktop(page, { mode: 'server', serverUrl: 'http://localhost:8000' });
   await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
   expect(await problems(page, 'Home')).toEqual([]);
-  for (const tab of ['Images', 'Sessions', 'Reduce']) {
+  for (const tab of ['Sessions', 'Review', 'Reduce']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     expect(await problems(page, `${tab} at minimum size`)).toEqual([]);
   }
@@ -206,10 +207,12 @@ test('desktop: drops go to the tab that reads them, never asking', async ({ page
   await desktop(page, { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'home' });
   await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
 
+  // Images go to standalone grainatlas; the shell stays where it is.
   await emit(page, 'shell://drop', { paths: [PKG], over: 'shell' });
-  await expect(page.getByRole('tab', { name: 'Images' })).toHaveAttribute('aria-selected', 'true');
-  const offer = (await calls(page)).find(([c]) => c === 'files_offer')![1]!;
-  expect(offer).toMatchObject({ module: 'images', kind: 'package', name: 'Mount_XS_150X', path: PKG, nudge: true });
+  await expect.poll(async () => (await calls(page)).filter(([c]) => c === 'grainatlas_open_paths').map(([, a]) => a)).toEqual([{ paths: [PKG] }]);
+  await expect(page.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('status').filter({ hasText: 'Mount_XS_150X' })).toContainText('Files handed to grainatlas');
+  expect((await calls(page)).filter(([c]) => c === 'files_offer')).toEqual([]);
 
   await emit(page, 'shell://drop', { paths: [QTEGRA], over: 'grainatlas' });
   await expect(page.getByRole('tab', { name: 'Sessions' })).toHaveAttribute('aria-selected', 'true');
@@ -219,6 +222,7 @@ test('desktop: drops go to the tab that reads them, never asking', async ({ page
 
   await page.getByRole('tab', { name: 'Home' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Apatite_demo' })).toContainText('Qtegra export Apatite_demo, 2 files');
+  expect((await calls(page)).filter(([c]) => c === 'files_offer').map(([, a]) => a?.module)).toEqual(['sessions']);
   expect(await problems(page, 'Home after drops')).toEqual([]);
 });
 

@@ -16,7 +16,7 @@ import { createFrameHost, pushOpenFiles, pushCommand } from '@lab/bridge/host';
 import { fileUrlToPath } from './drop';
 import { identity, SIGN_OUT_EVENTS } from './identity.svelte';
 import { opener } from './opener.svelte';
-import { desktopFiles, desktopModules, isDesktop, logInfo } from './platform';
+import { desktopFiles, desktopModules, isDesktop, logInfo, logWarn } from './platform';
 import { shell } from './shell.svelte';
 import { settings } from './settings.svelte';
 import { selection } from './selection.svelte';
@@ -63,11 +63,10 @@ export function onModuleEvent(event: BridgeEvent, source: string) {
       void publishImagesPresentation();
     }
     void dispatchSpotAction(event, source).catch(err => shell.note('Images spot action', 'review', String(err), true));
-    if (synced) void atlasSyncedNotice(synced);
+    if (synced) void atlasSyncedNotice(synced).catch(err => logWarn(`[atlas] refresh after a sync notice failed: ${String(err)}`));
   }
   const selected = spotSelection(event);
   if (selected) selection.fromImages = { ...selected, at: Date.now() };
-  if (event.type === 'grainatlas.files.opened') opener.outcome(source, event);
   if (event.type === 'lab.open-files.seen') opener.seen(source, event);
 }
 
@@ -135,6 +134,9 @@ export function unregisterFrame(tab: ModuleTab): void {
 /** Ask a module to focus an object without navigating away from its open project. */
 export async function sendCommand(tab: ModuleTab, command: BridgeCommand): Promise<boolean> {
   if (!isBridgeCommand(command)) return false;
+  if (tab === 'images' && (['set-mode', 'leave-edit', 'sync-draft', 'discard-draft'].includes(command.type)
+    || command.type === 'set-presentation' && command.presentation !== 'viewer'
+    || command.type === 'open-project' && command.mode === 'edit')) return false;
   if (!atlasSync.v4 && ['open-project', 'set-mode', 'leave-edit', 'sync-draft', 'discard-draft', 'report-status', 'atlas-synced'].includes(command.type)) return false;
   if (isDesktop) return desktopModules.command(tab, command);
   const frame = frames.get(tab);
@@ -152,6 +154,9 @@ export async function listenForLinks(): Promise<void> {
   if (isDesktop) {
     const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link');
     const { listen } = await import('@tauri-apps/api/event');
+    await listen<{ id: number }>('shell://quit-request', e => {
+      void import('@tauri-apps/api/core').then(({ invoke }) => invoke('quit_answer', { id: e.payload.id, answer: 'go' }));
+    });
     await onOpenUrl((urls) => routeOsUrls(urls));
     await listen<BridgeOpenPayload>(EVENTS.open, (e) => void shell.handleLink(e.payload.url, e.payload.source));
     await listen<{ module: ModuleTab }>('lab-bridge://ready', e => moduleReady(e.payload.module));

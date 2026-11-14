@@ -23,8 +23,9 @@
   import GeochemistryPlot from '../components/review/GeochemistryPlot.svelte';
   import DepthPlot from '../components/review/DepthPlot.svelte';
   import SpotDetails from '../components/review/SpotDetails.svelte';
-  let { active, split = false, imagesOnly, images }: {
-    active: boolean; split?: boolean; imagesOnly: boolean; images: Snippet<[boolean, string]>;
+  import { plural } from '../lib/plural';
+  let { active, split = false, images }: {
+    active: boolean; split?: boolean; images: Snippet<[boolean, string]>;
   } = $props();
   const dockLayout = $derived(readLayout(split ? settings.reviewDockSplit : settings.reviewDockSolo, split, settings.reviewDataWidth));
   const selectedSpot = $derived(review.selected);
@@ -247,9 +248,9 @@
     <button class="chip" aria-pressed={equalLayout(dockLayout, presetLayout(name, split))} title={name === 'Balanced' ? 'Reset layout to the default panel positions and sizes' : name} onclick={() => { dock?.applyPreset(name); layoutsOpen = false; }}>{name}</button>
   {/each}
 {/snippet}
-<section id="review-data-pane" class="view review" class:hidden={!active && !imagesOnly} aria-label="Review results" data-testid="review-view">
-  <div class="toolbar glass" hidden={imagesOnly}>
-    <ScopePicker active={active && !imagesOnly}>
+<section id="review-data-pane" class="view review" class:hidden={!active} aria-label="Review results" data-testid="review-view">
+  <div class="toolbar glass">
+    <ScopePicker {active}>
       {#snippet actions()}
         <div class="layout-presets" role="group" aria-label="Layout">{@render layoutButtons()}</div>
         <button class="chip layout-toggle" aria-expanded={layoutsOpen} aria-controls="review-layout-presets" onclick={() => layoutsOpen = !layoutsOpen}>Layout</button>
@@ -276,7 +277,7 @@
                 <div class="sample-toggle">
                 <button class="chip sample-chip" aria-label={`${reference ? 'Standard' : 'Sample'} ${sample.name}`}
                   aria-pressed={samplesShown.includes(sample.key)}
-                  title="Click to toggle · Shift-click to toggle a range · Alt/Option-click or Alt+Enter/Space to show only this sample"
+                  title={`${sample.name} (${plural(sample.count, 'spot')}) · Click to toggle · Shift-click to toggle a range · Alt/Option-click or Alt+Enter/Space to show only this sample`}
                   onclick={e=>showSample(sample.key,e)} onkeydown={e=>sampleKeydown(sample.key,e)}>
                   <i style:background={color(sample.name)}></i><span>{sample.name}</span><small>{sample.count}</small>
                 </button>
@@ -289,7 +290,6 @@
       </div>
     {/if}
   </div>
-  {#if !imagesOnly}
   {#if review.state==='signed-out'}
     <div class="panel stack"><p class="muted">{review.error||'Sign in to read stored results from laicpmsdb.'}</p><button class="btn" onclick={()=>identity.dialog=true}>Sign in</button></div>
   {:else if review.state==='idle'}<p class="panel muted">No laicpmsdb server configured. Set a server in Settings to read results.</p>
@@ -298,8 +298,7 @@
   {:else}
     {#if review.error}<p class="error small notice" role="status">{review.error}</p>{/if}
   {/if}
-  {/if}
-  <ReviewDock {active} {split} {imagesOnly} ready={review.state==='ready'} {images} bind:this={dock}>
+  <ReviewDock {active} {split} ready={review.state==='ready'} {images} bind:this={dock}>
     {#snippet headerActions(pane)}
       {#if pane === 'images'}
         <button class="btn atlas-edit" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}

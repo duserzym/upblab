@@ -12,6 +12,8 @@ fn main() {
             "studio_status",
             "studio_launch",
             "grainatlas_launch",
+            "grainatlas_open_paths",
+            "inbox_take",
             "auth_restore",
             "auth_login",
             "auth_exchange",

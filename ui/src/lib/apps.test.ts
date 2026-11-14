@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('./platform', () => ({ isDesktop: true, launchGrainAtlas: vi.fn(async () => {}) }));
 vi.mock('./identity.svelte', () => ({ identity: { target: { server: 'https://lab' }, handoff: vi.fn(async () => 'CODE') } }));
-vi.mock('./shell.svelte', () => ({ shell: { studio: { state: 'launched' }, handleLink: vi.fn(async () => true) } }));
+vi.mock('./shell.svelte', () => ({ shell: { studio: { state: 'launched' }, handleLink: vi.fn(async () => true), homeUrl: vi.fn(() => 'https://lab/atlas/?server=https%3A%2F%2Flab') } }));
 vi.mock('./app-watch.svelte', () => ({ appWatch: { atlas: vi.fn(), session: vi.fn() } }));
 const { editInAtlas, openInStudio, apps } = await import('./apps.svelte');
 const platform = await import('./platform');
@@ -27,24 +27,23 @@ it('shows install guidance without navigating for a missing app', async () => {
   expect(apps.atlas).toMatchObject({ state: 'missing', message: expect.stringContaining('/Applications') });
   expect(shell.handleLink).not.toHaveBeenCalled();
 });
-it('falls back for signed-out, failed handoff and launch errors', async () => {
+it('marks signed-out, failed handoff and launch errors as failed, with no tab fallback', async () => {
   for (const fail of ['signed-out', 'handoff', 'launch']) {
     if (fail === 'signed-out') vi.mocked(identity.handoff).mockResolvedValueOnce(null);
     if (fail === 'handoff') vi.mocked(identity.handoff).mockRejectedValueOnce(new Error('offline'));
     if (fail === 'launch') vi.mocked(platform.launchGrainAtlas).mockRejectedValueOnce(new Error('cannot launch'));
-    await editInAtlas(target, 'review');
-    expect(apps.atlas?.state).toBe('fallback');
-    expect(shell.handleLink).toHaveBeenLastCalledWith('grainatlas://project/p/spot/s', 'review');
+    await expect(editInAtlas(target, 'review')).resolves.toBeUndefined();
+    expect(apps.atlas).toMatchObject({ state: 'failed', message: expect.any(String) });
   }
+  expect(shell.handleLink).not.toHaveBeenCalled();
+  expect(appWatch.atlas).not.toHaveBeenCalled();
 });
-it('uses project and mount fallbacks and never throws when routing fails', async () => {
-  vi.mocked(identity.handoff).mockResolvedValueOnce(null);
-  await editInAtlas({ project: 'p', mount: 'm' }, 'home');
-  expect(shell.handleLink).toHaveBeenLastCalledWith('grainatlas://project/p', 'home');
+it('fails without a project instead of opening the mount', async () => {
   await editInAtlas({ project: null, mount: 'm' }, 'home');
-  expect(shell.handleLink).toHaveBeenLastCalledWith('laicpmsdb://mount/m', 'home');
-  vi.mocked(shell.handleLink).mockRejectedValueOnce(new Error('offline'));
-  await expect(editInAtlas({ project: null, mount: 'm' }, 'home')).resolves.toBeUndefined();
+  expect(apps.atlas?.state).toBe('failed');
+  expect(identity.handoff).not.toHaveBeenCalled();
+  expect(platform.launchGrainAtlas).not.toHaveBeenCalled();
+  expect(shell.handleLink).not.toHaveBeenCalled();
 });
 it('prefers run context, retains acquisition and always marks the sender', async () => {
   await openInStudio({ session: 's', run: 'r', acquisition: 'a' }, 'review');
@@ -55,12 +54,19 @@ it('prefers run context, retains acquisition and always marks the sender', async
   await openInStudio({ session: null, run: null }, 'review');
   expect(apps.studio?.state).toBe('failed');
 });
-it('uses the same fallback on web delivery without minting a code', async () => {
+it('opens the hosted build in a new window on web without minting a code', async () => {
   vi.resetModules();
   vi.doMock('./platform', () => ({ isDesktop: false, launchGrainAtlas: vi.fn() }));
-  const web = await import('./apps.svelte');
-  await web.editInAtlas(target, 'review');
-  expect(identity.handoff).not.toHaveBeenCalled();
-  expect(shell.handleLink).toHaveBeenCalledWith('grainatlas://project/p/spot/s', 'review');
-  expect(web.apps.atlas?.state).toBe('fallback');
+  const open = vi.fn();
+  vi.stubGlobal('window', { open });
+  vi.stubGlobal('location', { href: 'https://lab/desk/' });
+  try {
+    const web = await import('./apps.svelte');
+    await web.editInAtlas(target, 'review');
+    expect(identity.handoff).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledExactlyOnceWith('https://lab/atlas/?server=https%3A%2F%2Flab&project=p&spot=s', '_blank', 'noopener');
+    expect(shell.handleLink).not.toHaveBeenCalled();
+    expect(appWatch.atlas).toHaveBeenCalledWith('p', 'm');
+    expect(web.apps.atlas?.state).toBe('fallback');
+  } finally { vi.unstubAllGlobals(); vi.doUnmock('./platform'); }
 });

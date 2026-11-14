@@ -3,11 +3,11 @@ import { identity } from './identity.svelte';
 import { logWarn } from './platform';
 import { shell } from './shell.svelte';
 import { settings } from './settings.svelte';
-import { sendCommand } from './incoming';
-import { resolve } from './links';
+import { moduleSurfaces, sendCommand } from './incoming';
 import type { SessionOut, MountOut, RunOut } from './overview.svelte';
 import { assignSampleColors } from '../components/review/plot-data';
 import { normalise, parseScope, type ReviewScope, type ReviewSpot, type ResultTable, type ResultRow, type RunBrief, type DepthProfile } from './review-data';
+import { serverMessage } from './server-error';
 const enc = encodeURIComponent;
 type ScopeInput = {
   kind: 'session';
@@ -62,10 +62,8 @@ export class Review {
   private async get<T>(path: string): Promise<T> {
     const r = await identity.get<T>(path);
     if (r.status !== 200) {
-      const d = (r.body as {
-        detail?: string;
-      } | null)?.detail;
-      throw new Error(r.status === 401 ? 'Sign in again to read results.' : `${path}: ${d ?? `HTTP ${r.status}`}`);
+      if (r.status !== 401) void logWarn(`[review] ${path}: ${r.status} ${JSON.stringify(r.body)?.slice(0, 300)}`);
+      throw new Error(r.status === 401 ? 'Sign in again to read results.' : serverMessage(r.body, r.status));
     }
     return r.body;
   }
@@ -96,9 +94,9 @@ export class Review {
     });
   }
   async refresh() {
-    await this.load({ quiet: true });
+    await this.load({ quiet: true, strict: true });
   }
-  async load({ quiet = false } = {}) {
+  async load({ quiet = false, strict = false } = {}) {
     const source = this.currentSource();
     if (source !== this.source || !identity.target || !identity.signedIn) {
       this.source = source;
@@ -165,6 +163,7 @@ export class Review {
     }
     catch (err) {
       if (!current()) return;
+      if (strict) throw err;
       if (quiet) {
         void logWarn(`[review] Could not refresh results: ${String(err)}`);
         return;
@@ -177,7 +176,7 @@ export class Review {
     let rows: ReviewSpot[] = [], runs: RunOut[] = [], run: RunBrief | null = null;
     const info: Record<string, RunBrief> = {};
     if (scope?.kind === 'session') {
-      const [table, list] = await Promise.all([this.get<ResultTable>(`/v1/sessions/${enc(scope.id)}/results?run=${enc(scope.run)}`), quiet ? Promise.resolve(this.runs) : this.get<RunOut[]>(`/v1/sessions/${enc(scope.id)}/reductions`)]);
+      const [table, list] = await Promise.all([this.get<ResultTable>(`/v1/sessions/${enc(scope.id)}/results?run=${enc(scope.run)}`), this.get<RunOut[]>(`/v1/sessions/${enc(scope.id)}/reductions`)]);
       rows = table.rows.map(r => normalise(r, table));
       runs = list;
       run = table.run ?? null;
@@ -241,25 +240,14 @@ export class Review {
     if (focus)
       void this.focus(spot);
   }
-  private async command(spot: ReviewSpot, command: BridgeCommand) {
-    try {
-      if (await sendCommand('images', command))
-        return;
-      const route = resolve(`grainatlas://project/${spot.atlasProjectId}/spot/${spot.atlasSpotId}`);
-      if (route.kind === 'tab')
-        shell.load('images', route.route);
-    }
-    catch (err) {
-      this.error = `Could not show the spot in Images: ${String(err)}`;
-    }
+  private async command(_spot: ReviewSpot, command: BridgeCommand) {
+    if (!moduleSurfaces.has('images') || shell.view !== 'review' || !settings.reviewSplit) return;
+    try { await sendCommand('images', command); }
+    catch (err) { this.error = `Could not focus the Review viewer: ${String(err)}`; }
   }
-  async focus(spot: ReviewSpot, show = false) {
-    if (!spot.atlasProjectId || !spot.atlasSpotId)
-      return;
+  async focus(spot: ReviewSpot, _show = false) {
+    if (!spot.atlasProjectId || !spot.atlasSpotId) return;
     await this.command(spot, { type: 'focus-spot', project: spot.atlasProjectId, spot: spot.atlasSpotId, flash: true, via: 'review', server: shell.serverUrl });
-    const split = shell.view === 'review' && settings.reviewSplit;
-    if (show && !split)
-      shell.show('images');
   }
   async focusGrain(spots: ReviewSpot[]) {
     const spot = spots.find(s => s.atlasProjectId && s.atlasSpotId && s.grainLabel);

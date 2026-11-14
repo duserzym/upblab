@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { installFakeTauri } from './fake-tauri';
 
-for (const view of ['Home', 'Images']) {
+for (const view of ['Home', 'Reduce']) {
   test(`${view} leaves the local database stopped until Sessions is opened`, async ({ page }) => {
     await page.addInitScript(installFakeTauri, { store: { mode: 'local', lastTab: view.toLowerCase() } });
     await page.goto('./');

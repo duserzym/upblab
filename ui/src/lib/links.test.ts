@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { moduleHome, moduleUrl, normaliseServerUrl, resolve, withTheme, withoutTheme } from './links';
+import { describe, expect, it, vi } from 'vitest';
+import { atlasEditorUrl, moduleHome, moduleUrl, normaliseServerUrl, resolve, withTheme, withoutTheme } from './links';
 
 const A = '2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91';
 const B = '7c0e2b9d-1a3f-4e8b-8c6d-5f4a3b2c1d0e';
@@ -31,16 +31,17 @@ describe('resolve: plan section 4.4 table', () => {
     expect(resolve(`laicpmsdb://sample/${A}`)).toMatchObject({ tab: 'sessions', route: `/app/samples/${A}` });
   });
 
-  it('grainatlas spot -> Images tab', () => {
-    expect(resolve(`grainatlas://project/${A}/spot/${B}`)).toMatchObject({
-      kind: 'tab',
-      tab: 'images',
-      route: `/atlas/?project=${A}&spot=${B}`,
+  it('grainatlas spot -> standalone grainatlas', () => {
+    expect(resolve(`grainatlas://project/${A}/spot/${B}`)).toEqual({
+      kind: 'atlas',
+      project: A,
+      spot: B,
+      url: `grainatlas://project/${A}/spot/${B}`,
     });
   });
 
-  it('grainatlas project -> Images tab', () => {
-    expect(resolve(`grainatlas://project/${A}`)).toMatchObject({ tab: 'images', route: `/atlas/?project=${A}` });
+  it('grainatlas project -> standalone grainatlas', () => {
+    expect(resolve(`grainatlas://project/${A}`)).toEqual({ kind: 'atlas', project: A, url: `grainatlas://project/${A}` });
   });
 
   it('upbr session -> launch Studio', () => {
@@ -180,6 +181,16 @@ describe('moduleUrl', () => {
   it.each(['light', 'dark'] as const)('gives People a themed home with a server prefix (%s)', (theme) => {
     expect(moduleHome('people', { ...bases, server: 'https://lab.example/db/', theme }))
       .toBe(`https://lab.example/db/app/?theme=${theme}#/people`);
+  });
+});
+
+describe('atlasEditorUrl', () => {
+  it('adds project and spot to the hosted home, keeping its parameters', () => {
+    vi.stubGlobal('location', { href: 'https://lab.example/desk/' });
+    expect(atlasEditorUrl('https://lab.example/atlas/?server=https%3A%2F%2Flab.example&theme=dark', A, B))
+      .toBe(`https://lab.example/atlas/?server=https%3A%2F%2Flab.example&theme=dark&project=${A}&spot=${B}`);
+    expect(atlasEditorUrl('/atlas/', A, null)).toBe(`https://lab.example/atlas/?project=${A}`);
+    vi.unstubAllGlobals();
   });
 });
 

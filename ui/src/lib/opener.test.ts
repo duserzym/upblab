@@ -11,6 +11,7 @@ vi.mock('./platform', () => ({
   desktopAuth: {},
   LOCAL_STATUS_EVENT: 'local-service://status',
   localServiceApi: {},
+  openGrainAtlasPaths: vi.fn(async () => {}),
   desktopFiles: {
     scan: vi.fn(async (paths: string[]) => scans[paths.join('|')] ?? { scan: 's0', roots: [], entries: [], truncated: false, missing: paths }),
     offer: vi.fn(async (a: { files: unknown[] }) => ({ id: 'o1', files: a.files.length, bytes: 0, nudged: true })),
@@ -57,32 +58,33 @@ describe('opener (desktop)', () => {
     shell.targets = { images: null, sessions: null, people: null };
   });
 
-  it('a TM4000 package goes to Images and is offered to grainatlas, never asking', async () => {
+  it('a TM4000 package is handed to standalone grainatlas, never asking or showing a tab', async () => {
+    const events: unknown[] = [];
+    const stop = opener.observe(event => events.push(event));
     const r = await opener.openPaths([PKG], 'drop');
+    stop();
     expect(r.target).toBe('images');
-    expect(shell.view).toBe('images');
-    expect(shell.targets.images).toBeNull(); // grainatlas keeps its page; the files come through the bridge
-    expect(platform.desktopFiles.offer).toHaveBeenCalledWith({
-      scan: 's1',
-      module: 'images',
-      files: [
-        { index: 0, path: '001_HJ-GC1/001_HJ-GC1_0000.jpg' },
-        { index: 1, path: '001_HJ-GC1/001_HJ-GC1_0000.txt' },
-        { index: 2, path: 'Mount_XS_150X.zag' },
-      ],
-      kind: 'package',
-      name: 'Mount_XS_150X',
-      path: PKG,
-      nudge: true,
-    });
-    expect(shell.links[0].outcome).toMatch(/Images: TM4000 package Mount_XS_150X, 3 files .* handed to grainatlas/);
-    expect(opener.status?.state).toBe('offered');
+    expect(platform.openGrainAtlasPaths).toHaveBeenCalledExactlyOnceWith([PKG]);
+    expect(platform.desktopFiles.offer).not.toHaveBeenCalled();
+    expect(shell.view).toBe('home');
+    expect(shell.targets.images).toBeNull();
+    expect(opener.status).toMatchObject({ state: 'taken', outcome: expect.stringContaining('handed to grainatlas') });
+    expect(events.map(e => (e as { type: string }).type)).toEqual(['listed', 'atlas-handoff']);
+    expect(events[1]).toEqual({ type: 'atlas-handoff', from: 'drop', web: false });
   });
 
-  it('a .zag opened from the Finder opens its package', async () => {
+  it('a .zag opened from the Finder hands over its package', async () => {
     await opener.openPaths([`${PKG}/Mount_XS_150X.zag`], 'os');
     expect(platform.desktopFiles.scan).toHaveBeenCalledWith([PKG]);
-    expect(shell.view).toBe('images');
+    expect(platform.openGrainAtlasPaths).toHaveBeenCalledWith([PKG]);
+    expect(shell.view).toBe('home');
+  });
+
+  it('reports a failed handoff to grainatlas', async () => {
+    vi.mocked(platform.openGrainAtlasPaths).mockRejectedValueOnce(new Error('GrainAtlas is not installed'));
+    const r = await opener.openPaths([PKG], 'drop');
+    expect(r.target).toBeNull();
+    expect(opener.status?.state).not.toBe('taken');
   });
 
   it('a Qtegra export opens ingest in Sessions with its path', async () => {
@@ -104,35 +106,50 @@ describe('opener (desktop)', () => {
 
   it('records when the module takes the files, or that it does not read them yet', async () => {
     vi.useFakeTimers();
-    await opener.openPaths([PKG], 'drop');
-    opener.taken('o1', 'grainatlas', 3, 2150);
+    await opener.openPaths([QTEGRA], 'drop');
+    opener.taken('o1', 'laicpmsdb', 2, 2150);
     expect(opener.status?.state).toBe('taken');
-    expect(shell.links[0].outcome).toBe('grainatlas took 3 files (2.1 KB)');
+    expect(shell.links[0].outcome).toBe('laicpmsdb took 2 files (2.1 KB)');
 
-    await opener.openPaths([PKG], 'drop');
+    await opener.openPaths([QTEGRA], 'drop');
     vi.advanceTimersByTime(TAKE_TIMEOUT_MS + 1);
-    expect(shell.links[0].outcome).toMatch(/grainatlas has not taken the files: it does not read open-files/);
+    expect(shell.links[0].outcome).toMatch(/laicpmsdb has not taken the files: it does not read open-files/);
     vi.useRealTimers();
   });
 });
 
 describe('opener (web delivery)', () => {
-  it('holds the Files for the module and hands them over once', async () => {
+  it('tells the user to open grainatlas in a new tab for images and holds nothing', () => {
     const push = vi.fn();
     opener.pushFrame = push;
+    const events: unknown[] = [];
+    const stop = opener.observe(event => events.push(event));
     const set = {
       roots: [{ name: 'a.jpg', dir: false }],
       entries: [{ root: 0, rel: 'a.jpg', size: 1 }],
       files: [new File(['x'], 'a.jpg')],
     };
     const r = opener.openWebFiles(set, 'drop');
+    stop();
     expect(r.target).toBe('images');
-    expect(push).toHaveBeenCalledWith('images');
-    expect(opener.takeWeb('laicpmsdb', true)).toBeNull();
-    expect(opener.takeWeb('grainatlas', false)?.files[0].path).toBe('a.jpg');
-    const t = opener.takeWeb('grainatlas', true);
-    expect(t?.kind).toBe('images');
-    expect(await t?.files[0].file.text()).toBe('x');
+    expect(push).not.toHaveBeenCalled();
     expect(opener.takeWeb('grainatlas', true)).toBeNull();
+    expect(opener.status?.outcome).toMatch(/new browser tab/);
+    expect(events.at(-1)).toEqual({ type: 'atlas-handoff', from: 'drop', web: true });
+  });
+
+  it('holds the Files for Sessions and hands them over once', async () => {
+    const set = {
+      roots: [{ name: 'Apatite_demo', dir: true }],
+      entries: [{ root: 0, rel: 'Apatite_demo_1.csv', size: 1 }, { root: 0, rel: 'Apatite_demo_10.csv', size: 1 }],
+      files: [new File(['x'], 'Apatite_demo_1.csv'), new File(['y'], 'Apatite_demo_10.csv')],
+    };
+    const r = opener.openWebFiles(set, 'drop');
+    expect(r.target).toBe('sessions');
+    expect(opener.takeWeb('grainatlas', true)).toBeNull();
+    expect(opener.takeWeb('laicpmsdb', false)?.files).toHaveLength(2);
+    const t = opener.takeWeb('laicpmsdb', true);
+    expect(await t?.files[0].file.text()).toBe('x');
+    expect(opener.takeWeb('laicpmsdb', true)).toBeNull();
   });
 });

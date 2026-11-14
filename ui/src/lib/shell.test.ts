@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('./app-watch.svelte', () => ({ appWatch: { session: vi.fn() } }));
 vi.mock('./review.svelte', () => ({ review: { rows: [], open: vi.fn(async () => {}) } }));
 vi.mock('./incoming', () => ({ sendCommand: vi.fn(async () => true) }));
+vi.mock('./apps.svelte', () => ({ editInAtlas: vi.fn(async () => {}) }));
 vi.mock('./platform', () => ({
   isDesktop: true,
   logWarn: vi.fn(async () => {}),
@@ -72,12 +73,15 @@ describe('shell.handleLink', () => {
     expect(shell.targets.sessions?.url).toBe(`http://localhost:8000/app/?theme=light#/acquisitions/${A}`);
   });
 
-  it('switches to Images with the bundled build', async () => {
-    await shell.handleLink(`grainatlas://project/${A}/spot/${A}`, 'laicpmsdb');
-    expect(shell.view).toBe('images');
-    expect(shell.targets.images?.url).toBe(
-      `tauri://localhost/modules/grainatlas/index.html?server=http%3A%2F%2Flocalhost%3A8000&project=${A}&spot=${A}&theme=light`,
-    );
+  it('opens grainatlas links in the standalone app without switching tabs', async () => {
+    const { editInAtlas } = await import('./apps.svelte');
+    const before = shell.targets.images;
+    expect(await shell.handleLink(`grainatlas://project/${A}/spot/${A}`, 'laicpmsdb')).toBe(true);
+    expect(editInAtlas).toHaveBeenCalledExactlyOnceWith({ project: A, mount: null, spot: A }, 'laicpmsdb');
+    expect(shell.view).toBe('home');
+    expect(shell.targets.images).toBe(before);
+    await shell.handleLink(`grainatlas://project/${A}`, 'os');
+    expect(editInAtlas).toHaveBeenLastCalledWith({ project: A, mount: null, spot: undefined }, 'os');
   });
 
   it('gives every request a new sequence number so the same link navigates again', async () => {
@@ -256,28 +260,12 @@ describe('theme (System by default, passed to module tabs at load and live)', ()
   });
 });
 
-describe('Images leave guard', () => {
-  it('switches synchronously before v4, then waits for the dialog to approve leaving', async () => {
-    const { atlasSync } = await import('./atlas-sync.svelte');
-    const { atlasStatusFixture } = await import('../../tests/fixtures/atlas-sync');
-    atlasSync.v4 = false;
-    shell.view = 'images';
-    const unguarded = shell.show('home');
+describe('tab switching', () => {
+  it('switches at once, with no leave guard', async () => {
+    shell.view = 'review';
+    const switching = shell.show('home');
     expect(shell.view).toBe('home');
-    await unguarded;
-    atlasSync.receive(atlasStatusFixture);
-    shell.view = 'images';
-    const stay = shell.show('review');
-    expect(shell.view).toBe('images');
-    atlasSync.finishLeave(null);
-    expect(await stay).toBe(false);
-    expect(shell.view).toBe('images');
-    const leave = shell.show('review');
-    atlasSync.finishLeave('keep-draft');
-    expect(await leave).toBe(true);
-    expect(shell.view).toBe('review');
-    atlasSync.v4 = false;
-    atlasSync.status = null;
+    expect(await switching).toBe(true);
   });
 });
 

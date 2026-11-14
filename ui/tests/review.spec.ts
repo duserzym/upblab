@@ -13,10 +13,13 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect.poll(() => problems(page, 'Review')).toEqual([]);
       await expect(page.locator('[data-spot-key]')).toHaveCount(8);
       await page.locator('[data-spot-key="acq-2"]').click();
-      await expect.poll(async () => (await calls(page)).filter(([c]) => c === 'module_command').pop()?.[1]).toMatchObject({ module: 'images', command: { type: 'focus-spot', project: 'project-demo', spot: 'atlas-2', server: 'http://localhost:8000', via: 'review' } });
+      await expect(page.getByTestId('review-details').getByRole('heading', { name: 'Zircon_2', exact: true })).toBeVisible();
+      // With SEM images off there is no viewer to focus.
+      expect((await calls(page)).filter(([c, a]) => c === 'module_command' && a?.module === 'images')).toEqual([]);
       await expect(page.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true');
       await page.getByLabel('Filter spots').fill('Zircon_2');
-      await page.getByRole('tab', { name: 'Images', exact: true }).click();
+      // A selection made in grainatlas while another tab is shown waits for Review.
+      await page.getByRole('tab', { name: 'Home', exact: true }).click();
       await emit(page, 'atlas-3');
       await page.getByRole('tab', { name: 'Review', exact: true }).click();
       await expect(page.getByRole('treeitem', { name: /Zircon_3/ })).toHaveAttribute('aria-selected', 'true');
@@ -49,26 +52,29 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(page.getByTestId('review-details')).toContainText('not measured yet');
       await expect.poll(() => problems(page, 'Mount Review')).toEqual([]);
     });
-    test('split keeps the same Images surface and fits a narrow window', async ({ page }) => {
+    test('SEM images shows the grainatlas viewer beside the plots, keeps it across tabs and fits a narrow window', async ({ page }) => {
       const toggle = page.getByRole('checkbox', { name: 'SEM images', exact: true });
-      await page.getByRole('tab', { name: 'Images', exact: true }).click();
       const surface = page.locator('[data-module="images"]');
-      await expect(surface).toBeVisible();
-      const instance = await surface.evaluate(el => { el.setAttribute('data-instance', 'original'); return true; });
-      expect(instance).toBe(true);
-      await page.getByRole('tab', { name: 'Review', exact: true }).click();
+      await expect(surface).toBeHidden();
       await toggle.check();
       await expect(page.getByTestId('review-view')).toBeVisible();
       await expect(surface).toBeVisible();
-      await expect(surface).toHaveAttribute('data-instance', 'original');
+      await surface.evaluate(el => el.setAttribute('data-instance', 'original'));
+      await page.locator('[data-spot-key="acq-2"]').click();
+      await expect.poll(async () => (await calls(page)).filter(([c, a]) => c === 'module_command' && a?.module === 'images').pop()?.[1]?.command)
+        .toMatchObject({ type: 'focus-spot', project: 'project-demo', spot: 'atlas-2', server: 'http://localhost:8000', via: 'review' });
       const left = (await page.getByRole('region', { name: 'Age & plots' }).boundingBox())!, right = (await surface.boundingBox())!;
       expect(left.x + left.width).toBeLessThanOrEqual(right.x + 1);
       expect(right.x + right.width).toBeLessThanOrEqual(width);
       expect(right.y + right.height).toBeLessThanOrEqual(height);
       await expect.poll(() => problems(page, 'Split Review')).toEqual([]);
-      await page.getByRole('button', { name: 'Show in Images', exact: true }).click();
-      await expect(page.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('button', { name: /Show in Images/ })).toHaveCount(0);
+      // Leaving Review hides the viewer; coming back shows the same instance.
+      await page.getByRole('tab', { name: 'Home', exact: true }).click();
+      await expect(surface).toBeHidden();
+      await page.getByRole('tab', { name: 'Review', exact: true }).click();
       await expect(surface).toBeVisible();
+      await expect(surface).toHaveAttribute('data-instance', 'original');
       for (const tab of ['Geochemistry', 'Depth profile']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
         await expect.poll(() => problems(page, `Split ${tab}`)).toEqual([]);
@@ -361,7 +367,7 @@ test('hidden Review releases plots and restores its chosen view', async ({ page 
   await openReview(page);
   const diagram = page.getByRole('combobox', { name: 'Concordia diagram' });
   await diagram.selectOption('tw');
-  await page.getByRole('tab', { name: 'Images', exact: true }).click();
+  await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
   await expect(page.getByTestId('review-view').locator('.uplot')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Review', exact: true }).click();
   await expect(diagram).toHaveValue('tw');
@@ -370,7 +376,7 @@ test('hidden Review releases plots and restores its chosen view', async ({ page 
   await expect.poll(() => plots.count()).toBeGreaterThan(0);
   const count = await plots.count();
   const axis = await page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true }).textContent();
-  await page.getByRole('tab', { name: 'Images', exact: true }).click();
+  await page.getByRole('tab', { name: 'Reduce', exact: true }).click();
   await expect(plots).toHaveCount(0);
   await page.getByRole('tab', { name: 'Review', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Geochemistry', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -591,7 +597,7 @@ test('Quantity drawer spans the board, pushes plots down, and returns focus', as
   await expect(panel.getByRole('button', { name: 'Choose X axis', exact: true })).toBeFocused();
 });
 
-for (const [tab, module] of [['Images', 'images'], ['Sessions', 'sessions']] as const) {
+for (const [tab, module] of [['Sessions', 'sessions']] as const) {
   test(`Sign-in hides and restores the visible ${tab} surface without changing its box`, async ({ page }) => {
     await openReview(page, { signedIn: false });
     await page.getByRole('tab', { name: tab, exact: true }).click();

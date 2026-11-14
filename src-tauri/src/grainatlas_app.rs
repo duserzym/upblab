@@ -109,6 +109,83 @@ fn argv(
     Ok((program, args))
 }
 
+/// Keep paths as separate arguments. LaunchServices delivers them to an existing app.
+fn paths_argv(
+    os: Os,
+    executable: PathBuf,
+    paths: Vec<String>,
+    exists: impl Fn(&std::path::Path) -> bool,
+) -> Result<(PathBuf, Vec<String>), String> {
+    if paths.is_empty()
+        || paths.iter().any(|p| {
+            let path = std::path::Path::new(p);
+            p.chars().any(char::is_control) || !path.is_absolute() || !exists(path)
+        })
+    {
+        return Err(
+            "GrainAtlas paths must be absolute, exist and contain no control characters".into(),
+        );
+    }
+    let (program, mut args) = match os {
+        Os::Mac => (
+            PathBuf::from("/usr/bin/open"),
+            vec!["-b".into(), BUNDLE.into()],
+        ),
+        Os::Windows => (executable, Vec::new()),
+        Os::Linux => return Err("Opening standalone GrainAtlas is not supported on Linux".into()),
+    };
+    args.extend(paths);
+    Ok((program, args))
+}
+
+#[tauri::command]
+pub async fn grainatlas_open_paths(paths: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let os = if cfg!(target_os = "macos") {
+            Os::Mac
+        } else if cfg!(windows) {
+            Os::Windows
+        } else {
+            Os::Linux
+        };
+        let path = lookup(
+            os,
+            bundle_path,
+            registry_path,
+            |key| std::env::var_os(key).map(PathBuf::from),
+            |p| {
+                if cfg!(windows) {
+                    p.is_file()
+                } else {
+                    p.exists()
+                }
+            },
+        )?;
+        let (program, args) = paths_argv(os, path, paths, |p| p.exists())?;
+        let mut command = Command::new(program);
+        command.args(args);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0000_0008 | 0x0000_0200 | 0x0800_0000);
+        }
+        let mut child = command
+            .spawn()
+            .map_err(|e| format!("Could not open GrainAtlas paths: {e}"))?;
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+        Ok(())
+    })
+    .await
+    .map_err(|_| "GrainAtlas launcher failed".to_string())?
+}
+
 #[cfg(target_os = "macos")]
 fn bundle_path() -> Option<PathBuf> {
     let output = Command::new("/usr/bin/mdfind")
@@ -240,6 +317,30 @@ pub async fn grainatlas_launch(
 mod tests {
     use super::*;
     use std::cell::RefCell;
+
+    #[test]
+    fn path_arguments_and_validation() {
+        let paths = vec![std::env::temp_dir()
+            .join("image set.gaproj")
+            .to_string_lossy()
+            .into_owned()];
+        let (program, args) = paths_argv(Os::Mac, "app".into(), paths.clone(), |_| true).unwrap();
+        assert_eq!(program, PathBuf::from("/usr/bin/open"));
+        assert_eq!(&args[..2], ["-b", BUNDLE]);
+        assert_eq!(&args[2..], paths);
+        let (program, args) = paths_argv(Os::Windows, EXE.into(), paths.clone(), |_| true).unwrap();
+        assert_eq!(program, PathBuf::from(EXE));
+        assert_eq!(args, paths);
+        for bad in [
+            vec![],
+            vec!["relative.gaproj".into()],
+            vec![format!("{}\n", paths[0])],
+        ] {
+            assert!(paths_argv(Os::Mac, "app".into(), bad, |_| true).is_err());
+        }
+        assert!(paths_argv(Os::Mac, "app".into(), paths.clone(), |_| false).is_err());
+        assert!(paths_argv(Os::Linux, "app".into(), paths, |_| true).is_err());
+    }
 
     #[test]
     fn arguments_per_os() {

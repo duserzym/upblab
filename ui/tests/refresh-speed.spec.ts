@@ -9,7 +9,7 @@ const inventoryReads = async (page: Page) => (await calls(page)).filter(([name, 
 const overlays = async (page: Page) => (await calls(page)).filter(([name, args]) =>
   name === 'module_command' && (args?.command as { type?: string })?.type === 'review-spots');
 
-test('atlas sync keeps the Review tree visible while replacing results without reopening Images', async ({ page }) => {
+test('atlas sync keeps the Review tree visible while replacing results without reopening the SEM viewer', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openReview(page, { store: { reviewSplit: true } });
   const tree = page.getByRole('tree', { name: 'Result spots' });

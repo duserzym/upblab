@@ -4,8 +4,8 @@
   import { settings } from '../lib/settings.svelte';
   import { defaultRatio, dock, edgeAt, gap, geometry, panes, presetLayout, readLayout, resize, type Preset, type Edge, type Layout, type Pane, type Rect } from '../lib/review-layout';
 
-  let { active, ready, split, imagesOnly, spots, plots, details, images, headerActions, detailsRail }: {
-    active: boolean; ready: boolean; split: boolean; imagesOnly: boolean;
+  let { active, ready, split, spots, plots, details, images, headerActions, detailsRail }: {
+    active: boolean; ready: boolean; split: boolean;
     spots: Snippet; plots: Snippet; details: Snippet; images: Snippet<[boolean, string]>;
     headerActions?: Snippet<[Pane]>; detailsRail?: Snippet<[() => void]>;
   } = $props();
@@ -52,7 +52,7 @@
     const target = event.target as Element;
     if (!target.closest('#dock-images, [aria-label="Move SEM images"]')) closeImagesMenu();
   }
-  $effect(() => { if (!active || !split || imagesOnly || !ready) imagesMenu = false; });
+  $effect(() => { if (!active || !split || !ready) imagesMenu = false; });
   $effect(() => { if (!split && maximised === 'images') maximised = null; });
 
   export function applyPreset(name: Preset) {
@@ -154,14 +154,13 @@
 <svelte:window onblur={() => closeImagesMenu()} onkeydown={menuKey} onpointerdown={menuOutside} />
 
 <div class="dock" class:manipulating={drag?.moving || sizing} bind:this={surface} bind:clientWidth={width} bind:clientHeight={height}
-  hidden={!imagesOnly && (!active || !ready)}>
+  hidden={!active || !ready}>
   {#each panes as pane (pane)}
     {@const rect = maximised === pane ? { x: 0, y: 0, width, height } : tiles[pane] ?? empty}
-    {@const full = pane === 'images' && imagesOnly}
-    {@const rail = !full && !maximised && rails[pane]}
-    {@const shown = full || (!imagesOnly && active && ready && !!tiles[pane] && (!maximised || maximised === pane))}
-    <section data-collapsed={!!rail} data-review-panel={pane} class="tile" class:full class:rail={!!rail} class:rail-x={rail === 'x'} class:drag-source={drag?.moving && drag.pane === pane} hidden={!shown} aria-label={title[pane]}
-      style={full ? '' : tileStyle(rect)}>
+    {@const rail = !maximised && rails[pane]}
+    {@const shown = active && ready && !!tiles[pane] && (!maximised || maximised === pane)}
+    <section data-collapsed={!!rail} data-review-panel={pane} class="tile" class:rail={!!rail} class:rail-x={rail === 'x'} class:drag-source={drag?.moving && drag.pane === pane} hidden={!shown} aria-label={title[pane]}
+      style={tileStyle(rect)}>
       {#if rail}
         {#if pane === 'details' && rail === 'y' && detailsRail}
           {@render detailsRail(() => maximise(pane))}
@@ -170,7 +169,7 @@
         {/if}
       {/if}
       <!-- svelte-ignore a11y_no_static_element_interactions (Header double-click complements the maximise button.) -->
-      <header hidden={full || !!rail} ondblclick={event => headerDoubleClick(event, pane)}>
+      <header hidden={!!rail} ondblclick={event => headerDoubleClick(event, pane)}>
         <div class="heading"><button class="grip" title="Drag to another panel edge to move" aria-label={`Drag ${title[pane]}`}
           onpointerdown={e => grab(e, pane)} onpointermove={slide} onpointerup={release}
           onpointercancel={release} onlostpointercapture={release}><span aria-hidden="true">⠿</span></button><span class="tile-title" title={title[pane]}>{title[pane]}</span></div>
@@ -186,7 +185,7 @@
         {/if}
         </div>
       </header>
-      {#if pane === 'images' && imagesMenu && !full}
+      {#if pane === 'images' && imagesMenu}
         <!-- The Images body is native, so its own menu must also take layout space. -->
         <div id="dock-images" class="move-menu image-menu" role="group" aria-label="Move SEM images">
           {@render destinations(pane)}
@@ -196,7 +195,7 @@
         {#if pane === 'images'}
           <!-- Review is the only active module owner here. Sessions and People
                already receive active=false from App while this dock is active. -->
-          {@render images(shown && !rail && !drag?.moving, full ? 'full' : tileStyle(rect))}
+          {@render images(shown && !rail && !drag?.moving, tileStyle(rect))}
         {:else if pane === 'spots'}{@render spots()}
         {:else if pane === 'plots'}{@render plots()}
         {:else}{@render details()}{/if}
@@ -204,7 +203,7 @@
       {#if drag?.target === pane && drag.edge}<div class="drop-edge {drag.edge}"><span>Dock {drag.edge} of {title[pane]}</span></div>{/if}
     </section>
   {/each}
-  {#if active && ready && !imagesOnly && !maximised}
+  {#if active && ready && !maximised}
     {#each dividers as divider (divider.path.join('.'))}
       <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (Focusable splitter.) -->
       <div class="divider" class:vertical={divider.axis === 'x'} style={tileStyle(divider.rect)} role="separator" tabindex="0"
@@ -223,7 +222,6 @@
   .dock { position:relative; flex:1; min-height:0; min-width:0; overflow:hidden; }
   .tile { container-type:inline-size; position:absolute; display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-radius:var(--radius-sm); border:1px solid var(--hairline); background:var(--glass); }
   .tile[hidden], .tile header[hidden], .body[hidden], .dock[hidden] { display:none; }
-  .tile.full { inset:0; border:0; border-radius:0; }
   .tile header { display:flex; align-items:center; justify-content:space-between; height:29px; padding:0 4px; flex:none; border-bottom:1px solid var(--hairline); background:var(--accent-soft); }
   .heading,.header-actions {display:flex;align-items:center;min-width:0;gap:2px;}
   .heading {flex:1;}

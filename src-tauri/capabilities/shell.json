@@ -29,6 +29,8 @@
     "allow-studio-status",
     "allow-studio-launch",
     "allow-grainatlas-launch",
+    "allow-grainatlas-open-paths",
+    "allow-inbox-take",
     "allow-auth-restore",
     "allow-auth-login",
     "allow-auth-exchange",

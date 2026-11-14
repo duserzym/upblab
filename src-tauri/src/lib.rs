@@ -13,6 +13,7 @@ mod bridge;
 mod files;
 mod geometry;
 mod grainatlas_app;
+mod inbox;
 pub mod local_service;
 mod menu;
 mod modules;
@@ -93,6 +94,8 @@ pub fn run() {
             studio::studio_status,
             studio::studio_launch,
             grainatlas_app::grainatlas_launch,
+            grainatlas_app::grainatlas_open_paths,
+            inbox::inbox_take,
             auth::auth_restore,
             auth::auth_login,
             auth::auth_exchange,

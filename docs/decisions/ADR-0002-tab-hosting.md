@@ -76,3 +76,10 @@ the CI build is run on a Windows machine.
   that includes the shell's origin.
 - The web delivery needs that header change anyway, for `/app/` and `/atlas/`
   framed by `/desk/` on the same origin.
+
+## Update 2026-11-14
+
+The tabs are Home, Sessions, Review and Reduce (Ctrl/⌘ 1–4), plus People &
+access for lab staff. The Images tab and its leave and quit guards were
+removed; the `images` module webview remains, hosted only inside Review's SEM
+pane, with the same bounds, hiding and overlay rules as before.

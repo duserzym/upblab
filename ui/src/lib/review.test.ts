@@ -5,10 +5,10 @@ vi.mock('./identity.svelte', () => ({ identity: { target: { server: 'http://h' }
 vi.mock('./shell.svelte', () => ({ shell: { serverUrl: 'http://h', view: 'review', load: vi.fn(), show: vi.fn() } }));
 vi.mock('./settings.svelte', () => ({ settings: { loaded: true, reviewScope: '', reviewSplit: false, update: vi.fn() } }));
 vi.mock('./platform', () => ({ logWarn: vi.fn(async () => {}) }));
-vi.mock('./incoming', () => ({ sendCommand: vi.fn(async () => true) }));
+vi.mock('./incoming', () => ({ sendCommand: vi.fn(async () => true), moduleSurfaces: new Set<string>() }));
 const { identity } = await import('./identity.svelte');
 const { shell } = await import('./shell.svelte');
-const { sendCommand } = await import('./incoming');
+const { sendCommand, moduleSurfaces } = await import('./incoming');
 const { logWarn } = await import('./platform');
 const { settings } = await import('./settings.svelte');
 const { Review } = await import('./review.svelte');
@@ -27,6 +27,7 @@ beforeEach(() => {
   review = new Review();
   get.mockImplementation(async (path) => ({ status: path in reviewFixtures ? 200 : 404, body: reviewFixtures[path] }) as never);
   vi.mocked(sendCommand).mockResolvedValue(true);
+  moduleSurfaces.clear(); shell.view = 'review';
 });
 describe('Review selection and loading', () => {
   it('leaves an unsaved scope for the header to prompt and restores a saved scope', async () => {
@@ -51,29 +52,32 @@ describe('Review selection and loading', () => {
     expect(review.selected?.isReference).toBe(false);
   });
 
-  it('loads a run and focuses Images while keeping Review selected', async () => {
+  it('focuses the split Review viewer only, never showing or loading an Images tab', async () => {
     await review.open({ kind: 'session', id: session.id });
+    settings.reviewSplit = true; moduleSurfaces.add('images');
     review.select(review.rows[1]);
     await vi.waitFor(() => expect(sendCommand).toHaveBeenCalled());
     expect(sendCommand).toHaveBeenCalledWith('images', { type: 'focus-spot', project: 'project-demo', spot: 'atlas-2', server: 'http://h', flash: true, via: 'review' });
-    expect(shell.show).not.toHaveBeenCalled();
-    vi.mocked(sendCommand).mockResolvedValue(false);
-    await review.focus(review.rows[0]);
-    expect(shell.load).toHaveBeenCalledWith('images', '/atlas/?project=project-demo&spot=atlas-1');
-    await review.focus(review.rows[0], true);
-    expect(shell.show).toHaveBeenCalledWith('images');
     await review.focusGrain(review.rows);
     expect(sendCommand).toHaveBeenLastCalledWith('images', expect.objectContaining({ type: 'focus-grain', grain: 'area/1', server: 'http://h' }));
+    vi.mocked(sendCommand).mockRejectedValueOnce(new Error('gone'));
+    await review.focus(review.rows[0], true);
+    expect(review.error).toContain('gone');
+    expect(shell.show).not.toHaveBeenCalled();
+    expect(shell.load).not.toHaveBeenCalled();
   });
-  it('keeps both views open when Show in Images is used in the split', async () => {
+  it('sends nothing without an open viewer, outside the split or outside Review', async () => {
     await review.open({ kind: 'session', id: session.id });
+    vi.mocked(sendCommand).mockClear();
     settings.reviewSplit = true;
-    vi.stubGlobal('window', { innerWidth: 1440 });
     await review.focus(review.rows[0], true);
-    expect(shell.show).not.toHaveBeenCalled();
-    vi.stubGlobal('window', { innerWidth: 1280 });
+    moduleSurfaces.add('images'); settings.reviewSplit = false;
     await review.focus(review.rows[0], true);
+    settings.reviewSplit = true; shell.view = 'home';
+    await review.focus(review.rows[0], true);
+    expect(sendCommand).not.toHaveBeenCalled();
     expect(shell.show).not.toHaveBeenCalled();
+    expect(shell.load).not.toHaveBeenCalled();
   });
   it('does not echo shell selections and selects loaded user spots without sending a command', async () => {
     await review.open({ kind: 'session', id: session.id });
@@ -273,7 +277,7 @@ describe('Review refresh speed', () => {
     await vi.waitFor(() => expect(review.sessions).toHaveLength(1));
   });
 
-  it('keeps rows, run, selection and depth visible and reads only results with fresh lists', async () => {
+  it('keeps rows, run, selection and depth visible and reads only results and runs with fresh lists', async () => {
     await review.open({ kind: 'session', id: session.id });
     review.select(review.rows[3], false);
     await vi.waitFor(() => expect(review.depthState).toBe('ready'));
@@ -293,18 +297,23 @@ describe('Review refresh speed', () => {
     expect(review.selectedKey).toBe('acq-4');
     expect(review.rows[3].label).toBe('Zircon_4 updated');
     expect(review.depth).toBe(depth);
-    expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/sessions/${session.id}/results?run=preferred`]);
+    expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/sessions/${session.id}/results?run=preferred`, `/v1/sessions/${session.id}/reductions`]);
   });
 
-  it('keeps old rows and logs a failed quiet refresh', async () => {
+  it('keeps old rows on a failed refresh, which rejects, and logs a failed quiet load', async () => {
     await review.open({ kind: 'session', id: session.id });
     const oldRows = review.rows;
     get.mockResolvedValueOnce({ status: 503, body: { detail: 'maintenance' } } as never);
-    await review.refresh();
+    await expect(review.refresh()).rejects.toThrow('maintenance');
     expect(review.state).toBe('ready');
     expect(review.rows).toBe(oldRows);
     expect(review.error).toBe('');
-    expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('maintenance'));
+    vi.mocked(logWarn).mockClear();
+    get.mockResolvedValueOnce({ status: 503, body: { detail: 'maintenance' } } as never);
+    await review.load({ quiet: true });
+    expect(review.rows).toBe(oldRows);
+    expect(review.error).toBe('');
+    expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('Could not refresh results'));
   });
 
   it('ignores a quiet response superseded by a user scope change', async () => {
@@ -329,7 +338,7 @@ describe('Review refresh speed', () => {
     get.mockClear();
     await review.refresh();
     expect(review.rows[8].sampleName).toBe('Canonical reference');
-    expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/sessions/${session.id}/results?run=preferred`]);
+    expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/sessions/${session.id}/results?run=preferred`, `/v1/sessions/${session.id}/reductions`]);
     get.mockResolvedValueOnce({ status: 200, body: { ...table, rows: rows.map(row => ({ ...row, reference_material_name: 'Updated reference' })) } } as never);
     await review.refresh();
     expect(review.rows[8].sampleName).toBe('Updated reference');

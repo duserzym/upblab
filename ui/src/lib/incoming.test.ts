@@ -23,6 +23,7 @@ const { settings } = await import('./settings.svelte');
 const { dispatchSpotAction } = await import('./spot-actions');
 const { selection } = await import('./selection.svelte');
 const command: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 's', via: 'review' };
+const types = (frame: { postMessage: ReturnType<typeof vi.fn> }) => frame.postMessage.mock.calls.map(call => call[0].command.type);
 
 beforeEach(() => {
   atlasSync.v4 = false;
@@ -54,9 +55,10 @@ describe('sendCommand', () => {
     expect(other.postMessage).not.toHaveBeenCalled();
     const frame = { postMessage: vi.fn() };
     registerFrame('images', frame as unknown as Window);
-    expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ command: latest }), '*');
+    expect(types(frame)).toEqual(['focus-grain', 'set-presentation']);
+    expect(frame.postMessage).toHaveBeenNthCalledWith(1, expect.objectContaining({ command: latest }), '*');
     registerFrame('images', frame as unknown as Window);
-    expect(frame.postMessage).toHaveBeenCalledTimes(1);
+    expect(types(frame)).toEqual(['focus-grain', 'set-presentation', 'set-presentation']);
   });
 
   it('holds commands during initial load while keeping the frame known for bridge requests', async () => {
@@ -66,7 +68,8 @@ describe('sendCommand', () => {
     expect(await sendCommand('images', command)).toBe(false);
     expect(frame.postMessage).not.toHaveBeenCalled();
     registerFrame('images', frame as unknown as Window);
-    expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ command }), '*');
+    expect(types(frame)).toEqual(['focus-spot', 'set-presentation']);
+    expect(frame.postMessage).toHaveBeenNthCalledWith(1, expect.objectContaining({ command }), '*');
   });
 
   it('ignores invalid commands without replacing a waiting one', async () => {
@@ -74,7 +77,26 @@ describe('sendCommand', () => {
     expect(await sendCommand('images', { ...command, spot: 'bad/id' })).toBe(false);
     const frame = { postMessage: vi.fn() };
     registerFrame('images', frame as unknown as Window);
-    expect(frame.postMessage).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ command }), '*');
+    expect(types(frame)).toEqual(['focus-spot', 'set-presentation']);
+    expect(frame.postMessage).toHaveBeenNthCalledWith(1, expect.objectContaining({ command }), '*');
+  });
+
+  it('refuses editor commands to the images module, even after v4', async () => {
+    onModuleEvent(atlasStatusFixture, 'images');
+    const frame = { postMessage: vi.fn() };
+    frames.set('images', frame as unknown as Window);
+    for (const refused of [
+      { type: 'set-mode', project: 'p', mode: 'edit' },
+      { type: 'leave-edit', project: 'p', decision: 'sync' },
+      { type: 'sync-draft', project: 'p' },
+      { type: 'discard-draft', project: 'p' },
+      { type: 'set-presentation', presentation: 'editor' },
+      { type: 'open-project', project: 'p', mode: 'edit' },
+    ] as BridgeCommand[]) expect(await sendCommand('images', refused)).toBe(false);
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    expect(await sendCommand('images', { type: 'open-project', project: 'p', mode: 'view' })).toBe(true);
+    expect(await sendCommand('images', { type: 'set-presentation', presentation: 'viewer' })).toBe(true);
+    expect(types(frame)).toEqual(['open-project', 'set-presentation']);
   });
 });
 
@@ -97,10 +119,10 @@ describe('module selections', () => {
 });
 
 describe('module upload outcomes', () => {
-  it('forwards image outcomes and probe receipts with the canonical module name', () => {
+  it('forwards probe receipts with the canonical module name and ignores hosted image outcomes', () => {
     const opened = { type: 'grainatlas.files.opened', name: 'SEM', outcome: 'opened: package' };
     onModuleEvent(opened, 'images');
-    expect(opener.outcome).toHaveBeenCalledWith('grainatlas', opened);
+    expect(opener.outcome).not.toHaveBeenCalled();
     const seen = { type: 'lab.open-files.seen', id: 'o1', files: 2, bytes: 1024 };
     onModuleEvent(seen, 'sessions');
     expect(opener.seen).toHaveBeenCalledWith('laicpmsdb', seen);
@@ -127,11 +149,13 @@ describe('Atlas adoption', () => {
   it('never queues v4 commands until a valid Images v4 event', async () => {
     const frame = { postMessage: vi.fn() };
     registerFrame('images', frame as unknown as Window);
-    expect(await sendCommand('images', { type: 'sync-draft', project: 'p' })).toBe(false);
+    frame.postMessage.mockClear();
+    expect(await sendCommand('images', { type: 'report-status' })).toBe(false);
     expect(frame.postMessage).not.toHaveBeenCalled();
     onModuleEvent(atlasStatusFixture, 'images');
-    expect(await sendCommand('images', { type: 'sync-draft', project: 'p' })).toBe(true);
-    expect(frame.postMessage).toHaveBeenCalledOnce();
+    frame.postMessage.mockClear();
+    expect(await sendCommand('images', { type: 'report-status' })).toBe(true);
+    expect(types(frame)).toEqual(['report-status']);
   });
 });
 
@@ -147,9 +171,9 @@ describe('Images presentation delivery', () => {
     frame.postMessage.mockClear();
     moduleReady('images');
     expect(frame.postMessage).toHaveBeenCalledOnce();
-    shell.view = 'images';
+    shell.view = 'home'; settings.reviewSplit = false;
     await publishImagesPresentation();
-    expect(frame.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ command: { type: 'set-presentation', presentation: 'editor' } }), '*');
+    expect(frame.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ command: { type: 'set-presentation', presentation: 'viewer' } }), '*');
   });
   it('reapplies once on valid status readiness, preventing status feedback loops', () => {
     shell.view = 'review'; settings.reviewSplit = true;

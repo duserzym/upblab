@@ -10,6 +10,7 @@
 import { atlasFileUrl, capInventory, newestMounts, thumbnailPaths } from './home';
 import { identity } from './identity.svelte';
 import type { ApiReply } from './platform';
+import { serverMessage } from './server-error';
 
 export interface SessionOut {
   id: string;
@@ -127,8 +128,7 @@ function isList<T>(r: ApiReply<unknown>): r is ApiReply<T[]> {
 }
 
 function detail(r: ApiReply<unknown>): string {
-  const d = (r.body as { detail?: unknown } | null)?.detail;
-  return typeof d === 'string' ? d : `HTTP ${r.status}`;
+  return serverMessage(r.body, r.status);
 }
 
 class Overview {
@@ -214,14 +214,14 @@ class Overview {
   }
 
   /** Refresh a session row without disturbing the inventory or Review selection. */
-  async refreshSession(id: string) {
+  async refreshSession(id: string, { strict = false } = {}) {
     if (!identity.target || !identity.signedIn) return;
     const gen = this.generation, source = `${identity.target.server}:${identity.revision}`;
     try {
       const reply = await identity.get<SessionOut>(`/v1/sessions/${encodeURIComponent(id)}`);
       const existing = this.sessions.find(row => row.session.id === id)?.session;
       const session = reply.status === 200 && reply.body?.id === id ? reply.body : existing;
-      if (!session) return;
+      if (!session) { if (strict) throw new Error('Session unavailable'); return; }
       const row = await this.sessionRow(session);
       if (gen !== this.generation || source !== `${identity.target?.server}:${identity.revision}`) return;
       const index = this.sessions.findIndex(row => row.session.id === id);
@@ -231,11 +231,11 @@ class Overview {
       if (listed >= 0) this.sessionList[listed] = session;
       else this.sessionList.push(session);
       this.totalSessions = this.sessionList.length;
-    } catch { /* Keep the last readable row while offline. */ }
+    } catch (err) { if (strict) throw err; /* Keep the last readable row while offline. */ }
   }
 
   /** Refresh one mount in place; keep the visible inventory during the request. */
-  async refreshMount(id: string) {
+  async refreshMount(id: string, { strict = false } = {}) {
     if (!identity.target || !identity.signedIn) return;
     const gen = this.generation, server = identity.target.server, access = identity.revision;
     const current = () => gen === this.generation && server === identity.target?.server && access === identity.revision;
@@ -252,10 +252,11 @@ class Overview {
         if (!current() || !isList<MountOut>(list)) return;
         mount = list.body.find(m => m.id === id);
       }
-      if (!mount) return;
+      if (!mount) { if (strict) throw new Error('Mount unavailable'); return; }
       const reloadThumbnails = this.thumbnailSources.get(id)?.started === true
         || this.mounts.find(row => row.mount.id === id)?.thumbnails !== undefined;
       const row = await this.mountRow(mount, gen, false);
+      if (strict && row.atlas === 'error') throw new Error('Mount atlas unavailable');
       if (!current()) return;
       const listed = this.mountList.findIndex(m => m.id === id);
       if (listed >= 0) this.mountList[listed] = mount;
@@ -266,7 +267,7 @@ class Overview {
       else this.mounts = [...this.mounts, row];
       // Already visible cards need a fresh manifest even if their project is unchanged.
       if (reloadThumbnails) await this.loadThumbnails(id);
-    } catch { /* An older server or offline connection leaves Home as shown. */ }
+    } catch (err) { if (strict) throw err; /* Keep the last readable mount while offline. */ }
   }
 
   /** The explicit escape hatch for inventories over 500, using the list already read. */

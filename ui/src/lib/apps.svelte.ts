@@ -1,5 +1,6 @@
 import { identity } from './identity.svelte';
 import { isDesktop, launchGrainAtlas } from './platform';
+import { atlasEditorUrl } from './links';
 import { shell } from './shell.svelte';
 import { appWatch } from './app-watch.svelte';
 
@@ -15,13 +16,6 @@ class Apps {
 }
 export const apps = new Apps();
 let atlasSequence = 0, studioSequence = 0;
-export async function showInImages(target: AtlasTarget, from: string) {
-  try {
-    const link = target.project ? `grainatlas://project/${target.project}${target.spot ? `/spot/${target.spot}` : ''}`
-      : target.mount ? `laicpmsdb://mount/${target.mount}` : null;
-    if (link) await shell.handleLink(link, from);
-  } catch { /* Openers never interrupt the current view with an exception. */ }
-}
 export async function editInAtlas(target: AtlasTarget, from: string) {
   const seq = ++atlasSequence;
   const origin = `${identity.target?.server}:${identity.revision}`;
@@ -29,27 +23,23 @@ export async function editInAtlas(target: AtlasTarget, from: string) {
   const request: AppRequest<AtlasTarget> = { target, from, state: 'launching', message: '' };
   apps.atlas = request;
   try {
-    if (isDesktop && target.project) {
-      const server = identity.target?.server;
-      const code = await identity.handoff();
-      if (code && server && current()) {
-        await launchGrainAtlas(target.project, server, code, target.revision, target.spot, target.grain);
-        if (seq === atlasSequence) apps.atlas = { ...request, state: 'launched' };
-        if (current()) appWatch.atlas(target.project, target.mount);
-        return;
-      }
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message.startsWith('GrainAtlas is not installed')) {
-      if (seq === atlasSequence) apps.atlas = { ...request, state: 'missing', message };
+    if (!target.project) throw new Error('No grainatlas project is available for this mount.');
+    if (!isDesktop) {
+      window.open(atlasEditorUrl(shell.homeUrl('images'), target.project, target.spot), '_blank', 'noopener');
+      if (seq === atlasSequence) apps.atlas = { ...request, state: 'fallback' };
+      if (current()) appWatch.atlas(target.project, target.mount);
       return;
     }
-    request.message = message;
-  }
-  if (seq === atlasSequence) {
-    apps.atlas = { ...request, state: 'fallback' };
-    if (current()) await showInImages(target, from);
+    const server = identity.target?.server;
+    const code = await identity.handoff();
+    if (!current()) return;
+    if (!server || !code) throw new Error('Sign in to open this project in GrainAtlas.');
+    await launchGrainAtlas(target.project, server, code, target.revision, target.spot, target.grain);
+    if (seq === atlasSequence) apps.atlas = { ...request, state: 'launched' };
+    if (current()) appWatch.atlas(target.project, target.mount);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (seq === atlasSequence) apps.atlas = { ...request, state: message.startsWith('GrainAtlas is not installed') ? 'missing' : 'failed', message };
   }
 }
 export async function openInStudio(target: StudioTarget, from: string) {

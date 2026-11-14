@@ -11,7 +11,7 @@
 
 import type { OpenFilesTransfer } from '@lab/bridge';
 import { classify, expandOpened, formatBytes, type FileTab, type Routed, type WebSet } from './drop';
-import { desktopFiles, isDesktop, logInfo, logWarn } from './platform';
+import { desktopFiles, openGrainAtlasPaths, isDesktop, logInfo, logWarn } from './platform';
 import { shell } from './shell.svelte';
 
 export const MODULE_OF: Record<FileTab, string> = { images: 'grainatlas', sessions: 'laicpmsdb' };
@@ -22,6 +22,7 @@ export const TAKE_TIMEOUT_MS = 10_000;
 
 export type OpenProgress =
   | { type: 'listed'; from: string; routed: Extract<Routed, { target: FileTab }> }
+  | { type: 'atlas-handoff'; from: string; web: boolean }
   | { type: 'offered'; from: string; id: string }
   | { type: 'taken'; id: string; module: string; files: number; bytes: number }
   | { type: 'error'; from: string; reason: string }
@@ -94,8 +95,7 @@ class Opener {
 
   /** Show the tab; Sessions opens its ingest route (desktop with the path, `laicpmsdb://ingest?path=`). */
   private route(r: Extract<Routed, { target: FileTab }>, from: string) {
-    if (r.target === 'images') shell.show('images');
-    else if (isDesktop && r.path) void shell.handleLink(`laicpmsdb://ingest?path=${encodeURIComponent(r.path)}`, from);
+    if (isDesktop && r.path) void shell.handleLink(`laicpmsdb://ingest?path=${encodeURIComponent(r.path)}`, from);
     else shell.go('sessions', '/app/ingest');
   }
 
@@ -137,6 +137,12 @@ class Opener {
       }
       this.report({ type: 'listed', from, routed: r });
       if (scan.truncated) void logWarn(`[open] ${what}: listing cut short at ${scan.entries.length} files`);
+      if (r.target === 'images') {
+        await openGrainAtlasPaths(list);
+        this.status = { what, outcome: 'Files handed to grainatlas, where they are segmented and published. UPb Lab updates when grainatlas syncs.', state: 'taken' };
+        this.report({ type: 'atlas-handoff', from, web: false });
+        return r;
+      }
       const offer = await desktopFiles.offer({
         scan: scan.scan,
         module: r.target,
@@ -145,7 +151,7 @@ class Opener {
         name: r.name,
         path: r.path ?? null,
         // Sessions loads its ingest page, which takes the files when it starts.
-        nudge: r.target === 'images',
+        nudge: false,
       });
       this.offered(offer.id, r, what, from);
       this.route(r, from);
@@ -165,6 +171,11 @@ class Opener {
       return r;
     }
     this.report({ type: 'listed', from, routed: r });
+    if (r.target === 'images') {
+      this.status = { what, outcome: 'Open grainatlas in a new browser tab and drop the files there.', state: 'offered' };
+      this.report({ type: 'atlas-handoff', from, web: true });
+      return r;
+    }
     this.seq += 1;
     const id = `w${Date.now().toString(36)}-${this.seq}`;
     this.web[r.target] = {
@@ -175,7 +186,6 @@ class Opener {
     };
     this.offered(id, r, what, from);
     this.route(r, from);
-    if (r.target === 'images') this.pushFrame?.(r.target);
     return r;
   }
 

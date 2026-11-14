@@ -56,7 +56,6 @@
       </section>
     {/if}
     <div class="more row">
-      <button class="btn" disabled={!spot.atlasProjectId||!spot.atlasSpotId} onclick={()=>void review.focus(spot!,true)}>Show in Images</button>
       {#if spot.acquisitionId}<button class="btn" onclick={()=>void shell.handleLink(`laicpmsdb://acquisition/${spot!.acquisitionId}`,'review')}>Raw sweeps in Sessions</button>{/if}
     </div>
     {#if spot.acquisitionId && spot.runId}

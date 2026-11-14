@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { installFakeTauri } from './fake-tauri';
+import { reviewFixtures, session } from './fixtures/review';
 
 const manifest = { modules: [{
   name: 'grainatlas', version: 'test', source: 'https://example.test/grainatlas.tar.gz',
@@ -18,7 +19,7 @@ window.addEventListener('message', (event) => {
   if (event.source === parent && m?.tag === 'lab-bridge' && m.push === 'theme' &&
       (m.theme === 'light' || m.theme === 'dark')) {
     window.themePushes.push(m.theme);
-    // Images deliberately ignores the push for styling, testing the host's
+    // grainatlas deliberately ignores the push for styling, testing the host's
     // same-origin attribute fallback; Sessions applies the push.
     if (window.name !== 'lab-shell:images') document.documentElement.dataset.theme = m.theme;
   }
@@ -37,8 +38,10 @@ async function serveModules(page: Page) {
 
 const shellTheme = (page: Page, theme: string) => expect(page.locator('html')).toHaveAttribute('data-theme', theme);
 async function visitTabs(page: Page, theme: string) {
-  for (const tab of ['Home', 'Images', 'Sessions', 'Review', 'Reduce']) {
+  for (const tab of ['Home', 'Sessions', 'Review', 'Reduce']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
+    // grainatlas lives only in Review's SEM images tile.
+    if (tab === 'Review') await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
     await shellTheme(page, theme);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
@@ -110,8 +113,14 @@ for (const scheme of ['light', 'dark'] as const) {
   test(`desktop ${scheme}: publishes System and explicit choices to the host`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await serveModules(page);
-    await page.addInitScript(installFakeTauri, { store: { mode: 'server', serverUrl: 'http://localhost:8000' } });
+    // Signed in with stored results, so Review's SEM images tile opens grainatlas.
+    await page.addInitScript(installFakeTauri, {
+      store: { mode: 'server', serverUrl: 'http://localhost:8000', reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }) },
+      fixtures: reviewFixtures, signedIn: true,
+    });
     await page.goto('./');
+    // Settings are loaded (and the stored tab restored) once the shell listens for module events.
+    await page.waitForFunction(() => (window as unknown as { __fake: { listeners: Map<string, unknown> } }).__fake.listeners.has('lab-bridge://notify'));
     await expect(page.getByRole('tab', { name: 'Home', exact: true })).toBeVisible();
     await visitTabs(page, scheme);
     const themes = () => page.evaluate(() =>
@@ -129,7 +138,7 @@ for (const scheme of ['light', 'dark'] as const) {
     expect(await page.evaluate(() =>
       (window as unknown as { __fake: { calls: [string, { module?: string; navigate?: boolean }?][] } }).__fake.calls
         .filter(([command, args]) => command === 'module_open' && args?.navigate)
-        .map(([, args]) => args!.module))).toEqual(['images', 'sessions']);
+        .map(([, args]) => args!.module))).toEqual(['sessions', 'images']);
     await page.getByRole('radio', { name: 'System', exact: true }).click();
     await page.emulateMedia({ colorScheme: opposite });
     await shellTheme(page, opposite);

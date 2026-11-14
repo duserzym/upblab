@@ -11,7 +11,7 @@
   const sessions = $derived(card.target === 'sessions');
   /** Start the upload (Home's action tiles call this directly, one click). */
   export async function choose() {
-    if (!isDesktop) { folderInput?.click(); return; }
+    if (!isDesktop) { if (sessions) folderInput?.click(); else card.open = true; return; }
     try {
       const paths = await (sessions ? pickSessionPaths() : pickPaths(true));
       if (paths.length) await card.openPaths(paths);
@@ -23,10 +23,10 @@
     input.value = '';
   }
   function showReview() {
-    const id = sessions ? card.session?.id : card.mountId;
+    const id = card.session?.id;
     if (!id) return;
     shell.show('review');
-    void review.open(sessions ? { kind: 'session', id, run: card.completeRun ?? 'preferred' } : { kind: 'mount', id });
+    void review.open({ kind: 'session', id, run: card.completeRun ?? 'preferred' });
   }
 </script>
 
@@ -37,7 +37,8 @@
     {#if !isDesktop && sessions}<button class="btn" onclick={() => filesInput?.click()}>Choose session files…</button>{/if}
     {#if card.open || card.error}<button class="btn" aria-label="Dismiss {sessions ? 'session' : 'image'} upload" onclick={() => { card.close(); card.error = ''; }}>Dismiss</button>{/if}
   </div>
-  <p class="muted small">{sessions ? 'Rich CSV, per-spot folder, or both. Opens the ingest dialog in Sessions.' : 'SEM package folder or .grainatlas project folder. Opens in Images.'}</p>
+  <p class="muted small">{sessions ? 'Rich CSV, per-spot folder, or both. Opens the ingest dialog in Sessions.' : isDesktop ? 'SEM package folder, .grainatlas folder or .gaproj file. Opens in standalone grainatlas.' : 'Open grainatlas in a new browser tab and drop the files there.'}</p>
+  {#if !sessions && !isDesktop}<a class="btn" href={shell.homeUrl('images')} target="_blank" rel="noopener">Open grainatlas</a>{/if}
   {#if !isDesktop}
     <input bind:this={folderInput} aria-label="{sessions ? 'Session' : 'Image set'} folder" type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
     {#if sessions}<input bind:this={filesInput} aria-label="Session files" type="file" multiple hidden onchange={() => chosen(filesInput)} />{/if}
@@ -55,17 +56,6 @@
         <button class="btn" disabled={!card.ready} onclick={showReview}>Review</button>
       </div>
       {#if !card.ready}<p class="faint small">Review is available once a reduction run is submitted from UPbRPy Studio</p>{/if}
-    {:else if !sessions && card.imageOpened}
-      <p class="muted small">Publish the atlas to its mount from grainatlas (Publish button) to review it with results</p>
-      <div class="row">
-        <button class="btn" onclick={() => shell.show('images')}>Show Images</button>
-        <select aria-label="Review mount" bind:value={card.mountId}>
-          <option value="">Choose a mount…</option>
-          {#each card.mounts as mount}<option value={mount.id}>{mount.label}</option>{/each}
-        </select>
-        <button class="btn" disabled={!card.ready} onclick={showReview}>Review mount</button>
-      </div>
-      {#if !card.mounts.length}<p class="faint small">Register a mount in Sessions, then publish the atlas from grainatlas.</p>{/if}
     {/if}
   {/if}
   {#if card.error}<p class="error small" role="alert">{card.error}</p>{/if}

@@ -13,11 +13,16 @@ in one module into the right view in another:
 
 | Tab | Module | Built as | How the shell hosts it |
 | --- | --- | --- | --- |
-| Images | grainatlas | static web build (Svelte + wasm) and Tauri app | bundled static assets in a webview |
 | Sessions | laicpmsdb | Django service with a Svelte web build at `/app/` | webview pointed at the configured laicpmsdb server, or at the instance the shell starts on this computer (ADR-0003) |
-| Review | the shell itself | Svelte + uPlot | stored session or mount results, plots and image selection; optional split with Images |
+| Review | the shell itself | Svelte + uPlot | stored session or mount results, plots and image selection; the SEM pane is the bundled grainatlas build as a read-only viewer |
 | Reduce | UPbRPy Studio | native PySide6 + pyqtgraph desktop app | launched as an external application with a hand-off file and `upbr://` link; not embedded |
-| Home | the shell itself | Svelte | timeline across modules, search, recent items, settings |
+| Home | the shell itself | Svelte | timeline across modules, search, recent items, settings; uploads hand image sets to standalone grainatlas |
+
+Update 2026-11-14 (stage 4): the Images tab was removed. Editing images,
+grains and spots happens only in standalone grainatlas (desktop) or the
+hosted grainatlas build in its own browser tab (web), opened in context by
+**Edit in grainatlas** and by uploads. The bundled grainatlas build stays,
+as Review's read-only SEM viewer. Notices and polling: `docs/deep-links.md`.
 
 The shell owns no scientific data and performs no data reduction. Everything it shows is
 produced by a module; everything it stores is configuration and the link
@@ -36,8 +41,8 @@ graph between module objects.
    (name, version, release URL, SHA-256) and updated by a script.
 3. **One Svelte shell page, two deliveries.** The same shell UI runs inside
    Tauri (desktop) and as a page served by laicpmsdb at `/desk/` (web), where
-   the Images tab loads the grainatlas static build that laicpmsdb also serves
-   at `/atlas/`. Users without the desktop app get the same tabs in a browser.
+   Review's SEM viewer loads the grainatlas static build that laicpmsdb also
+   serves at `/atlas/`, and Edit in grainatlas opens that build in a new tab. Users without the desktop app get the same tabs in a browser.
 4. **Links are URLs.** Every cross-module action is a URL with a registered
    scheme: `laicpmsdb://acquisition/<uuid>`, `grainatlas://project/<uuid>/spot/<uuid>`,
    `upbr://session/<uuid>`. The shell registers all three schemes on both
@@ -59,7 +64,7 @@ graph between module objects.
    receives reduction bundles back through laicpmsdb's import. Embedding is
    revisited only if Studio grows a web front end.
 8. **Open source, MIT**, code only in git, no telemetry, offline-capable for
-   the Images tab and read-only cached views of the Sessions tab.
+   Review's image viewer and read-only cached views of the Sessions tab.
 9. **A release is a double-click application.** In "This computer" mode the
    shell bundles PostgreSQL 17 (`postgresql_embedded`) and a relocatable
    Python runtime carrying the laicpmsdb service, starts both on launch,
@@ -129,15 +134,16 @@ per module tab (Tauri 2 multi-webview), so a slow module never blocks the
 shell. Web: the shell page with one `iframe` per module tab, same bridge over
 `postMessage`. Tab state (open project, current route) is saved per user.
 
-Review is the fourth tab, between Sessions and Reduce (Ctrl/⌘ 1–5). It
+Review is the third tab, between Sessions and Reduce (Ctrl/⌘ 1–4 since the
+Images tab was removed on 2026-11-14). It
 reads stored laicpmsdb results, draws display geometry and links selections
 both ways through protocol v3 commands and spot notifications. It has no
 reduction or editing controls. At 1440 CSS px or more the remembered **Side
-by side** choice places Review and Images in equal halves. Review uses a
-compact tree with plots above details. The existing Images component and
-ModuleSurface remain mounted; native bounds follow ResizeObserver, and the
+by side** choice shows the grainatlas viewer as Review's SEM pane. Review uses a
+compact tree with plots above details. The viewer's ModuleSurface stays
+mounted; native bounds follow ResizeObserver, and the
 web iframe resizes. Below 1440 CSS px Review returns to three columns and
-Images hides. Dialogs hide the module surface as on the other tabs.
+the viewer hides. Dialogs hide the module surface as on the other tabs.
 
 ### 4.4 Link resolution
 
@@ -145,7 +151,7 @@ Images hides. Dialogs hide the module surface as on the other tabs.
 module --bridge.open(url)--> shell resolver
   laicpmsdb://acquisition/<id>     -> Sessions tab, route /app/acquisitions/<id>
   laicpmsdb://session/<id>         -> Sessions tab, route /app/sessions/<id>
-  grainatlas://project/<id>/spot/<id> -> Images tab, route /atlas/?project=<id>&spot=<id>
+  grainatlas://project/<id>/spot/<id> -> standalone grainatlas (desktop) or /atlas/?project=<id>&spot=<id> in a new tab (web)
   laicpmsdb://mount/<id>           -> Sessions tab, the mount page with its atlas view
   laicpmsdb://ingest?path=...      -> Sessions tab, the ingest dialog (desktop only)
   upbr://session/<id>?server=&code= -> launch Studio in database mode (docs/WORKFLOW.md section 4)

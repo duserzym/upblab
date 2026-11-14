@@ -1,5 +1,4 @@
 <script lang="ts">
-  import DraftList from '../components/home/DraftList.svelte';
   import UploadCard from '../components/UploadCard.svelte';
   import { upload } from '../lib/upload.svelte';
   import { identity } from '../lib/identity.svelte';
@@ -19,6 +18,7 @@
   import { settings } from '../lib/settings.svelte';
   import { review } from '../lib/review.svelte';
   import { shell } from '../lib/shell.svelte';
+  import { atlasSync } from '../lib/atlas-sync.svelte';
 
   let { active }: { active: boolean } = $props();
   let server = $state<boolean | null>(null);
@@ -104,7 +104,7 @@
   // The three parts of the pipeline, as one line in the header: where each tab gets its
   // data or program, and whether it answers. The pill says the short state; the tooltip and
   // the accessible name say all of it. A click opens the tab, which explains a problem.
-  type Pill = { tab: 'sessions' | 'images' | 'reduce'; name: string; module: string; ok: boolean | null; state: string; detail: string };
+  type Pill = { tab: 'sessions' | 'reduce'; name: string; module: string; ok: boolean | null; state: string; detail: string };
   const host = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/$/, '');
   const pills = $derived.by((): Pill[] => {
     const sessionsPill: Pill = shell.local
@@ -124,11 +124,6 @@
     const studioState = !isDesktop ? 'desktop app only' : studio === null ? 'checking…' : studio.found ? (studio.kind === 'checkout' ? 'development checkout' : 'installed') : 'not found';
     return [
       sessionsPill,
-      {
-        tab: 'images', name: 'Images', module: 'grainatlas', ok: shell.atlas ? true : null,
-        state: shell.atlas ? `build ${shell.atlas.version}` : 'no build pinned yet',
-        detail: shell.atlas ? `build ${shell.atlas.version} (${shell.atlas.source})` : 'no build pinned yet',
-      },
       {
         tab: 'reduce', name: 'Reduce', module: 'UPbRPy Studio', ok: isDesktop && studio ? studio.found : null,
         state: studioState, detail: [studioState, studio?.path].filter(Boolean).join(' · '),
@@ -171,14 +166,22 @@
         <span class="dot" style="background: {openColor(opener.status.state)}"></span>
         <span class="mono">{opener.status.what}</span>: {opener.status.outcome}
       </p>
+      {#if !isDesktop && opener.status.outcome.startsWith('Open grainatlas')}
+        <a class="btn" href={shell.homeUrl('images')} target="_blank" rel="noopener">Open grainatlas</a>
+      {/if}
     {/if}
     {#if !isDesktop}
       <input bind:this={folderInput} aria-label="Open folder" type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
       <input bind:this={filesInput} aria-label="Open files" type="file" multiple hidden onchange={() => chosen(filesInput)} />
     {/if}
 
-    <DraftList />
 
+    {#if atlasSync.strandedDrafts.length}
+      <p class="small stranded" role="status" data-testid="stranded-drafts">
+        UPb Lab still holds unsynced grainatlas edits from its former Images tab for {atlasSync.strandedDrafts.map(d => d.name).join(', ')}.
+        They are kept in UPb Lab's own storage, which the standalone grainatlas cannot open. Do not reset UPb Lab's data until they are recovered.
+      </p>
+    {/if}
     <section class="board-section stack" aria-label="Sessions">
       <Toolbar section="Sessions" collapsed={collapsed('sessions')} controls="home-sessions-grid" toggle={() => toggleSection('sessions')} bind:query={sessionQuery} bind:sort={sessionSort} count={sessions.length} total={overview.totalSessions} progress={sessionProgress} cap={sessionCap} refresh={identity.signedIn ? refresh : undefined} busy={overview.refreshing}>
         {#snippet options()}
@@ -333,4 +336,5 @@
   table.data { table-layout: fixed; }
   table.data tbody tr { cursor: default; }
   .board > .panel { margin-top: 0; padding: var(--space-3); gap: var(--space-2); }
+  .stranded { margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--warning); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
 </style>

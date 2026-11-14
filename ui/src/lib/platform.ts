@@ -271,7 +271,23 @@ export function pickSessionPaths(): Promise<string[]> {
   return invoke<string[]>('files_pick_session');
 }
 
+/** Hand local images and project paths to the standalone application. */
+export async function openGrainAtlasPaths(paths: string[]): Promise<void> {
+  await invoke('grainatlas_open_paths', { paths });
+}
+
+/** src-tauri/src/inbox.rs `Notice`: what a standalone app reported; looked up again, never trusted. */
+export type InboxNotice =
+  | { type: 'lab.atlas.synced'; mount: string; project: string; server: string }
+  | { type: 'lab.run.submitted'; session: string; run: string | null; server: string };
+/** Take (and remove) the notices standalone grainatlas and Studio left for UPb Lab. Desktop only. */
+export async function takeInbox(): Promise<InboxNotice[]> {
+  if (!isDesktop) return [];
+  return invoke<InboxNotice[]>('inbox_take');
+}
+
 /** One-time code is passed only through IPC, never logged or retained. */
+
 export async function launchGrainAtlas(project: string, server: string, code: string, revision?: number, spot?: string | null, grain?: string | null): Promise<void> {
   if (!isDesktop) throw new Error('GrainAtlas can only be launched from the desktop app.');
   await invoke('grainatlas_launch', { project, server, code, ...(revision === undefined ? {} : { revision }), ...(spot ? { spot } : grain ? { grain } : {}) });

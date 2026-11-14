@@ -1,7 +1,7 @@
 # Links between modules
 
 Cross-module navigation uses URLs (plan section 4.4). UPb Lab registers
-three schemes with the operating system and routes them to a tab:
+three schemes with the operating system and routes them to a tab or an app:
 
 | Link | Opens |
 | --- | --- |
@@ -12,8 +12,8 @@ three schemes with the operating system and routes them to a tab:
 | `laicpmsdb://ingest?path=<folder>` | Sessions tab, `<server>/app/#/ingest?path=<folder>` (the ingest dialog, folder prefilled; desktop) |
 | `laicpmsdb://search?label=<label>` | Sessions tab, `<server>/app/#/search?label=<label>` |
 | `laicpmsdb://auth/callback?code=<code>`, `?error=<slug>` | completes the shell's ORCID or Google sign-in, or shows why it failed (only one the shell started in the last ten minutes, only from the OS) |
-| `grainatlas://project/<id>` | Images tab, grainatlas build `index.html?server=<laicpmsdb>&project=<id>` |
-| `grainatlas://project/<id>/spot/<id>` | Images tab, `index.html?server=<laicpmsdb>&project=<id>&spot=<id>` |
+| `grainatlas://project/<id>` | standalone grainatlas on that project (desktop); the hosted build `<server>/atlas/?project=<id>` in a new browser tab (web) |
+| `grainatlas://project/<id>/spot/<id>` | the same, with that spot selected and centred |
 | `upbr://session/<id>?server=&code=` | launches UPbRPy Studio in database mode (`--open "<link>"`); without `code`, the shell mints one with its sign-in (`POST /v1/auth/handoff`) and adds its `server` (docs/WORKFLOW.md section 4); the Reduce tab shows the result, or install instructions when Studio is missing |
 | `upbr://run/<id>?server=` | the same, for the project of a reduction run |
 | `upbr://session/<id>?…&acquisition=<id>&via=upblab`, `upbr://run/<id>?…` | the same, opening at one analysis with its raw sweep (Openers section below) |
@@ -39,9 +39,13 @@ The resolver is `ui/src/lib/links.ts`; its tests are the specification.
 - **You.** The link box on the Home tab, handy for testing.
 - **Opened files.** A Qtegra export dropped on the window, opened from the
   Finder or Explorer, or picked with Home's Open buttons becomes
-  `laicpmsdb://ingest?path=<folder>` (desktop); image folders go to the
-  Images tab. The files themselves reach the module through `@lab/bridge`
-  `open-files` (bridge/README.md); `ui/src/lib/drop.ts` decides where.
+  `laicpmsdb://ingest?path=<folder>` (desktop). Image folders, `.grainatlas`
+  folders and `.gaproj` files are handed to standalone grainatlas
+  (`open -b org.grainatlas.desktop <paths>` on macOS, the paths as arguments
+  on Windows); on the web the page asks you to open grainatlas in a new
+  browser tab and drop them there. Session files reach laicpmsdb through
+  `@lab/bridge` `open-files` (bridge/README.md); `ui/src/lib/drop.ts`
+  decides where.
 - **The web delivery.** `/desk/open?url=<encoded link>`.
 
 ## Web delivery
@@ -83,7 +87,8 @@ it; use the Home tab's link box instead.
 
 ## Module installers
 
-`grainatlas://` stays registered to UPb Lab and opens its Images tab.
+`grainatlas://` stays registered to UPb Lab, which opens standalone
+grainatlas (grainatlas.app registers no scheme of its own).
 Standalone GrainAtlas is launched with arguments, as described below.
 UPbRPy Studio's installer registers `upbr`; when both Studio and UPb Lab are
 installed, the OS picks one handler for that scheme. UPb Lab routes an
@@ -124,8 +129,7 @@ start `grainatlas-desktop.exe` with the same arguments. Find it through
 (NSIS, current-user install), then `%LOCALAPPDATA%\grainatlas`, then
 `Program Files\grainatlas` (MSI). Single-instance forwarding works the same
 on Windows. The shell implements the launcher in
-`src-tauri/src/grainatlas_app.rs`. Its UI mints the one-time handoff code and
-shows the launch button only after a valid v4 event from the Images module.
+`src-tauri/src/grainatlas_app.rs`. Its UI mints the one-time handoff code.
 
 
 ## Shell to module: commands (bridge v3)
@@ -171,9 +175,11 @@ open -n -b org.grainatlas.desktop --args --project <atlas project uuid> --server
   focuses the object. It never opens a second copy of a project.
 - Today's grainatlas ignores `--spot` and `--grain` (unknown flags and
   their values are skipped) and opens or focuses the project.
-- Without the desktop app (web delivery), or when the mount has no
-  published atlas, UPb Lab does the best existing thing: the Images tab
-  with `grainatlas://project/<id>/spot/<id>`, or the mount page.
+- Web delivery opens the hosted grainatlas build in a new browser tab at
+  `<server>/atlas/?project=<id>[&spot=<id>]`. A mount without a published
+  atlas has no Edit button. When the desktop app is missing, UPb Lab shows
+  where to install it; there is no in-window fallback since the Images tab
+  was removed (2026-11-14).
 
 ### UPb Lab to Studio
 
@@ -218,3 +224,44 @@ Studio opens it through the operating system after **Submit to database**
 succeeds, only for a project opened by a link carrying `via=upblab`.
 grainatlas does not send a link after a sync: it would pull UPb Lab to the
 front in the middle of editing.
+
+## Notices from the standalone apps (2026-11-14)
+
+Standalone grainatlas and UPbRPy Studio tell UPb Lab that the database
+changed by leaving a small JSON file in UPb Lab's data folder. Writing a file
+never launches or focuses UPb Lab, works the same on macOS and Windows, and
+needs no running UPb Lab.
+
+| Sender | When | File |
+| --- | --- | --- |
+| grainatlas (desktop, standalone only) | after a sync that applied something, including a partial sync, and after a publish | `inbox/atlas-synced/<mount_id>.json` |
+| UPbRPy Studio | after a successful `POST /v1/sessions/{id}/runs/import` | `inbox/run-submitted/<session_id>.json` |
+
+The folder is Tauri's app data directory for `edu.umn.upbstudio`:
+`~/Library/Application Support/edu.umn.upbstudio/` on macOS,
+`%APPDATA%\edu.umn.upbstudio\` on Windows. Senders create the subfolders,
+write a temp file in the same folder and rename it, and overwrite the
+previous file for the same mount or session, so the folder does not grow.
+
+```json
+{"v":1,"type":"lab.atlas.synced","mount_id":"<uuid>","project_uuid":"<uuid>","revision":12,"server":"http://localhost:8000","at":"<ISO time>","source":"grainatlas-standalone"}
+{"v":1,"type":"lab.run.submitted","session_id":"<uuid>","run_id":"<uuid>","server":"http://localhost:8000","at":"<ISO time>","source":"studio"}
+```
+
+UPb Lab (`src-tauri/src/inbox.rs`, `ui/src/lib/app-watch.svelte.ts`) takes
+the files every 5 s while its window is visible and on focus, and deletes
+each one. Files that are not `v: 1`, have the wrong `type` for their folder,
+carry an id with characters outside `[A-Za-z0-9._~-]` or are larger than
+4 KB are deleted unread; `*.tmp` files are left for the sender. A notice for
+another server is ignored. A notice is only a reason to look now: UPb Lab
+re-reads `/v1/atlas/projects/<id>` or `/v1/sessions/<id>/reductions` and
+refreshes Home and Review when something changed. It never uses the revision
+or run id in the file.
+
+The fallback is a poll every 60 s while the window is visible (paused when
+hidden, run again on focus): one request per open mount or session. That
+means each app UPb Lab opened in the last two hours, plus Review's current
+scope (a mount's atlas project, or a session's runs and the atlas projects of
+its rows, at most 8). An item whose request fails waits 10 minutes before the
+next try. Studio also keeps opening `laicpmsdb://run/<id>` after a submit,
+which brings Review to that run on purpose.

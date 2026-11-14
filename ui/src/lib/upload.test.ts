@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { get, scan, offer, projectPackage } = vi.hoisted(() => ({ get: vi.fn(), scan: vi.fn(), offer: vi.fn(), projectPackage: vi.fn() }));
+const { get, scan, offer, openGrainAtlasPaths } = vi.hoisted(() => ({ get: vi.fn(), scan: vi.fn(), offer: vi.fn(), openGrainAtlasPaths: vi.fn() }));
 vi.mock('./identity.svelte', () => ({ identity: { target: { server: 'http://lab', key: 'lab' }, revision: 1, get } }));
-vi.mock('./platform', () => ({ desktopFiles: { scan, offer, projectPackage }, isDesktop: true, logInfo: vi.fn(), logWarn: vi.fn() }));
+vi.mock('./platform', () => ({ desktopFiles: { scan, offer }, openGrainAtlasPaths, isDesktop: true, logInfo: vi.fn(), logWarn: vi.fn() }));
 vi.mock('./shell.svelte', () => ({ shell: { show: vi.fn(), go: vi.fn(), handleLink: vi.fn(), note: vi.fn() } }));
 const { Upload, POLL_MS, WATCH_MS } = await import('./upload.svelte');
 const { opener } = await import('./opener.svelte');
@@ -20,7 +20,7 @@ beforeEach(() => {
   identity.revision = 1;
   get.mockResolvedValue({ status: 200, body: [] });
   offer.mockImplementation(async () => ({ id: `o${++nextId}` }));
-  projectPackage.mockResolvedValue(null);
+  openGrainAtlasPaths.mockResolvedValue(undefined);
 });
 afterEach(() => { cards.forEach(c => c.dispose()); vi.clearAllTimers(); vi.useRealTimers(); });
 
@@ -102,57 +102,45 @@ describe('Home upload handoffs', () => {
     expect(c.session?.id).toBe(session.id);
   });
 
-  it('shows the module outcome, ignores other sets and sources, and offers mounts without polling', async () => {
-    get.mockResolvedValue({ status: 200, body: [{ id: 'm1', label: 'Demo mount' }] });
+  it('on web, tells the user to open grainatlas in a new tab and holds or polls nothing', async () => {
     const c = card('images');
     await c.openWebFiles(image);
-    opener.takeWeb('grainatlas', true);
-    opener.outcome('laicpmsdb', { name: 'SEM', outcome: 'opened: wrong source' });
-    opener.outcome('grainatlas', { name: 'other', outcome: 'opened: another set' });
-    expect(c.imageOpened).toBe(false);
-    opener.outcome('grainatlas', { name: 'SEM', outcome: 'asked: scale' });
-    expect(c.outcome).toBe('asked: scale');
-    opener.outcome('grainatlas', { name: 'SEM', outcome: 'opened: package, 1 area(s)' });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(c.mounts[0].id).toBe('m1');
+    expect(c.sent).toBe(true);
+    expect(c.outcome).toMatch(/new browser tab/);
+    expect(c.steps).toEqual([{ text: c.outcome, done: true }]);
     expect(c.ready).toBe(false);
-    c.mountId = 'm1';
-    expect(c.ready).toBe(true);
-    const calls = get.mock.calls.length;
+    expect(opener.takeWeb('grainatlas', true)).toBeNull();
+    expect(shell.show).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(get).toHaveBeenCalledTimes(calls);
+    expect(get).not.toHaveBeenCalled();
   });
 
-  it('matches a notified project id to a mount current atlas', async () => {
-    get.mockImplementation(async (path: string) => ({ status: 200, body: path === '/v1/mounts'
-      ? [{ id: 'm1', label: 'One' }, { id: 'm2', label: 'Two' }]
-      : { current: { project_id: path.includes('m2') ? 'p2' : 'p1' } } }));
+  it('on desktop, hands the paths to standalone grainatlas without offering them to a tab', async () => {
+    scan.mockResolvedValue({ scan: 'scan', roots: [{ path: '/SEM', name: 'SEM', dir: true }], entries: image.entries, missing: [], truncated: false });
+    const c = card('images');
+    await c.openPaths(['/SEM']);
+    expect(openGrainAtlasPaths).toHaveBeenCalledExactlyOnceWith(['/SEM']);
+    expect(offer).not.toHaveBeenCalled();
+    expect(c.steps).toEqual([{ text: expect.stringContaining('handed to grainatlas'), done: true }]);
+    expect(c.error).toBe('');
+  });
+
+  it('ignores an image handoff from another card', async () => {
+    const s = card('sessions');
+    await s.openWebFiles(csv);
     const c = card('images');
     await c.openWebFiles(image);
-    opener.outcome('grainatlas', { name: 'SEM', outcome: 'opened: package', project: 'p2' });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(c.mountId).toBe('m2');
-  });
-
-  it.each(['waiting', 'timeout'])('offers the project first and the package after %s', async mode => {
-    projectPackage.mockResolvedValue({ name: 'SEM', path: '/SEM', exists: true });
-    scan.mockImplementation(async (paths: string[]) => ({ scan: 'scan', roots: [{ path: paths[0], name: paths[0].slice(1), dir: true }], entries: [{ root: 0, rel: paths[0].endsWith('.grainatlas') ? 'project.json' : 'a.jpg', size: 20 }], missing: [], truncated: false }));
-    const c = card('images');
-    await c.openPaths(['/demo.grainatlas']);
-    expect(offer.mock.calls.map(([a]) => a.kind)).toEqual(['project']);
-    if (mode === 'waiting') opener.outcome('grainatlas', { name: 'demo.grainatlas', outcome: 'waiting: package SEM' });
-    await vi.advanceTimersByTimeAsync(mode === 'waiting' ? 0 : 10_000);
-    expect(offer.mock.calls.map(([a]) => a.kind)).toEqual(['project', 'area']);
-    expect(scan.mock.calls.map(([paths]) => paths)).toEqual([['/demo.grainatlas'], ['/SEM']]);
-    opener.outcome('grainatlas', { name: 'demo.grainatlas', outcome: 'opened: project SEM' });
-    expect(c.imageOpened).toBe(true);
+    expect(s.outcome).toBe('');
+    expect(c.sent).toBe(true);
   });
 
   it('keeps failures visible and stops watching when dismissed or the account changes', async () => {
+    scan.mockResolvedValue({ scan: 'scan', roots: [{ path: '/SEM', name: 'SEM', dir: true }], entries: image.entries, missing: [], truncated: false });
+    openGrainAtlasPaths.mockRejectedValueOnce(new Error('GrainAtlas is not installed'));
     const c = card('images');
-    await c.openWebFiles(image);
-    opener.outcome('grainatlas', { name: 'SEM', outcome: 'failed: invalid project' });
-    expect(c.error).toContain('invalid project');
+    await c.openPaths(['/SEM']);
+    expect(c.error).toContain('GrainAtlas is not installed');
+    expect(c.sent).toBe(false);
     const s = card('sessions');
     await s.openWebFiles(csv);
     opener.takeWeb('laicpmsdb', true);

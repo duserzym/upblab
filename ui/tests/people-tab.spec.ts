@@ -66,13 +66,13 @@ test('signing out from the hosted page removes People and returns Home', async (
 });
 
 for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
-  test(`People and the six-tab header fit ${width} x ${height}`, async ({ page }) => {
+  test(`People and the five-tab header fit ${width} x ${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await people(page, true, 'Demo staff with a deliberately long display name');
     await page.getByRole('tab', { name: 'People & access', exact: true }).click();
     await expect(page.locator('iframe[title="People & access"]')).toBeVisible();
     expect(await problems(page, 'People & access')).toEqual([]);
     const tabs = await page.getByRole('tab').allTextContents();
-    expect(tabs).toEqual(['Home', 'Images', 'Sessions', 'Review', 'Reduce', 'People & access']);
+    expect(tabs).toEqual(['Home', 'Sessions', 'Review', 'Reduce', 'People & access']);
   });
 }

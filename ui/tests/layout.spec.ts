@@ -185,7 +185,7 @@ test('the compact Layout control expands within the toolbar at 1024x640', async 
   await expect.poll(() => problems(page, 'Compact layout toolbar')).toEqual([]);
 });
 
-test('a short vertical stack hides SEM when railed and the Images tab still uses full bounds', async ({ page }) => {
+test('a short vertical stack hides SEM when railed and hides it again after Expand and Escape', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 640 });
   const stack: Layout = { axis: 'y', ratio: 0.25, first: 'details', second: {
     axis: 'y', ratio: 0.3, first: 'spots', second: { axis: 'y', ratio: 0.5, first: 'plots', second: 'images' },
@@ -201,12 +201,9 @@ test('a short vertical stack hides SEM when railed and the Images tab still uses
   await page.keyboard.press('Escape');
   await expect(surface).toBeHidden();
   await expect.poll(async () => (await calls(page)).slice(before).some(([c, a]) => c === 'module_hide' && a?.module === 'images')).toBe(true);
-  await page.getByRole('tab', { name: 'Images', exact: true }).click();
-  await expect(surface).toBeVisible();
-  await expect.poll(async () => {
-    const r = (await surface.boundingBox())!;
-    return { x: r.x, y: r.y, width: r.width, height: r.height };
-  }).toEqual({ x: 0, y: 48, width: 1024, height: 592 });
+  // The SEM tile is the only place grainatlas shows inside UPb Lab; it stays railed.
+  await expect(tile(page, 'SEM images')).toHaveAttribute('data-collapsed', 'true');
+  await expect(page.getByRole('tab', { name: 'Images' })).toHaveCount(0);
 });
 
 

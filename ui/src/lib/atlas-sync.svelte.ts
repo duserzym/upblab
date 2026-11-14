@@ -1,86 +1,24 @@
-import { tick } from 'svelte';
-import { confirmationSummary, createAtlasRequests, requestTimeout, resultReason, type AtlasRequest } from './atlas-requests';
-import { logWarn } from './platform';
-import { atlasStatus, atlasDrafts, atlasSynced, type AtlasStatusEvent, type AtlasDraft, type AtlasSyncedEvent, type AtlasChanges, type AtlasSyncConfirmation } from '@lab/bridge';
+import { atlasDrafts, atlasStatus, atlasSynced, type AtlasDraft, type AtlasStatusEvent, type AtlasSyncedEvent } from '@lab/bridge';
 
-export function changeCounts(changes: AtlasChanges | null): string {
-  if (!changes) return '';
-  return ([['spots', 'spot'], ['grains', 'grain'], ['labels', 'label']] as const)
-    .flatMap(([key, label]) => changes[key] ? [`${changes[key]} ${label}${changes[key] === 1 ? '' : 's'}`] : [])
-    .concat(changes.pixels ? ['new images'] : []).join(', ');
-}
-export function statusLabel(status: AtlasStatusEvent): string {
-  switch (status.state) {
-    case 'checking': return 'Checking…';
-    case 'unregistered': return 'Not in the database';
-    case 'in-sync': return ['In sync', [status.atlasVersion === null ? '' : `v${status.atlasVersion}`, status.revision === null ? '' : `r${status.revision}`].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
-    case 'local-changes': return ['Local changes', changeCounts(status.changes)].filter(Boolean).join(' · ');
-    case 'server-newer': return 'Database is newer';
-    case 'both-changed': return 'Both changed';
-    case 'offline': return 'Offline, changes kept here';
-  }
-}
-export function needsLeaveGuard(status: AtlasStatusEvent | null): boolean {
-  return status?.mode === 'edit' && !!status.changes &&
-    (status.changes.pixels || status.changes.spots > 0 || status.changes.grains > 0 || status.changes.labels > 0);
-}
 export function refreshDecision(mount: string, review: { state: string; scope: { kind: string; id: string } | null; rows: { mountId: string | null }[] }, home: { mount: { id: string } }[]) {
   return {
     review: review.state === 'ready' && (review.scope?.kind === 'mount' && review.scope.id === mount || review.rows.some(row => row.mountId === mount)),
     home: home.some(row => row.mount.id === mount),
   };
 }
-export type LeaveDecision = 'sync' | 'keep-draft' | 'discard';
 class AtlasSync {
   v4 = $state(false);
   status = $state<AtlasStatusEvent | null>(null);
-  drafts = $state<AtlasDraft[]>([]);
   lastSynced = $state<AtlasSyncedEvent | null>(null);
-  note = $state('');
-  private requests = createAtlasRequests(async command => (await import('./incoming')).sendCommand('images', command), () => this.v4);
-  request(command: AtlasRequest, timeoutMs = requestTimeout(command)) {
-    // Development specs can shorten timeouts without changing production behavior.
-    const testMs = import.meta.env.DEV && typeof location !== 'undefined'
-      ? Number(new URLSearchParams(location.search).get('atlas-command-timeout')) : 0;
-    return this.requests.request(command, Number.isFinite(testMs) && testMs > 0 ? testMs : timeoutMs);
-  }
-  async openForConfirmation(project: string, confirm: AtlasSyncConfirmation, openIfDifferent = false) {
-    const { shell } = await import('./shell.svelte');
-    await shell.show('images');
-    this.note = `Needs your confirmation: this ${confirmationSummary(confirm)}`;
-    // Restore the module surface after the shell dialog closes before handing off.
-    await tick();
-    const result = await this.request({
-      type: openIfDifferent && this.status?.project !== project ? 'open-project' : 'set-mode',
-      project, mode: 'edit',
-    }, 10_000);
-    if ('timeout' in result || !result.ok)
-      await logWarn(`[atlas] opening bulk sync confirmation: ${resultReason(result, 10)}`);
-  }
-  snapshot = $state(0);
-  leave = $state<{ status: AtlasStatusEvent } | null>(null);
-  private resolveLeave: ((decision: LeaveDecision | null) => void) | null = null;
+  /** Unsynced edits left in UPb Lab's own storage by the former Images tab. Shown, never sent. */
+  strandedDrafts = $state<AtlasDraft[]>([]);
   receive(event: unknown): AtlasSyncedEvent | null {
-    this.requests.receive(event);
-    const status = atlasStatus(event), drafts = atlasDrafts(event), synced = atlasSynced(event);
-    if (!status && !drafts && !synced) return null;
-    this.v4 = true;
-    if (status) { if (this.status?.project !== status.project || status.state === 'in-sync') this.note = ''; this.status = status; this.snapshot++; }
-    if (drafts) { this.drafts = drafts.drafts; this.snapshot++; }
+    const status = atlasStatus(event), synced = atlasSynced(event), drafts = atlasDrafts(event);
+    if (status || synced || drafts) this.v4 = true;
+    if (status) this.status = status;
+    if (drafts) this.strandedDrafts = drafts.drafts;
     if (synced) this.lastSynced = synced;
     return synced;
-  }
-  get guardNeeded() { return this.v4 && needsLeaveGuard(this.status); }
-  requestLeave(): Promise<LeaveDecision | null> {
-    // A second navigation while the dialog is open must not replace its resolver.
-    if (this.leave || !this.status) return Promise.resolve(null);
-    this.leave = { status: this.status };
-    return new Promise(resolve => { this.resolveLeave = resolve; });
-  }
-  finishLeave(decision: LeaveDecision | null) {
-    this.resolveLeave?.(decision);
-    this.resolveLeave = null;
-    this.leave = null;
   }
 }
 export const atlasSync = new AtlasSync();

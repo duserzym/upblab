@@ -39,7 +39,8 @@ test('plot context menu selects the point, stays in its tile and supports keyboa
   await expect(menu).toBeVisible();
   await expect(details(page).getByRole('heading', { name: 'Zircon_2', exact: true })).toBeVisible();
   await inside(menu, page.locator('[data-review-panel="plots"]'));
-  await expect(menu.getByRole('menuitem', { name: 'Show in Images', exact: true })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /Edit in grainatlas/ })).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: /Show in Images/ })).toHaveCount(0);
   await menu.getByRole('menuitem', { name: /Edit in grainatlas/ }).click();
   await expect.poll(async () => (await launches(page, 'grainatlas_launch')).length).toBe(1);
   await point.focus();
@@ -71,14 +72,13 @@ test('E and S open the selected spot; typing, modifiers and other tabs do not', 
   expect((await launches(page, 'studio_launch')).length).toBe(1);
 });
 
-test('missing grainatlas gives inline installation guidance and an Images fallback', async ({ page }) => {
+test('missing grainatlas gives inline installation guidance without an Images fallback', async ({ page }) => {
   await openReview(page, { fixtures, grainatlasLaunchErrors: ['GrainAtlas is not installed (looked in /Applications and ~/Applications)'] });
   await details(page).getByRole('button', { name: 'Edit in grainatlas', exact: true }).click();
   const guidance = details(page).getByRole('status');
   await expect(guidance).toContainText('~/Applications');
   await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
-  await guidance.getByRole('button', { name: 'Show in Images', exact: true }).click();
-  await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: /Show in Images/ })).toHaveCount(0);
 });
 
 test('missing Studio stays inline in Review', async ({ page }) => {
@@ -167,14 +167,16 @@ test('a watched session submission refreshes its Home row and Review selection',
   await expect(page.getByTestId('session-card')).toContainText('UPbRPy 0.2.0');
 });
 
-test('Home missing-grainatlas fallback remains clickable within the card', async ({ page }) => {
+test('Home missing-grainatlas guidance stays within the card, without an Images fallback', async ({ page }) => {
   await openReview(page, { fixtures, grainatlasLaunchErrors: ['GrainAtlas is not installed (looked in /Applications and ~/Applications)'] });
   await tab(page, 'Home').click();
   const card = page.getByTestId('mount-card');
   await card.getByRole('button', { name: 'Edit in grainatlas', exact: true }).click();
-  await expect(card.getByRole('status')).toContainText('~/Applications');
-  await card.getByRole('button', { name: 'Show in Images', exact: true }).click();
-  await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
+  const guidance = card.getByRole('status');
+  await expect(guidance).toContainText('~/Applications');
+  await inside(guidance, card);
+  await expect(card.getByRole('button', { name: /Show in Images/ })).toHaveCount(0);
+  await expect(tab(page, 'Home')).toHaveAttribute('aria-selected', 'true');
 });
 
 test('geochemistry point menus offer the same in-context actions', async ({ page }) => {
@@ -269,24 +271,38 @@ test('SEM header explains when the selected spot has no published atlas', async 
   await expect(edit).toHaveAttribute('title', /No published atlas.*\(E\)/);
 });
 
-for (const matchingProject of [true, false]) {
-  test(`Images strip passes revision and ${matchingProject ? 'matching selected spot' : 'omits a spot from another project'}`, async ({ page }) => {
-    await openReview(page, { fixtures });
-    await select(page);
-    await tab(page, 'Images').click();
-    const project = matchingProject ? 'project-demo' : 'project-other';
-    await page.evaluate(event => (window as unknown as { __emit(e: string, p: unknown): void })
-      .__emit('lab-bridge://notify', { source: 'images', event }), { ...atlasStatusFixture, project, mode: 'view', state: 'in-sync' });
-    const strip = page.getByTestId('atlas-status-strip');
-    await strip.getByRole('button', { name: 'Edit in grainatlas', exact: true }).click();
-    await expect.poll(async () => (await launches(page, 'grainatlas_launch')).length).toBe(1);
-    const args = (await launches(page, 'grainatlas_launch'))[0][1]!;
-    expect(args).toMatchObject({ project, revision: 41, code: 'ONE-TIME-FIXTURE' });
-    if (matchingProject) expect(args.spot).toBe('atlas-2');
-    else expect(args.spot).toBeUndefined();
-  });
-}
+test('a grainatlas spot link launches the standalone app at that project and spot, leaving the tab alone', async ({ page }) => {
+  await openReview(page, { fixtures });
+  await tab(page, 'Home').click();
+  // The same plugin event used by the desktop OS deep-link delivery.
+  await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('deep-link://new-url', ['grainatlas://project/project-linked/spot/spot-linked']));
+  await expect.poll(async () => (await launches(page, 'grainatlas_launch')).length).toBe(1);
+  expect((await launches(page, 'grainatlas_launch'))[0][1]).toMatchObject({ project: 'project-linked', spot: 'spot-linked', server: 'http://localhost:8000', code: 'ONE-TIME-FIXTURE' });
+  await expect(tab(page, 'Home')).toHaveAttribute('aria-selected', 'true');
+  await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('deep-link://new-url', ['grainatlas://project/project-linked']));
+  await expect.poll(async () => (await launches(page, 'grainatlas_launch')).length).toBe(2);
+  const args = (await launches(page, 'grainatlas_launch'))[1][1]!;
+  expect(args.project).toBe('project-linked');
+  expect(args.spot).toBeUndefined();
+  expect((await calls(page)).filter(([c, a]) => c === 'module_open' && a?.module === 'images')).toEqual([]);
+});
 
+test('web: a grainatlas spot link opens the hosted grainatlas in a new tab', async ({ page }) => {
+  await page.route('http://localhost:8000/**', route => route.fulfill({ json: {} }));
+  await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [{ name: 'grainatlas', version: 'demo', source: 'fixture', sha256: 'demo', entry: 'modules/grainatlas/index.html' }] } }));
+  await page.addInitScript(() => {
+    const opened: string[][] = [];
+    (window as unknown as { __opened: string[][] }).__opened = opened;
+    window.open = (url?: string | URL, target?: string) => { opened.push([String(url), String(target)]); return null; };
+  });
+  await page.goto(`./?server=http://localhost:8000&url=${encodeURIComponent('grainatlas://project/project-linked/spot/spot-linked')}`);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __opened: string[][] }).__opened.length)).toBe(1);
+  const [[url, target]] = await page.evaluate(() => (window as unknown as { __opened: string[][] }).__opened);
+  expect(url).toContain('project-linked');
+  expect(url).toContain('spot-linked');
+  expect(target).toBe('_blank');
+  await expect(tab(page, 'Images')).toHaveCount(0);
+});
 
 test('SEM header opens the displayed mount atlas without a selected spot', async ({ page }) => {
   await openReview(page, { fixtures: { ...fixtures, [`/v1/mounts/${mount.id}/results`]: { mount_id: mount.id, spots: [] } } });
@@ -349,47 +365,28 @@ const presentations = async (page: Page) => (await calls(page)).filter(([name, a
   name === 'module_command' && args?.module === 'images' && (args.command as { type?: string })?.type === 'set-presentation')
   .map(([, args]) => (args!.command as { presentation: string }).presentation);
 
-test('Images uses an editor and Review SEM uses a viewer, including module reloads and status readiness', async ({ page }) => {
+test('the Review viewer only ever receives set-presentation viewer, across reloads, status events and tab switches', async ({ page }) => {
   await openReview(page, { store: { reviewSplit: true } });
   await expect.poll(() => presentations(page)).toContain('viewer');
-  await emitNotify(page, { ...atlasStatusFixture, mode: 'view', state: 'in-sync', changes: null });
+  // An edit-mode status from the module must not add a strip or switch it to an editor.
+  await emitNotify(page, { ...atlasStatusFixture, mode: 'edit' });
   await expect(page.getByTestId('atlas-status-strip')).toHaveCount(0);
-  let before = (await presentations(page)).length;
+  for (let reload = 0; reload < 2; reload++) {
+    const before = (await presentations(page)).length;
+    await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('lab-bridge://ready', { module: 'images' }));
+    await expect.poll(async () => (await presentations(page)).length).toBeGreaterThan(before);
+  }
+  await tab(page, 'Home').click();
+  await tab(page, 'Review').click();
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+  const before = (await presentations(page)).length;
   await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('lab-bridge://ready', { module: 'images' }));
   await expect.poll(async () => (await presentations(page)).length).toBeGreaterThan(before);
-  expect((await presentations(page)).at(-1)).toBe('viewer');
-  await tab(page, 'Images').click();
-  await expect.poll(async () => (await presentations(page)).at(-1)).toBe('editor');
-  await expect(page.getByTestId('atlas-status-strip')).toBeVisible();
-  before = (await presentations(page)).length;
-  await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('lab-bridge://ready', { module: 'images' }));
-  await expect.poll(async () => (await presentations(page)).length).toBeGreaterThan(before);
-  expect((await presentations(page)).at(-1)).toBe('editor');
-  await tab(page, 'Review').click();
-  await expect.poll(async () => (await presentations(page)).at(-1)).toBe('viewer');
-});
-
-test('the Images leave guard completes before switching the surface to viewer', async ({ page }) => {
-  await openReview(page, { store: { reviewSplit: true } });
-  await tab(page, 'Images').click();
-  await expect.poll(async () => (await presentations(page)).at(-1)).toBe('editor');
-  await emitNotify(page, atlasStatusFixture);
-  const before = (await presentations(page)).filter(p => p === 'viewer').length;
-  await tab(page, 'Review').click();
-  const guard = page.getByRole('dialog', { name: /Leave editing/ });
-  await expect(guard).toBeVisible();
-  await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
-  expect((await presentations(page)).filter(p => p === 'viewer')).toHaveLength(before);
-  await guard.getByRole('button', { name: 'Stay', exact: true }).click();
-  await expect(guard).toHaveCount(0);
-  expect((await presentations(page)).filter(p => p === 'viewer')).toHaveLength(before);
-  await tab(page, 'Review').click();
-  await guard.getByRole('button', { name: 'Keep draft and leave', exact: true }).click();
-  const leave = async () => (await calls(page)).filter(([name, args]) => name === 'module_command' && (args?.command as { type: string })?.type === 'leave-edit').at(-1)?.[1]?.command as { id: string } | undefined;
-  await expect.poll(leave).toBeTruthy();
-  await page.evaluate(id => (window as unknown as { __commandResult(id: string, type: string, result: unknown): Promise<void> }).__commandResult(id, 'leave-edit', { ok: true }), (await leave())!.id);
-  await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
-  await expect.poll(async () => (await presentations(page)).at(-1)).toBe('viewer');
+  expect(new Set(await presentations(page))).toEqual(new Set(['viewer']));
+  // No editor command reaches the viewer.
+  expect((await calls(page)).filter(([name, args]) => name === 'module_command' && args?.module === 'images'
+    && ['set-mode', 'leave-edit', 'sync-draft', 'discard-draft', 'open-files'].includes((args.command as { type: string }).type))).toEqual([]);
 });
 
 test('image spot action notifications launch the requested spot in grainatlas and Studio', async ({ page }) => {
