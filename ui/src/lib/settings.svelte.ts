@@ -58,7 +58,7 @@ export const DEFAULTS: SettingsData = {
   homeSections: {},
   reviewScope: '',
   reviewSplit: false,
-  reviewDataWidth: 50,
+  reviewDataWidth: 42,
   reviewDockSolo: '',
   reviewDockSplit: '',
   updateChannel: 'stable',

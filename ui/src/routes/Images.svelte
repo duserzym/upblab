@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { publishImagesPresentation } from '../lib/incoming';
   import { atlasSync, statusLabel } from '../lib/atlas-sync.svelte';
   import { apps, editInAtlas } from '../lib/apps.svelte';
   import { review } from '../lib/review.svelte';
@@ -7,6 +8,9 @@
   import { shell } from '../lib/shell.svelte';
 
   let { active, layoutKey }: { active: boolean; layoutKey: string } = $props();
+  $effect(() => {
+    if (active) void publishImagesPresentation();
+  });
   const atlas = $derived(shell.atlas);
   let busy = $state(false), error = $state('');
   async function openStandalone() {
@@ -23,7 +27,7 @@
 </script>
 
 <section class="view images-view" class:hidden={!active}>
-  {#if atlasSync.v4 && atlasSync.status}
+  {#if shell.view === 'images' && atlasSync.v4 && atlasSync.status}
     <div class="atlas-strip row" data-testid="atlas-status-strip">
       <strong class="project" title={atlasSync.status.name}>{atlasSync.status.name}</strong>
       <span class="small status-text" title={statusLabel(atlasSync.status)}>{statusLabel(atlasSync.status)}</span>

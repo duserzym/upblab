@@ -29,7 +29,7 @@ it('re-tiles panes and remembers the resized layout', () => {
 it('rejects invalid saved layouts and layouts that repeat panes', () => {
   expect(readLayout('invalid', true, 57)).toEqual(defaultLayout(true, 57));
   expect(readLayout(JSON.stringify(defaultLayout(true)), false, 50)).toEqual(defaultLayout(false));
-  expect(readLayout('{"axis":"x","ratio":0.5,"first":"plots","second":"plots"}', true, 50)).toEqual(defaultLayout(true));
+  expect(readLayout('{"axis":"x","ratio":0.5,"first":"plots","second":"plots"}', true, 42)).toEqual(defaultLayout(true));
 });
 
 it('enforces the minimums when the dock has room for every pane', () => {
@@ -142,15 +142,15 @@ function oldPreset(name: typeof presets[number], dataWidth = 50): Layout {
 }
 
 it('puts details under images in every preset and preserves dataWidth as the plots share', () => {
-  for (const [name, ratio] of [['Balanced', 0.5], ['Plots focus', 0.7], ['Image focus', 0.38]] as const) {
+  for (const [name, ratio] of [['Balanced', 0.42], ['Plots focus', 0.58], ['Image focus', 0.34]] as const) {
     expect(presetLayout(name, true)).toEqual({ axis: 'x', ratio: 0.17, first: 'spots', second: {
-      axis: 'x', ratio, first: 'plots', second: { axis: 'y', ratio: 0.6, first: 'images', second: 'details' },
+      axis: 'x', ratio, first: 'plots', second: { axis: 'y', ratio: 0.45, first: 'images', second: 'details' },
     } });
   }
   expect(defaultLayout(true, 57)).toEqual({ axis: 'x', ratio: 0.17, first: 'spots', second: {
-    axis: 'x', ratio: 0.57, first: 'plots', second: { axis: 'y', ratio: 0.6, first: 'images', second: 'details' },
+    axis: 'x', ratio: 0.57, first: 'plots', second: { axis: 'y', ratio: 0.45, first: 'images', second: 'details' },
   } });
-  expect(defaultRatio(defaultLayout(true), ['second', 'second'], true)).toBe(0.6);
+  expect(defaultRatio(defaultLayout(true), ['second', 'second'], true)).toBe(0.45);
   expect(defaultLayout(false, 57)).toEqual(defaultLayout(false));
   expect(presetLayout('Plots focus', false)).toEqual({ axis: 'x', ratio: 0.18,
     first: { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' }, second: 'plots' });
@@ -159,7 +159,7 @@ it('puts details under images in every preset and preserves dataWidth as the plo
 it('migrates exact old split presets on read, including stored Balanced data widths, once', () => {
   for (const dataWidth of [30, 50, 57, 70]) for (const name of presets) {
     const old = oldPreset(name, dataWidth), before = JSON.stringify(old);
-    const expected = name === 'Balanced' ? defaultLayout(true, dataWidth) : presetLayout(name, true);
+    const expected = name === 'Balanced' ? defaultLayout(true, dataWidth === 50 ? 42 : dataWidth) : presetLayout(name, true);
     expect(migrateSplitLayout(old, dataWidth)).toEqual(expected);
     expect(readLayout(before, true, dataWidth)).toEqual(expected);
     expect(migrateSplitLayout(expected, dataWidth)).toBe(expected);
@@ -191,4 +191,25 @@ it('collapses under-image metadata into a horizontal summary rail in the shortes
     expect(result.tiles.images!.height).toBeGreaterThanOrEqual(minimum.images.y);
   }
   expect(geometry(defaultLayout(true), 1280, 650).collapsed).toEqual([]);
+});
+
+function previousPreset(name: typeof presets[number]): Layout {
+  return { axis: 'x', ratio: 0.17, first: 'spots', second: {
+    axis: 'x', ratio: name === 'Balanced' ? 0.5 : name === 'Plots focus' ? 0.7 : 0.38,
+    first: 'plots', second: { axis: 'y', ratio: 0.6, first: 'images', second: 'details' },
+  } };
+}
+
+it('migrates only exact previous under-image presets, preserving every custom divider and topology', () => {
+  for (const name of presets) {
+    const previous = previousPreset(name);
+    expect(readLayout(JSON.stringify(previous), true, 50)).toEqual(presetLayout(name, true));
+    for (const path of [[], ['second'], ['second', 'second']] as const) {
+      const custom = resize(previous, [...path], 0.61);
+      expect(migrateSplitLayout(custom, 50)).toBe(custom);
+    }
+    const custom = dock(previous, 'details', 'plots', 'bottom');
+    expect(migrateSplitLayout(custom, 50)).toBe(custom);
+  }
+  expect(geometry(defaultLayout(true), 1280, 656).tiles.details!.width).toBeGreaterThan(560);
 });

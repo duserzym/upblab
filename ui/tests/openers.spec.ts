@@ -310,3 +310,108 @@ test('SEM header opens the displayed mount atlas without a selected spot', async
   expect(args.project).toBe('project-demo');
   expect(args.spot).toBeUndefined();
 });
+
+for (const [width, height] of [[1280, 800], [1440, 900]]) {
+  test(`the fullest spot fits completely below SEM at ${width} x ${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openReview(page, { fixtures, store: { reviewSplit: true } });
+    // This row has every stored metric and both automatic flags.
+    await page.locator('[data-spot-key="acq-4"]').click();
+    const tile = page.locator('[data-review-panel="details"]');
+    const info = details(page);
+    await expect(info.getByRole('heading', { name: 'Zircon_4', exact: true })).toBeVisible();
+    await expect(tile).toHaveAttribute('data-collapsed', 'false');
+    await expect(info).toContainText('Sample A · grain area/2');
+    await expect(info).toContainText('559 ± 9 Ma');
+    await expect(info).toContainText('discordant');
+    await expect(info).toContainText('high ratio scatter');
+    await expect(info.locator('dd')).toHaveCount(10);
+    await expect(info.locator('dt').filter({ hasText: /^206Pb\/238U date/ })).toHaveCount(0);
+    await expect(info.locator('dt').filter({ hasText: /^207Pb\/206Pb date/ })).toHaveCount(1);
+    await inside(info.getByRole('button', { name: 'Edit in grainatlas', exact: true }), tile);
+    await inside(info.getByRole('button', { name: 'Open in Studio', exact: true }), tile);
+    const run = info.getByTestId('spot-run');
+    await expect(run).toContainText('run-preferre');
+    await expect(run).toContainText('Pipeline 0.1.0 · Demo analyst');
+    await expect.poll(async () => {
+      const body = await info.evaluate(el => ({ scroll: el.scrollHeight, visible: el.clientHeight }));
+      return body.scroll <= body.visible + 1;
+    }).toBe(true);
+    await inside(run, tile.locator('.body'));
+    expect(await tile.locator('.body').evaluate(el => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+    expect(await info.locator('dd').evaluateAll(nodes => nodes.every(el => el.scrollWidth <= el.clientWidth + 1))).toBe(true);
+  });
+}
+
+const emitNotify = (page: Page, event: unknown, source = 'images') => page.evaluate(({ event, source }) =>
+  (window as unknown as { __emit(e: string, payload: unknown): Promise<void> }).__emit('lab-bridge://notify', { event, source }), { event, source });
+const presentations = async (page: Page) => (await calls(page)).filter(([name, args]) =>
+  name === 'module_command' && args?.module === 'images' && (args.command as { type?: string })?.type === 'set-presentation')
+  .map(([, args]) => (args!.command as { presentation: string }).presentation);
+
+test('Images uses an editor and Review SEM uses a viewer, including module reloads and status readiness', async ({ page }) => {
+  await openReview(page, { store: { reviewSplit: true } });
+  await expect.poll(() => presentations(page)).toContain('viewer');
+  await emitNotify(page, { ...atlasStatusFixture, mode: 'view', state: 'in-sync', changes: null });
+  await expect(page.getByTestId('atlas-status-strip')).toHaveCount(0);
+  let before = (await presentations(page)).length;
+  await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('lab-bridge://ready', { module: 'images' }));
+  await expect.poll(async () => (await presentations(page)).length).toBeGreaterThan(before);
+  expect((await presentations(page)).at(-1)).toBe('viewer');
+  await tab(page, 'Images').click();
+  await expect.poll(async () => (await presentations(page)).at(-1)).toBe('editor');
+  await expect(page.getByTestId('atlas-status-strip')).toBeVisible();
+  before = (await presentations(page)).length;
+  await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('lab-bridge://ready', { module: 'images' }));
+  await expect.poll(async () => (await presentations(page)).length).toBeGreaterThan(before);
+  expect((await presentations(page)).at(-1)).toBe('editor');
+  await tab(page, 'Review').click();
+  await expect.poll(async () => (await presentations(page)).at(-1)).toBe('viewer');
+});
+
+test('the Images leave guard completes before switching the surface to viewer', async ({ page }) => {
+  await openReview(page, { store: { reviewSplit: true } });
+  await tab(page, 'Images').click();
+  await expect.poll(async () => (await presentations(page)).at(-1)).toBe('editor');
+  await emitNotify(page, atlasStatusFixture);
+  const before = (await presentations(page)).filter(p => p === 'viewer').length;
+  await tab(page, 'Review').click();
+  const guard = page.getByRole('dialog', { name: /Leave editing/ });
+  await expect(guard).toBeVisible();
+  await expect(tab(page, 'Images')).toHaveAttribute('aria-selected', 'true');
+  expect((await presentations(page)).filter(p => p === 'viewer')).toHaveLength(before);
+  await guard.getByRole('button', { name: 'Stay', exact: true }).click();
+  await expect(guard).toHaveCount(0);
+  expect((await presentations(page)).filter(p => p === 'viewer')).toHaveLength(before);
+  await tab(page, 'Review').click();
+  await guard.getByRole('button', { name: 'Keep draft and leave', exact: true }).click();
+  const leave = async () => (await calls(page)).filter(([name, args]) => name === 'module_command' && (args?.command as { type: string })?.type === 'leave-edit').at(-1)?.[1]?.command as { id: string } | undefined;
+  await expect.poll(leave).toBeTruthy();
+  await page.evaluate(id => (window as unknown as { __commandResult(id: string, type: string, result: unknown): Promise<void> }).__commandResult(id, 'leave-edit', { ok: true }), (await leave())!.id);
+  await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
+  await expect.poll(async () => (await presentations(page)).at(-1)).toBe('viewer');
+});
+
+test('image spot action notifications launch the requested spot in grainatlas and Studio', async ({ page }) => {
+  await openReview(page, { fixtures, studioFound: true, store: { reviewSplit: true } });
+  // The action names a different spot from the current selection.
+  await emitNotify(page, { type: 'lab.spot.action', action: 'edit', project: 'project-demo', spot: 'atlas-4' });
+  await expect.poll(async () => (await launches(page, 'grainatlas_launch')).at(-1)?.[1]).toMatchObject({ project: 'project-demo', spot: 'atlas-4' });
+  await emitNotify(page, { type: 'lab.spot.action', action: 'studio', project: 'project-demo', spot: 'atlas-4' }, 'grainatlas');
+  await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(1);
+  const url = new URL((await launches(page, 'studio_launch'))[0][1]!.url as string);
+  expect(url.host + url.pathname).toBe('run/run-preferred');
+  expect(url.searchParams.get('acquisition')).toBe('acq-4');
+  await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
+});
+
+test('a Studio spot action resolves a result outside the loaded Review rows', async ({ page }) => {
+  await openReview(page, { fixtures: { ...fixtures, [`/v1/sessions/${session.id}/results?run=preferred`]: { ...table, rows: table.rows.filter(row => row.acquisition_id !== 'acq-2') } }, studioFound: true });
+  await expect(page.locator('[data-spot-key="acq-2"]')).toHaveCount(0);
+  await emitNotify(page, { type: 'lab.spot.action', action: 'studio', project: 'project-demo', spot: 'atlas-2' });
+  await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(1);
+  const url = new URL((await launches(page, 'studio_launch'))[0][1]!.url as string);
+  expect(url.searchParams.get('acquisition')).toBe('acq-2');
+  expect((await calls(page)).some(([name, args]) => name === 'api_get' && args?.path === '/v1/spots/by-atlas/atlas-2/results')).toBe(true);
+  await expect(details(page).getByRole('heading', { name: 'Zircon_2', exact: true })).toBeVisible();
+});

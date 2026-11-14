@@ -153,7 +153,7 @@ describe('theme preference and migration', () => {
 });
 
 describe('Review pane widths', () => {
-  it.each([[undefined, 50], [63, 63], [20, 30], [100, 70], ['60', 50]])(
+  it.each([[undefined, 42], [63, 63], [20, 30], [100, 70], ['60', 42]])(
     'restores a saved width of %s as %s', async (width, expected) => {
       stored = { reviewDataWidth: width };
       await settings.load();

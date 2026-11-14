@@ -8,9 +8,10 @@ use std::sync::Mutex;
 
 use serde::Deserialize;
 use tauri::ipc::CapabilityBuilder;
-use tauri::webview::{NewWindowResponse, WebviewBuilder};
+use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{
-    AppHandle, LogicalPosition, LogicalSize, Manager, Rect, Runtime, State, Url, WebviewUrl,
+    AppHandle, Emitter, EventTarget, LogicalPosition, LogicalSize, Manager, Rect, Runtime, State,
+    Url, WebviewUrl,
 };
 use tauri_plugin_opener::OpenerExt;
 
@@ -141,7 +142,7 @@ fn grant_bridge<R: Runtime>(
 /// Set before any page script: tells @lab/bridge it runs inside the shell.
 fn marker_script(module: &str, theme: &str) -> String {
     format!(
-        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 3, minor: 1, theme: {:?} }}), configurable: false }});{}",
+        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 5, minor: 0, theme: {:?} }}), configurable: false }});{}",
         module_name(&format!("module-{module}")),
         theme,
         theme_script(theme).expect("resolved theme")
@@ -157,6 +158,7 @@ fn build_webview<R: Runtime>(
     let nav_app = app.clone();
     let nav_label = label.to_string();
     let page_app = app.clone();
+    let page_module = module.to_string();
     let win_app = app.clone();
     let win_label = label.to_string();
     WebviewBuilder::new(label, WebviewUrl::External(url))
@@ -168,12 +170,21 @@ fn build_webview<R: Runtime>(
         ))
         // A webview can reload long after creation. Its fixed init script may
         // carry an older theme; refresh from the host on every page load.
-        .on_page_load(move |webview, _| {
+        .on_page_load(move |webview, payload| {
             if let Ok(theme) = page_app.state::<ThemeState>().current() {
                 if let Ok(script) = theme_script(&theme) {
                     if let Err(err) = webview.eval(script) {
                         log::warn!("could not initialise module theme: {err}");
                     }
+                }
+            }
+            if payload.event() == PageLoadEvent::Finished {
+                if let Err(err) = page_app.emit_to(
+                    EventTarget::webview(crate::SHELL_WEBVIEW),
+                    "lab-bridge://ready",
+                    serde_json::json!({ "module": page_module }),
+                ) {
+                    log::warn!("could not report module load: {err}");
                 }
             }
         })
@@ -332,7 +343,7 @@ mod tests {
         assert!(marker_script("sessions", "light").contains("\"laicpmsdb\""));
         assert!(marker_script("people", "light").contains("\"laicpmsdb\""));
         let script = marker_script("images", "dark");
-        assert!(script.contains("v: 3, minor: 1, theme: \"dark\""));
+        assert!(script.contains("v: 5, minor: 0, theme: \"dark\""));
         assert!(script.contains("new MutationObserver"));
     }
 }

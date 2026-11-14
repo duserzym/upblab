@@ -7,9 +7,11 @@
 //   web      /desk/open?url=… and module iframes posting through @lab/bridge;
 //            files dropped on the shell page (App.svelte)
 
+import { dispatchSpotAction } from './spot-actions';
+import { presentationFor } from './presentation';
 import { atlasSync } from './atlas-sync.svelte';
 import { atlasSyncedNotice } from './atlas-refresh';
-import { EVENTS, spotSelection, isBridgeCommand, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
+import { EVENTS, atlasStatus, spotSelection, isBridgeCommand, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
 import { createFrameHost, pushOpenFiles, pushCommand } from '@lab/bridge/host';
 import { fileUrlToPath } from './drop';
 import { identity, SIGN_OUT_EVENTS } from './identity.svelte';
@@ -56,6 +58,11 @@ export function onModuleEvent(event: BridgeEvent, source: string) {
   if (SIGN_OUT_EVENTS.includes(event.type) && identity.signedIn) void identity.logout(`${source} signed out`);
   if (source === 'grainatlas') {
     const synced = atlasSync.receive(event);
+    if (atlasStatus(event) && !imagesReportedReady) {
+      imagesReportedReady = true;
+      void publishImagesPresentation();
+    }
+    void dispatchSpotAction(event, source).catch(err => shell.note('Images spot action', 'review', String(err), true));
     if (synced) void atlasSyncedNotice(synced);
   }
   const selected = spotSelection(event);
@@ -90,6 +97,20 @@ export const frames = new Map<string, Window>();
 const loadingFrames = new Set<ModuleTab>();
 const waitingCommands = new Map<ModuleTab, BridgeCommand>();
 
+let imagesReportedReady = false;
+
+export function publishImagesPresentation(): Promise<boolean> {
+  const presentation = presentationFor(shell.view, settings.reviewSplit, 'images');
+  return presentation ? sendCommand('images', { type: 'set-presentation', presentation }).catch(() => false) : Promise.resolve(false);
+}
+
+/** Reapply after a frame load or native page load, including a menu reload. */
+export function moduleReady(tab: ModuleTab): void {
+  if (tab !== 'images') return;
+  imagesReportedReady = false;
+  void publishImagesPresentation();
+}
+
 /** Register early for bridge requests, then on load to deliver any waiting command. */
 export function registerFrame(tab: ModuleTab, frame: Window, loaded = true): void {
   frames.set(tab, frame);
@@ -103,6 +124,7 @@ export function registerFrame(tab: ModuleTab, frame: Window, loaded = true): voi
     waitingCommands.delete(tab);
     pushCommand(frame, command, '*');
   }
+  moduleReady(tab);
 }
 
 export function unregisterFrame(tab: ModuleTab): void {
@@ -117,7 +139,8 @@ export async function sendCommand(tab: ModuleTab, command: BridgeCommand): Promi
   if (isDesktop) return desktopModules.command(tab, command);
   const frame = frames.get(tab);
   if (!frame || loadingFrames.has(tab)) {
-    waitingCommands.set(tab, command);
+    // Presentation is reapplied on load; it must not replace a pending focus.
+    if (command.type !== 'set-presentation') waitingCommands.set(tab, command);
     return false;
   }
   waitingCommands.delete(tab);
@@ -131,6 +154,7 @@ export async function listenForLinks(): Promise<void> {
     const { listen } = await import('@tauri-apps/api/event');
     await onOpenUrl((urls) => routeOsUrls(urls));
     await listen<BridgeOpenPayload>(EVENTS.open, (e) => void shell.handleLink(e.payload.url, e.payload.source));
+    await listen<{ module: ModuleTab }>('lab-bridge://ready', e => moduleReady(e.payload.module));
     await listen<BridgeNotifyPayload>(EVENTS.notify, (e) => onModuleEvent(e.payload.event, e.payload.source));
     await listen<DropPayload>(FILE_EVENTS.drop, (e) => {
       opener.dragging = false;

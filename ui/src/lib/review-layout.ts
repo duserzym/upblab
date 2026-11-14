@@ -9,10 +9,10 @@ export type Rect = { x: number; y: number; width: number; height: number };
 type Divider = { path: Path; rect: Rect; area: Rect; axis: Axis; position: number; minRatio: number; maxRatio: number };
 export const gap = 8;
 
-export function defaultLayout(images: boolean, dataWidth = 50): Layout {
+export function defaultLayout(images: boolean, dataWidth = 42): Layout {
   if (images) return { axis: 'x', ratio: 0.17, first: 'spots', second: {
     axis: 'x', ratio: dataWidth / 100, first: 'plots',
-    second: { axis: 'y', ratio: 0.6, first: 'images', second: 'details' },
+    second: { axis: 'y', ratio: 0.45, first: 'images', second: 'details' },
   } };
   return { axis: 'x', ratio: 0.20,
     first: { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' }, second: 'plots' };
@@ -23,7 +23,7 @@ export type Preset = typeof presets[number];
 
 export function presetLayout(name: Preset, images: boolean): Layout {
   if (name === 'Balanced' || name === 'Image focus' && !images) return defaultLayout(images);
-  if (images) return defaultLayout(true, name === 'Image focus' ? 38 : 70);
+  if (images) return defaultLayout(true, name === 'Image focus' ? 34 : 58);
   return { axis: 'x', ratio: 0.18,
     first: { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' }, second: 'plots' };
 }
@@ -41,13 +41,19 @@ export function migrateSplitLayout(layout: Layout, dataWidth: number): Layout {
     const ratio = name === 'Balanced' ? dataWidth / 100 : name === 'Plots focus' ? 0.7 : 0.38;
     const old: Layout = { axis: 'x', ratio: name === 'Balanced' ? 0.2 : 0.18, first: sidebar,
       second: { axis: 'x', ratio, first: 'plots', second: 'images' } };
-    if (equalLayout(layout, old)) return name === 'Balanced' ? defaultLayout(true, dataWidth) : presetLayout(name, true);
+    if (equalLayout(layout, old)) return name === 'Balanced' ? defaultLayout(true, dataWidth === 50 ? 42 : dataWidth) : presetLayout(name, true);
+  }
+  for (const [oldShare, name] of [[50, 'Balanced'], [70, 'Plots focus'], [38, 'Image focus']] as const) {
+    const previous: Layout = { axis: 'x', ratio: 0.17, first: 'spots', second: {
+      axis: 'x', ratio: oldShare / 100, first: 'plots', second: { axis: 'y', ratio: 0.6, first: 'images', second: 'details' },
+    } };
+    if (equalLayout(layout, previous)) return presetLayout(name, true);
   }
   return layout;
 }
 
 // Ratios reset only when the entire topology still corresponds to the default.
-export function defaultRatio(layout: Layout, path: Path, images: boolean, dataWidth = 50): number {
+export function defaultRatio(layout: Layout, path: Path, images: boolean, dataWidth = 42): number {
   const baseline = defaultLayout(images, dataWidth);
   function shape(node: Layout): string {
     return typeof node === 'string' ? node : `${node.axis}(${shape(node.first)},${shape(node.second)})`;

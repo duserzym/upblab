@@ -277,7 +277,7 @@ export class Review {
     const current = matches.find(r => r.runId === this.selected?.runId && r.sessionId === this.selected?.sessionId) ?? matches[0];
     if (current) {
       this.select(current, false);
-      return;
+      return current;
     }
     try {
       const reply = await this.get<{
@@ -288,6 +288,8 @@ export class Review {
       if (request !== this.selectionGeneration || scopeGen !== this.generation)
         return;
       const raw = reply.rows[0];
+      const project = raw?.atlas_project_id ?? reply.spot.atlas_project_id;
+      if (project && project !== event.project) return;
       const mountId = String(reply.spot.mount_id ?? raw?.mount_id ?? '');
       let next: ScopeInput | null = null;
       // A mount view stays on the mount, reloading newly published spots if needed.
@@ -301,7 +303,9 @@ export class Review {
           return;
       }
       const found = this.rows.find(r => r.atlasSpotId === event.spot && (!r.atlasProjectId || r.atlasProjectId === event.project));
-      this.select(found ?? normalise({ ...reply.spot, ...raw, atlas_project_id: event.project, atlas_spot_id: event.spot, label: raw?.label ?? reply.spot.label ?? event.name }), false);
+      const selected = found ?? normalise({ ...reply.spot, ...raw, atlas_project_id: event.project, atlas_spot_id: event.spot, label: raw?.label ?? reply.spot.label ?? event.name });
+      this.select(selected, false);
+      return selected;
     }
     catch (err) {
       if (request === this.selectionGeneration && scopeGen === this.generation)

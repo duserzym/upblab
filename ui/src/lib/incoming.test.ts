@@ -12,11 +12,15 @@ vi.mock('./platform', () => ({
 vi.mock('./identity.svelte', () => ({ identity: {}, SIGN_OUT_EVENTS: [] }));
 vi.mock('./opener.svelte', () => ({ opener: { seen: vi.fn(), outcome: vi.fn() } }));
 vi.mock('./shell.svelte', () => ({ shell: {} }));
-vi.mock('./settings.svelte', () => ({ settings: {} }));
+vi.mock('./settings.svelte', () => ({ settings: { reviewSplit: false } }));
+vi.mock('./spot-actions', () => ({ dispatchSpotAction: vi.fn(async () => {}) }));
 
 const platform = await import('./platform');
 const { opener } = await import('./opener.svelte');
-const { frames, registerFrame, sendCommand, onModuleEvent } = await import('./incoming');
+const { frames, registerFrame, sendCommand, onModuleEvent, moduleReady, publishImagesPresentation } = await import('./incoming');
+const { shell } = await import('./shell.svelte');
+const { settings } = await import('./settings.svelte');
+const { dispatchSpotAction } = await import('./spot-actions');
 const { selection } = await import('./selection.svelte');
 const command: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 's', via: 'review' };
 
@@ -24,6 +28,8 @@ beforeEach(() => {
   atlasSync.v4 = false;
   atlasSync.status = null;
   frames.clear();
+  shell.view = 'home';
+  settings.reviewSplit = false;
   selection.fromImages = null;
   vi.clearAllMocks();
 });
@@ -126,5 +132,43 @@ describe('Atlas adoption', () => {
     onModuleEvent(atlasStatusFixture, 'images');
     expect(await sendCommand('images', { type: 'sync-draft', project: 'p' })).toBe(true);
     expect(frame.postMessage).toHaveBeenCalledOnce();
+  });
+});
+
+describe('Images presentation delivery', () => {
+  it('reapplies on each frame load and native ready, without replacing a queued focus', async () => {
+    shell.view = 'review'; settings.reviewSplit = true;
+    await sendCommand('images', command);
+    await publishImagesPresentation();
+    const frame = { postMessage: vi.fn() };
+    registerFrame('images', frame as unknown as Window);
+    expect(frame.postMessage.mock.calls.map(call => call[0].command.type)).toEqual(['focus-spot', 'set-presentation']);
+    expect(frame.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ command: { type: 'set-presentation', presentation: 'viewer' } }), '*');
+    frame.postMessage.mockClear();
+    moduleReady('images');
+    expect(frame.postMessage).toHaveBeenCalledOnce();
+    shell.view = 'images';
+    await publishImagesPresentation();
+    expect(frame.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ command: { type: 'set-presentation', presentation: 'editor' } }), '*');
+  });
+  it('reapplies once on valid status readiness, preventing status feedback loops', () => {
+    shell.view = 'review'; settings.reviewSplit = true;
+    const frame = { postMessage: vi.fn() };
+    registerFrame('images', frame as unknown as Window);
+    frame.postMessage.mockClear();
+    onModuleEvent(atlasStatusFixture, 'sessions');
+    onModuleEvent({ type: 'lab.atlas.status' }, 'images');
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    onModuleEvent(atlasStatusFixture, 'images');
+    expect(frame.postMessage).toHaveBeenCalledOnce();
+    onModuleEvent(atlasStatusFixture, 'images');
+    expect(frame.postMessage).toHaveBeenCalledOnce();
+  });
+  it('dispatches notifications from Images through the validated action handler', () => {
+    const action = { type: 'lab.spot.action', action: 'edit', project: 'p', spot: 's' };
+    onModuleEvent(action, 'sessions');
+    expect(dispatchSpotAction).not.toHaveBeenCalled();
+    onModuleEvent(action, 'images');
+    expect(dispatchSpotAction).toHaveBeenCalledWith(action, 'grainatlas');
   });
 });

@@ -25,7 +25,7 @@ export function applyPreset(mineral: Mineral): Panel[] {
   return preset(mineral).slice(0, MAX_PANELS);
 }
 export function mineralFor(material: string | undefined): Mineral { return MINERALS.find(m => material?.toLowerCase().includes(m.toLowerCase())) ?? 'Zircon'; }
-export function gridColumns(width: number): 1 | 2 | 3 { return width >= 880 ? 3 : width >= 460 ? 2 : 1; }
+export function gridColumns(width: number): 2 | 3 { return width >= 880 ? 3 : 2; }
 export const BOARD_KEY = 'upbstudio.review.geochem.v1';
 export type Boards = Partial<Record<Mineral, Panel[]>>;
 const known = new Set(QUANTITIES.map(q => q.id));

@@ -181,10 +181,17 @@ pub fn bridge_theme(state: State<'_, ThemeState>) -> Result<String, String> {
 
 const COMMAND_EVENT: &str = "lab-bridge:command";
 
-/// Only the latest untaken command for each module webview matters.
+/// Keep presentation independently so a tab switch cannot replace a pending focus.
+#[derive(Default)]
+struct PendingCommands {
+    command: Option<Value>,
+    presentation: Option<Value>,
+}
+
+/// Only the latest command of each kind for each module webview matters.
 #[derive(Default)]
 pub struct Commands {
-    waiting: Mutex<HashMap<String, Value>>,
+    waiting: Mutex<HashMap<String, PendingCommands>>,
     sequence: AtomicU64,
 }
 
@@ -243,6 +250,12 @@ fn valid_command(command: &Value) -> bool {
         return false;
     }
     match command.get("type").and_then(Value::as_str) {
+        Some("set-presentation") => {
+            return matches!(
+                command.get("presentation").and_then(Value::as_str),
+                Some("viewer" | "editor")
+            );
+        }
         Some("report-status") => return true,
         Some("open-project") => {
             return valid_id(command.get("project"))
@@ -330,19 +343,37 @@ impl Commands {
         if !valid_command(&command) {
             return Err("invalid bridge command".into());
         }
-        self.waiting
-            .lock()
-            .map_err(|e| e.to_string())?
-            .insert(label.into(), command);
+        let mut waiting = self.waiting.lock().map_err(|e| e.to_string())?;
+        let pending = waiting.entry(label.into()).or_default();
+        if command.get("type").and_then(Value::as_str) == Some("set-presentation") {
+            pending.presentation = Some(command);
+        } else {
+            pending.command = Some(command);
+        }
         Ok(self.sequence.fetch_add(1, Ordering::Relaxed))
     }
 
     fn take(&self, label: &str) -> Result<Option<Value>, String> {
+        let mut waiting = self.waiting.lock().map_err(|e| e.to_string())?;
+        let Some(pending) = waiting.get_mut(label) else {
+            return Ok(None);
+        };
+        let command = pending
+            .presentation
+            .take()
+            .or_else(|| pending.command.take());
+        if pending.presentation.is_none() && pending.command.is_none() {
+            waiting.remove(label);
+        }
+        Ok(command)
+    }
+
+    fn has_waiting(&self, label: &str) -> Result<bool, String> {
         Ok(self
             .waiting
             .lock()
             .map_err(|e| e.to_string())?
-            .remove(label))
+            .contains_key(label))
     }
 }
 
@@ -374,7 +405,17 @@ pub fn bridge_take_command<R: Runtime>(
     state: State<'_, Commands>,
     webview: Webview<R>,
 ) -> Result<Option<Value>, String> {
-    state.take(webview.label())
+    let command = state.take(webview.label())?;
+    if state.has_waiting(webview.label())? {
+        // The bridge serialises pulls. This nudge queues the second kind after
+        // this reply, even for an older module that ignores presentation.
+        if let Err(err) = webview.eval(format!(
+            "window.dispatchEvent(new CustomEvent({COMMAND_EVENT:?}));"
+        )) {
+            log::warn!("could not nudge remaining command: {err}");
+        }
+    }
+    Ok(command)
 }
 
 #[cfg(test)]
@@ -587,6 +628,27 @@ mod tests {
     }
 
     #[test]
+    fn presentation_commands_accept_only_viewer_or_editor() {
+        for presentation in [json!("viewer"), json!("editor")] {
+            assert!(valid_command(
+                &json!({"type": "set-presentation", "presentation": presentation})
+            ));
+        }
+        for presentation in [
+            Value::Null,
+            json!(false),
+            json!("view"),
+            json!("edit"),
+            json!(""),
+        ] {
+            assert!(!valid_command(
+                &json!({"type": "set-presentation", "presentation": presentation})
+            ));
+        }
+        assert!(!valid_command(&json!({"type": "set-presentation"})));
+    }
+
+    #[test]
     fn atlas_command_completion_ids() {
         for mut command in [
             json!({"type": "open-project", "project": "p"}),
@@ -724,6 +786,30 @@ mod tests {
             assert!(!valid_command(
                 &json!({"type": "open-project", "project": "p", "server": server})
             ));
+        }
+    }
+
+    #[test]
+    fn presentation_does_not_replace_focus_and_latest_presentation_wins() {
+        for presentation_first in [false, true] {
+            let state = Commands::default();
+            let focus = json!({"type": "focus-spot", "project": "p", "spot": "s"});
+            let viewer = json!({"type": "set-presentation", "presentation": "viewer"});
+            if presentation_first {
+                state.store("module-images", viewer.clone()).unwrap();
+            }
+            state.store("module-images", focus.clone()).unwrap();
+            state
+                .store(
+                    "module-images",
+                    json!({"type": "set-presentation", "presentation": "editor"}),
+                )
+                .unwrap();
+            state.store("module-images", viewer.clone()).unwrap();
+            assert_eq!(state.take("module-images").unwrap(), Some(viewer));
+            assert!(state.has_waiting("module-images").unwrap());
+            assert_eq!(state.take("module-images").unwrap(), Some(focus));
+            assert!(!state.has_waiting("module-images").unwrap());
         }
     }
 

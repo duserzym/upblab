@@ -227,5 +227,5 @@ test('reading an old split preset migrates its display without writing layout se
   await expect.poll(() => saved(page)).not.toEqual(old);
   const next = await saved(page);
   expect(next.first).toBe('spots');
-  expect(next.second.second).toEqual({ axis: 'y', ratio: 0.6, first: 'images', second: 'details' });
+  expect(next.second.second).toEqual({ axis: 'y', ratio: 0.45, first: 'images', second: 'details' });
 });

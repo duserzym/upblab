@@ -80,7 +80,7 @@ describe('Review selection and loading', () => {
     const key = review.selectedKey;
     await review.fromImages(event('atlas-2', 'shell'));
     expect(review.selectedKey).toBe(key);
-    await review.fromImages(event('atlas-2'));
+    expect(await review.fromImages(event('atlas-2'))).toBe(review.rows[1]);
     expect(review.selectedKey).toBe('acq-2');
     expect(sendCommand).not.toHaveBeenCalled();
   });
@@ -92,6 +92,16 @@ describe('Review selection and loading', () => {
     expect(review.scope).toEqual({ kind: 'session', id: 'other', run: 'preferred' });
     expect(review.selectedKey).toBe('acq-other');
     expect(sendCommand).not.toHaveBeenCalled();
+  });
+  it('does not select a lookup result belonging to a different atlas project', async () => {
+    await review.open({ kind: 'session', id: session.id });
+    const selected = review.selectedKey;
+    const previous = get.getMockImplementation()!;
+    const other = { ...rows[0], atlas_project_id: 'other-project', atlas_spot_id: 'atlas-other' };
+    get.mockImplementation(path => path === '/v1/spots/by-atlas/atlas-other/results'
+      ? Promise.resolve({ status: 200, body: { spot: other, rows: [other], columns: table.columns } }) as never : previous(path));
+    expect(await review.fromImages(event('atlas-other'))).toBeUndefined();
+    expect(review.selectedKey).toBe(selected);
   });
   it('retains all mount spots and uses only full results on that mount, with the legacy atlas fallback', async () => {
     get.mockImplementation(async (path) => ({ status: 200, body: path.includes('/results?run=') ? { ...table, rows: [{ ...rows[0], mount_id: null }, { ...rows[1], mount_id: 'elsewhere' }] } : reviewFixtures[path] }) as never);

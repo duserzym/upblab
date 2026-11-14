@@ -60,7 +60,7 @@
     imagesMenu = false;
     draft = undefined;
     const json = JSON.stringify(presetLayout(name, split));
-    void settings.update(split ? { reviewDockSplit: json, reviewDataWidth: 50 } : { reviewDockSolo: json });
+    void settings.update(split ? { reviewDockSplit: json, reviewDataWidth: 42 } : { reviewDockSolo: json });
   }
 
   function save(next: Layout) {

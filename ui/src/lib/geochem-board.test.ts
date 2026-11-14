@@ -14,7 +14,7 @@ describe('geochemistry boards',()=>{
     expect(mineralFor('apatite')).toBe('Apatite');expect(mineralFor(undefined)).toBe('Zircon');
   });
   it('chooses columns from container width, including compact and boundary cases',()=>{
-    expect([320,459,460,784,879,880,944].map(gridColumns)).toEqual([1,1,2,2,2,3,3]);
+    expect([320,459,460,784,879,880,944].map(gridColumns)).toEqual([2,2,2,2,2,3,3]);
   });
   it('persists valid per-mineral boards and deliberate empty boards with fresh unique panel ids',()=>{
     const saved={Zircon:[panel('U','Th',true)],Apatite:[]};

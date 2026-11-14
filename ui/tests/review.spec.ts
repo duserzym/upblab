@@ -90,11 +90,11 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     });
     test('defaults follow the board width, with two rows and stored-only thermometry', async ({ page }) => {
       const board = page.getByTestId('geochem-board');
-      const columns = width === 1440 ? 3 : 2;
+      await expect(board).toBeVisible();
+      const boardWidth = Math.floor((await board.boundingBox())!.width);
+      const columns = boardWidth >= 880 ? 3 : 2;
       await expect(board).toHaveAttribute('data-columns', String(columns));
       await expect(page.getByTestId('geochem-panel')).toHaveCount(columns * 2);
-      const boardWidth = (await board.boundingBox())!.width;
-      expect(columns).toBe(boardWidth >= 880 ? 3 : boardWidth >= 460 ? 2 : 1);
       const cards = await page.getByTestId('geochem-panel').all();
       const first = (await cards[0].boundingBox())!;
       for (let i = 1; i < columns; i++) {
@@ -107,6 +107,15 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       expect(nextRow.y).toBeGreaterThan(first.y);
       await expect(board).toContainText('Ti-in-zircon T is not stored for this run');
       await expect.poll(() => problems(page, 'Default board')).toEqual([]);
+      const sem = page.getByRole('checkbox', { name: 'SEM images', exact: true });
+      for (const enabled of [true, false]) {
+        await sem.setChecked(enabled);
+        await expect.poll(async () => {
+          const measured = Math.floor((await board.boundingBox())!.width);
+          const expected = measured >= 880 ? 3 : 2;
+          return await board.getAttribute('data-columns') === String(expected) && await page.getByTestId('geochem-panel').count() === expected * 2;
+        }).toBe(true);
+      }
     });
     test('quantity chips change axes, keyboard picking works, and the board persists', async ({ page }) => {
       let first = page.getByTestId('geochem-panel').first();
