@@ -56,6 +56,8 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     for (const [state, text] of [['available', 'Update available: v0.2.0'], ['none', 'Up to date (v0.1.0)']]) {
       test(`updates ${state} ${theme} ${width}x${height}`, async ({ page }) => {
         await page.setViewportSize({ width, height });
+        // A controllable clock replaces a 5 s sleep for the feedback timer below.
+        if (state === 'none') await page.clock.install();
         await openPreview(page, theme, state);
         const button = page.getByTestId('check-updates');
         await button.click();
@@ -63,7 +65,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
         await insideViewport(page);
         if (state === 'none') {
           // The result stays in the popover after the old chip's five-second feedback expires.
-          await page.waitForTimeout(5100);
+          await page.clock.fastForward(5100);
           await expect(page.getByTestId('check-updates-popover')).toContainText(text);
           await expect(button).not.toHaveAttribute('data-badge');
         }

@@ -8,6 +8,9 @@ const PORT = 1431;
 export default defineConfig({
   testDir: 'tests',
   fullyParallel: true,
+  // Most of a run is waiting on the dev server and browsers; more workers than
+  // Playwright's default half of the cores cut the full suite about 15 %.
+  workers: process.env.CI ? undefined : '80%',
   reporter: [['list']],
   use: { baseURL: `http://localhost:${PORT}/` },
   projects: [
