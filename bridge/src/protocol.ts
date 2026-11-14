@@ -10,8 +10,12 @@
 //      focus-grain); lab.spot.selected.
 //   3.1 theme: resolved shell theme at load and on every change.
 //   4  atlas sync status, hosted drafts, sync notices and edit commands.
+//   5  set-presentation (the shell shows a module as a read-only viewer or as
+//      its editor) and lab.spot.action (the module asks the shell to open a
+//      spot elsewhere: edit in grainatlas, open in Studio). A v4 module never
+//      gets set-presentation; a v5 module on a v4 shell stays an editor.
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export const PROTOCOL_MINOR = 0;
 
 export type Theme = 'light' | 'dark';
@@ -81,6 +85,8 @@ export const ATLAS_EVENTS = {
   drafts: 'lab.atlas.drafts',
   synced: 'lab.atlas.synced',
   commandResult: 'lab.command.result',
+  /** v5: the user asked to open a spot in another app (context menu or E / S in the viewer). */
+  spotAction: 'lab.spot.action',
 } as const;
 
 /** A module event for the shell (timeline entries, status, title changes). */
@@ -247,9 +253,29 @@ export interface AtlasSyncedCommand {
   revision: number;
 }
 
+/**
+ * v5: how the shell shows the module. `viewer`: no editing chrome and no
+ * writes of any kind (stored copies, drafts, journal, sync); pan, zoom, area,
+ * legend and spot selection only. `editor`: the full module, as before v5.
+ */
+export type Presentation = 'viewer' | 'editor';
+export interface SetPresentationCommand {
+  type: 'set-presentation';
+  presentation: Presentation;
+}
+
 export type BridgeCommand = FocusSpotCommand | FocusGrainCommand | ReviewSpotsCommand |
   OpenProjectCommand | SetModeCommand | LeaveEditCommand | SyncDraftCommand |
-  DiscardDraftCommand | ReportStatusCommand | AtlasSyncedCommand;
+  DiscardDraftCommand | ReportStatusCommand | AtlasSyncedCommand | SetPresentationCommand;
+
+/** v5: `edit` = edit the spot in standalone grainatlas; `studio` = open its analysis in Studio. */
+export type SpotActionName = 'edit' | 'studio';
+export interface SpotActionEvent extends BridgeEvent {
+  type: 'lab.spot.action';
+  action: SpotActionName;
+  project: string;
+  spot: string;
+}
 
 /** The shell also accepts grainatlas.spot.selected ({ project, spot, name }) as via 'user'. */
 export interface SpotSelectedEvent extends BridgeEvent {
@@ -295,6 +321,7 @@ export function isBridgeCommand(x: unknown): x is BridgeCommand {
   const c = x as Record<string, unknown>;
   if (isAtlasCommandName(c.type) && c.id !== undefined && !isCommandId(c.id)) return false;
   if (c.type === 'report-status') return true;
+  if (c.type === 'set-presentation') return c.presentation === 'viewer' || c.presentation === 'editor';
   if (c.type === 'open-project') return isId(c.project) &&
     (c.server === undefined || isServer(c.server)) &&
     (c.mode === undefined || isAtlasMode(c.mode)) &&
@@ -353,6 +380,14 @@ export function commandResult(event: unknown): CommandResult | null {
     ...(event.project === undefined ? {} : { project: event.project }),
     ...(event.mount === undefined ? {} : { mount: event.mount }),
     ...(event.revision === undefined ? {} : { revision: event.revision }) } as CommandResult;
+}
+
+/** v5: normalise a spot action request; anything malformed is null. */
+export function spotAction(event: unknown): SpotActionEvent | null {
+  if (!isRecord(event) || event.type !== ATLAS_EVENTS.spotAction ||
+      (event.action !== 'edit' && event.action !== 'studio') ||
+      !isId(event.project) || !isId(event.spot)) return null;
+  return { type: ATLAS_EVENTS.spotAction, action: event.action, project: event.project, spot: event.spot };
 }
 
 /** Normalise current and legacy spot selections; reject malformed ids and fields. */

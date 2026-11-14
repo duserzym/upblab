@@ -6,6 +6,7 @@ import {
   isBridgeCommand,
   isBridgePush,
   spotSelection,
+  spotAction,
   ATLAS_EVENTS,
   atlasStatus,
   atlasDrafts,
@@ -226,7 +227,7 @@ describe('open-files (protocol v2)', () => {
   };
 
   it('still accepts v1 requests and knows the new op', () => {
-    expect(PROTOCOL_VERSION).toBe(4);
+    expect(PROTOCOL_VERSION).toBe(5);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 1, id: 'a', op: 'token' })).toBe(true);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 2, id: 'a', op: 'open-files' })).toBe(true);
     expect(isBridgeRequest({ tag: MESSAGE_TAG, v: 2, id: 'a', op: 'delete' })).toBe(false);
@@ -805,5 +806,23 @@ describe('v4 command completion', () => {
       for (const code of ['offline', 'conflict', 'unauthorized', 'not-found', 'failed'])
         expect(commandResult({ ...result, code })).toBeNull();
     }
+  });
+});
+
+describe('protocol v5: presentation and spot actions', () => {
+  it('accepts set-presentation viewer and editor only', () => {
+    expect(isBridgeCommand({ type: 'set-presentation', presentation: 'viewer' })).toBe(true);
+    expect(isBridgeCommand({ type: 'set-presentation', presentation: 'editor' })).toBe(true);
+    expect(isBridgeCommand({ type: 'set-presentation', presentation: 'edit' })).toBe(false);
+    expect(isBridgeCommand({ type: 'set-presentation' })).toBe(false);
+  });
+  it('normalises spot actions and rejects malformed ones', () => {
+    const event = { type: 'lab.spot.action', action: 'edit', project: 'p-1', spot: 's-1', extra: 1 };
+    expect(spotAction(event)).toEqual({ type: 'lab.spot.action', action: 'edit', project: 'p-1', spot: 's-1' });
+    expect(spotAction({ ...event, action: 'studio' })?.action).toBe('studio');
+    expect(spotAction({ ...event, action: 'delete' })).toBeNull();
+    expect(spotAction({ ...event, spot: 'a/b' })).toBeNull();
+    expect(spotAction({ ...event, type: 'lab.spot.selected' })).toBeNull();
+    expect(spotAction(null)).toBeNull();
   });
 });

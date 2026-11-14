@@ -398,6 +398,31 @@ on Windows. The shell implements this launch contract in
 `src-tauri/src/grainatlas_app.rs`; the UI mints the handoff code and enables
 the button only after Images advertises v4.
 
+## Protocol v5: viewer presentation and spot actions
+
+The shell can show a module as a read-only viewer (UPb Lab's Review tab) or as
+its editor (UPb Lab's Images tab, or any shell older than v5):
+
+```ts
+{ type: 'set-presentation', presentation: 'viewer' | 'editor' }
+```
+
+In `viewer` the module hides all editing chrome and writes nothing: no stored
+copies, drafts, journal entries, saves or sync calls. Pan, zoom, fit, area,
+legend, scale bar and spot selection (`lab.spot.selected`) stay. A module that
+never receives the command stays an editor; a v4 module ignores it.
+
+A viewer can ask the shell to open a spot elsewhere (its right-click menu, or
+E and S):
+
+```ts
+await notify({ type: 'lab.spot.action', action: 'edit' | 'studio', project, spot });
+```
+
+`edit` opens the spot in standalone grainatlas; `studio` opens its analysis in
+UPbRPy Studio. The shell validates it with `spotAction()`; malformed events are
+ignored, and a v4 shell ignores the type.
+
 ## Adopting the bridge in a module
 
 `@lab/bridge` is not on npm yet. Until it is, depend on it from a checkout
