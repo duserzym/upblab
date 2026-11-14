@@ -1,7 +1,8 @@
 <script lang="ts">
   import { atlasSync, statusLabel } from '../lib/atlas-sync.svelte';
-  import { identity } from '../lib/identity.svelte';
-  import { isDesktop, launchGrainAtlas } from '../lib/platform';
+  import { apps, editInAtlas } from '../lib/apps.svelte';
+  import { review } from '../lib/review.svelte';
+  import { isDesktop } from '../lib/platform';
   import ModuleSurface from '../components/ModuleSurface.svelte';
   import { shell } from '../lib/shell.svelte';
 
@@ -13,9 +14,9 @@
     if (!atlasSync.v4 || !status || busy) return;
     busy = true; error = '';
     try {
-      const code = await identity.handoff();
-      if (!code) throw new Error('Sign in to open this project in GrainAtlas.');
-      await launchGrainAtlas(status.project, shell.serverUrl, code, status.revision ?? undefined);
+      const spot = review.selected?.atlasProjectId === status.project ? review.selected : null;
+      await editInAtlas({ project: status.project, mount: status.mount, spot: spot?.atlasSpotId, revision: status.revision ?? undefined }, 'images');
+      if (apps.atlas?.from === 'images') error = apps.atlas.message;
     } catch (err) { error = String(err); }
     finally { busy = false; }
   }
@@ -28,7 +29,7 @@
       <span class="small status-text" title={statusLabel(atlasSync.status)}>{statusLabel(atlasSync.status)}</span>
       {#if atlasSync.note}<span class="small launch-error" role="status" title={atlasSync.note}>{atlasSync.note}</span>{/if}
       {#if error}<span class="error small launch-error" role="status" title={error}>{error}</span>{/if}
-      {#if isDesktop}<button class="btn small" disabled={busy} onclick={openStandalone}>{busy ? 'Opening…' : 'Open in GrainAtlas'}</button>{/if}
+      {#if isDesktop}<button class="btn small" disabled={busy} onclick={openStandalone}>{busy ? 'Opening…' : 'Edit in grainatlas'}</button>{/if}
     </div>
   {/if}
   {#if atlas}

@@ -90,7 +90,7 @@ test('divider double-click restores the mode default ratio after a keyboard resi
   const divider = page.getByRole('separator', { name: 'Resize panels' }).first();
   await divider.focus();
   await page.keyboard.press('Shift+ArrowRight');
-  await expect.poll(async () => (await saved(page))?.ratio).not.toBe(0.2);
+  await expect.poll(async () => (await saved(page))?.ratio).not.toBe(0.17);
   await divider.dblclick();
   await expect.poll(() => saved(page)).toEqual(defaultLayout(true));
 });
@@ -207,4 +207,25 @@ test('a short vertical stack hides SEM when railed and the Images tab still uses
     const r = (await surface.boundingBox())!;
     return { x: r.x, y: r.y, width: r.width, height: r.height };
   }).toEqual({ x: 0, y: 48, width: 1024, height: 592 });
+});
+
+
+test('reading an old split preset migrates its display without writing layout settings', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const old = { axis: 'x', ratio: 0.2,
+    first: { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' },
+    second: { axis: 'x', ratio: 0.57, first: 'plots', second: 'images' } };
+  await openReview(page, { store: { reviewSplit: true, reviewDataWidth: 57, reviewDockSplit: JSON.stringify(old) } });
+  const images = (await tile(page, 'SEM images').boundingBox())!, metadata = (await tile(page, 'Spot metadata').boundingBox())!;
+  expect(metadata.y).toBeGreaterThanOrEqual(images.y + images.height);
+  expect(metadata.x).toBe(images.x);
+  expect(metadata.width).toBe(images.width);
+  expect(await saved(page)).toEqual(old);
+  expect((await calls(page)).filter(([name, args]) => name === 'plugin:store|set' && args?.key === 'reviewDockSplit')).toEqual([]);
+  // A real edit persists the new tree, ending migration for future reads.
+  await page.getByRole('separator', { name: 'Resize panels' }).first().press('ArrowRight');
+  await expect.poll(() => saved(page)).not.toEqual(old);
+  const next = await saved(page);
+  expect(next.first).toBe('spots');
+  expect(next.second.second).toEqual({ axis: 'y', ratio: 0.6, first: 'images', second: 'details' });
 });

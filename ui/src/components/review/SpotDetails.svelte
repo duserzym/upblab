@@ -20,42 +20,63 @@
   };
 </script>
 {#if spot}
-  <h2>{spot.label}</h2>
-  <dl class="grid-kv small">
-    <dt>{spot.isReference ? 'Reference material' : 'Sample'}</dt><dd>{spot.sampleName}</dd>
-    {#if spot.isReference}<dt>Role</dt><dd>{spot.kind.replaceAll('_', ' ')}</dd>{/if}
-    <dt>Grain</dt><dd>{spot.grainLabel??'No grain'}</dd>
-    <dt>Mount</dt><dd>{review.mounts.find(m=>m.id===spot.mountId)?.label??spot.mountId??'—'}</dd>
-    <dt>Session</dt><dd>{spot.sessionKey??spot.sessionId??'—'}</dd>
-  </dl>
-  {#if !spot.acquisitionId || !spot.runId}
-    <p class="muted">{spot.acquisitionId?'no result in this run':'not measured yet · no result in this run'}</p>
-  {:else}
-    <h3>Preferred date</h3>
-    <p>{dateLabel(spot)}{spot.date?' Ma':''}</p>
-    <p class="small muted">{spot.date?.method??'No stored method'} · 2σ (2se) · {spot.date?.passes===true?'pass':spot.date?.passes===false?'does not pass':'pass not recorded'}</p>
-    <dl class="grid-kv small">
-      {#each metrics as metric}
-        <dt>{names[metric]??metric}</dt><dd>{pair(spot.values[metric], spot.values[metric+'_2e'])}</dd>
-      {/each}
-    </dl>
-    <h3>Flags</h3>
-    {#if spot.flags.length}<ul class="small warning">{#each spot.flags as flag}<li>{flag}</li>{/each}</ul>{:else}<p class="small faint">None recorded</p>{/if}
-    <h3>Run</h3><p class="mono small" title={spot.runId}>{spot.runId.slice(0,12)} · {run?.is_preferred?'preferred':'not preferred'}</p>
-    <p class="small muted">Pipeline {run?.pipeline_version??'not recorded'} · {run?.run_by??'operator not recorded'}</p>
-  {/if}
-  <div class="stack">
-    <button class="btn" disabled={!spot.atlasProjectId} title={spot.atlasProjectId ? 'Edit in grainatlas (E)' : 'No published images'} onclick={() => void editInAtlas({ project: spot!.atlasProjectId, mount: spot!.mountId, spot: spot!.atlasSpotId }, 'review')}>Edit in grainatlas</button>
-    <button class="btn" disabled={!spot.runId && !spot.sessionId} title={spot.runId || spot.sessionId ? 'Open in Studio (S)' : 'Not measured yet'} onclick={() => void openInStudio({ session: spot!.sessionId, run: spot!.runId, acquisition: spot!.acquisitionId }, 'review')}>Open in Studio</button>
-    <AtlasGuidance mount={spot.mountId} from="review" />
-    <StudioGuidance from="review" />
-    <button class="btn" disabled={!spot.atlasProjectId||!spot.atlasSpotId} onclick={()=>void review.focus(spot!,true)}>Show in Images</button>
-    {#if spot.acquisitionId}<button class="btn" onclick={()=>void shell.handleLink(`laicpmsdb://acquisition/${spot!.acquisitionId}`,'review')}>Raw sweeps in Sessions</button>{/if}
+  <div class="details">
+    <header class="identity">
+      <h2>{spot.label}</h2>
+      <p class="small">{spot.isReference ? `${spot.sampleName} · ${spot.kind.replaceAll('_', ' ')}` : spot.sampleName} · grain {spot.grainLabel??'none'}</p>
+      <p class="small muted">{review.mounts.find(m=>m.id===spot.mountId)?.label??spot.mountId??'No mount'} · {spot.sessionKey??spot.sessionId??'no session'}</p>
+      <div class="openers row">
+        <button class="btn" disabled={!spot.atlasProjectId} title={spot.atlasProjectId ? 'Edit in grainatlas (E)' : 'No published images'} onclick={() => void editInAtlas({ project: spot!.atlasProjectId, mount: spot!.mountId, spot: spot!.atlasSpotId }, 'review')}>Edit in grainatlas</button>
+        <button class="btn" disabled={!spot.runId && !spot.sessionId} title={spot.runId || spot.sessionId ? 'Open in Studio (S)' : 'Not measured yet'} onclick={() => void openInStudio({ session: spot!.sessionId, run: spot!.runId, acquisition: spot!.acquisitionId }, 'review')}>Open in Studio</button>
+      </div>
+      <AtlasGuidance mount={spot.mountId} from="review" />
+      <StudioGuidance from="review" />
+    </header>
+    {#if !spot.acquisitionId || !spot.runId}
+      <p class="muted">{spot.acquisitionId?'no result in this run':'not measured yet · no result in this run'}</p>
+    {:else}
+      <section class="date">
+        <h3>Preferred date</h3>
+        <p class="value">{dateLabel(spot)}{spot.date?' Ma':''}</p>
+        <p class="small muted">{spot.date?.method??'No stored method'} · 2σ (2se) · {spot.date?.passes===true?'pass':spot.date?.passes===false?'does not pass':'pass not recorded'}</p>
+      </section>
+      <section class="values">
+        <h3>Dates, ratios and concentrations</h3>
+        <dl class="grid-kv small">
+          {#each metrics as metric}
+            <dt>{names[metric]??metric}</dt><dd class="num">{pair(spot.values[metric], spot.values[metric+'_2e'])}</dd>
+          {/each}
+        </dl>
+      </section>
+      <section class="flags">
+        <h3>Flags</h3>
+        {#if spot.flags.length}<ul class="small warning">{#each spot.flags as flag}<li>{flag}</li>{/each}</ul>{:else}<p class="small faint">None recorded</p>{/if}
+        <h3>Run</h3><p class="mono small run" title={spot.runId}>{spot.runId.slice(0,12)} · {run?.is_preferred?'preferred':'not preferred'}</p>
+        <p class="small muted">Pipeline {run?.pipeline_version??'not recorded'} · {run?.run_by??'operator not recorded'}</p>
+      </section>
+    {/if}
+    <div class="more row">
+      <button class="btn" disabled={!spot.atlasProjectId||!spot.atlasSpotId} onclick={()=>void review.focus(spot!,true)}>Show in Images</button>
+      {#if spot.acquisitionId}<button class="btn" onclick={()=>void shell.handleLink(`laicpmsdb://acquisition/${spot!.acquisitionId}`,'review')}>Raw sweeps in Sessions</button>{/if}
+    </div>
   </div>
 {:else}<p class="muted">Select a spot to see its stored results.</p>{/if}
 <style>
-  h2,h3,p {margin:0;} h3 {font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-top:4px;} dd {min-width:0;overflow-wrap:anywhere;} dt {min-width:0;}
-  .stack {gap:8px;} .btn {font-size:0.78rem;white-space:normal;text-align:left;}
+  .details {container-type:inline-size;display:grid;gap:10px;min-width:0;}
+  h2,h3,p {margin:0;} h2 {overflow-wrap:anywhere;} h3 {font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin:4px 0 2px;}
+  .identity {display:grid;gap:4px;min-width:0;} .identity p {overflow-wrap:anywhere;}
+  .openers, .more {flex-wrap:wrap;gap:6px;} .btn {font-size:0.78rem;white-space:normal;text-align:left;}
+  .value {font-size:1.15rem;font-weight:600;white-space:nowrap;}
+  dd {min-width:0;overflow-wrap:anywhere;} dt {min-width:0;overflow-wrap:normal;word-break:keep-all;} .num {white-space:nowrap;overflow-wrap:normal;}
+  .run {overflow-wrap:anywhere;}
   ul {margin:0;padding-left:18px;} .warning {color:var(--warning);}
-  .grid-kv {grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);margin:0;}
+  .grid-kv {grid-template-columns:minmax(min-content,1fr) max-content;column-gap:12px;margin:0;}
+  /* Docked under or beside a wide image: sections side by side, nothing truncated. */
+  @container (min-width: 560px) {
+    .details {grid-template-columns:minmax(220px,1fr) minmax(280px,1.25fr);grid-template-areas:"id values" "date values" "flags values" "more more";align-items:start;}
+    .identity {grid-area:id;} .date {grid-area:date;} .values {grid-area:values;} .flags {grid-area:flags;} .more {grid-area:more;}
+  }
+  @container (min-width: 900px) {
+    .details {grid-template-columns:minmax(220px,1fr) minmax(300px,1.3fr) minmax(200px,0.9fr);grid-template-areas:"id values flags" "date values flags" "more more more";}
+  }
 </style>

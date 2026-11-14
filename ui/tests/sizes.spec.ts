@@ -246,3 +246,25 @@ for (const [width, height] of [...SIZES, MIN]) {
     expect(await problems(page, 'Reduce installation guidance')).toEqual([]);
   });
 }
+
+for (const [width, height] of [...SIZES, MIN]) {
+  test(`Review with SEM images fits ${width} x ${height}`, async ({ page }) => {
+    const { openReview } = await import('./review-helpers');
+    await page.setViewportSize({ width, height });
+    await openReview(page, { store: { reviewSplit: true } });
+    await page.locator('[data-spot-key="acq-2"]').click();
+    const images = page.locator('[data-review-panel="images"]');
+    const metadata = page.locator('[data-review-panel="details"]');
+    await expect(images).toBeVisible();
+    await expect(images.getByRole('button', { name: 'Edit in grainatlas', exact: true })).toBeEnabled();
+    await expect(metadata).toHaveAttribute('data-collapsed', height === 640 ? 'true' : 'false');
+    if (height === 640) {
+      await expect(metadata.locator('.details-summary')).toContainText('Zircon_2');
+      await expect(metadata.locator('.details-summary')).toContainText('553 ± 9 Ma');
+    } else await expect(metadata.getByRole('heading', { name: 'Zircon_2', exact: true })).toBeVisible();
+    await expect.poll(() => problems(page, 'Review with SEM images')).toEqual([]);
+    // The rail and tile controls must fit their owner as well as the window.
+    expect(await page.locator('[data-review-panel]:visible').evaluateAll(tiles => tiles
+      .filter(tile => tile.scrollWidth > tile.clientWidth + 1).map(tile => tile.getAttribute('data-review-panel')))).toEqual([]);
+  });
+}

@@ -3,7 +3,7 @@ import { isDesktop, launchGrainAtlas } from './platform';
 import { shell } from './shell.svelte';
 import { appWatch } from './app-watch.svelte';
 
-export interface AtlasTarget { project: string | null; mount: string | null; spot?: string | null; grain?: string | null }
+export interface AtlasTarget { project: string | null; mount: string | null; spot?: string | null; grain?: string | null; revision?: number }
 export interface StudioTarget { session: string | null; run: string | null; acquisition?: string | null }
 export interface AppRequest<T> {
   target: T; from: string;
@@ -33,7 +33,7 @@ export async function editInAtlas(target: AtlasTarget, from: string) {
       const server = identity.target?.server;
       const code = await identity.handoff();
       if (code && server && current()) {
-        await launchGrainAtlas(target.project, server, code, undefined, target.spot, target.grain);
+        await launchGrainAtlas(target.project, server, code, target.revision, target.spot, target.grain);
         if (seq === atlasSequence) apps.atlas = { ...request, state: 'launched' };
         if (current()) appWatch.atlas(target.project, target.mount);
         return;

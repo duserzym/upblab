@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { calls, openReview, inside } from './review-helpers';
+import { atlasStatusFixture } from './fixtures/atlas-sync';
 import { session, mount, runs, table } from './fixtures/review';
 
 const tab = (page: Page, name: string) => page.getByRole('tab', { name, exact: true });
@@ -201,4 +202,111 @@ test('failed Studio launch gives inline guidance in Review', async ({ page }) =>
   await details(page).getByRole('button', { name: 'Open in Studio', exact: true }).click();
   await expect(details(page).getByRole('status')).toContainText('fixture launch failure');
   await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
+});
+
+for (const [width, height] of [[1440, 900], [1280, 800]]) {
+  test(`Balanced SEM header edits the selected spot with details below images at ${width} x ${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openReview(page, { fixtures, store: { reviewSplit: true } });
+    await select(page);
+    await expect(page.getByRole('button', { name: 'Balanced', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const images = page.locator('[data-review-panel="images"]');
+    const metadata = page.locator('[data-review-panel="details"]');
+    const edit = images.getByRole('button', { name: 'Edit in grainatlas', exact: true });
+    await expect(edit).toBeEnabled();
+    await expect(edit).toHaveAttribute('title', /\(E\)/);
+    await inside(edit, images.locator('header'));
+    await expect(metadata).toHaveAttribute('data-collapsed', 'false');
+    await expect.poll(async () => {
+      const image = (await images.boundingBox())!, info = (await metadata.boundingBox())!;
+      return info.y >= image.y + image.height;
+    }).toBe(true);
+    const image = (await images.boundingBox())!, info = (await metadata.boundingBox())!;
+    expect(info.x).toBe(image.x);
+    expect(info.width).toBe(image.width);
+    await edit.click();
+    await expect.poll(async () => (await launches(page, 'grainatlas_launch')).at(-1)?.[1])
+      .toMatchObject({ project: 'project-demo', spot: 'atlas-2', code: 'ONE-TIME-FIXTURE' });
+    await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
+  });
+}
+
+test('the collapsed details strip keeps the selected name and date and opens both apps at 1024 x 640', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 640 });
+  await openReview(page, { fixtures, studioFound: true, store: { reviewSplit: true } });
+  await page.locator('[data-spot-key="acq-2"]').click();
+  const metadata = page.locator('[data-review-panel="details"]');
+  await expect(metadata).toHaveAttribute('data-collapsed', 'true');
+  const strip = metadata.locator('.details-summary');
+  await expect(strip.getByText('Zircon_2', { exact: true })).toBeVisible();
+  const date = strip.getByText('553 ± 9 Ma', { exact: true });
+  await expect(date).toBeVisible();
+  await inside(date, metadata);
+  expect(await date.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const edit = strip.getByRole('button', { name: 'Edit in grainatlas', exact: true });
+  await expect(edit).toBeEnabled();
+  await inside(edit, metadata);
+  await edit.click();
+  await expect.poll(async () => (await launches(page, 'grainatlas_launch')).at(-1)?.[1])
+    .toMatchObject({ project: 'project-demo', spot: 'atlas-2' });
+  await strip.getByRole('button', { name: 'Open in Studio', exact: true }).click();
+  await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(1);
+  const url = new URL((await launches(page, 'studio_launch'))[0][1]!.url as string);
+  expect(url.host + url.pathname).toBe('run/run-preferred');
+  expect(url.searchParams.get('acquisition')).toBe('acq-2');
+  await strip.getByRole('button', { name: 'Expand Spot metadata', exact: true }).click();
+  await expect(details(page).getByRole('heading', { name: 'Zircon_2', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(strip).toBeVisible();
+});
+
+test('SEM header explains when the selected spot has no published atlas', async ({ page }) => {
+  await openReview(page, { store: { reviewSplit: true }, fixtures: {
+    [`/v1/sessions/${session.id}/results?run=preferred`]: { ...table, rows: table.rows.map(row => ({ ...row, atlas_project_id: null })) },
+  } });
+  const edit = page.locator('[data-review-panel="images"]').getByRole('button', { name: 'Edit in grainatlas', exact: true });
+  await expect(edit).toBeDisabled();
+  await expect(edit).toHaveAttribute('title', /No published atlas.*\(E\)/);
+});
+
+for (const matchingProject of [true, false]) {
+  test(`Images strip passes revision and ${matchingProject ? 'matching selected spot' : 'omits a spot from another project'}`, async ({ page }) => {
+    await openReview(page, { fixtures });
+    await select(page);
+    await tab(page, 'Images').click();
+    const project = matchingProject ? 'project-demo' : 'project-other';
+    await page.evaluate(event => (window as unknown as { __emit(e: string, p: unknown): void })
+      .__emit('lab-bridge://notify', { source: 'images', event }), { ...atlasStatusFixture, project, mode: 'view', state: 'in-sync' });
+    const strip = page.getByTestId('atlas-status-strip');
+    await strip.getByRole('button', { name: 'Edit in grainatlas', exact: true }).click();
+    await expect.poll(async () => (await launches(page, 'grainatlas_launch')).length).toBe(1);
+    const args = (await launches(page, 'grainatlas_launch'))[0][1]!;
+    expect(args).toMatchObject({ project, revision: 41, code: 'ONE-TIME-FIXTURE' });
+    if (matchingProject) expect(args.spot).toBe('atlas-2');
+    else expect(args.spot).toBeUndefined();
+  });
+}
+
+
+test('SEM header opens the displayed mount atlas without a selected spot', async ({ page }) => {
+  await openReview(page, { fixtures: { ...fixtures, [`/v1/mounts/${mount.id}/results`]: { mount_id: mount.id, spots: [] } } });
+  // Home's mount inventory already knows this published atlas.
+  await tab(page, 'Home').click();
+  await expect(page.getByTestId('mount-card').getByRole('button', { name: 'Edit in grainatlas', exact: true })).toBeEnabled();
+  await tab(page, 'Review').click();
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+  await page.getByRole('button', { name: 'Choose review scope', exact: true }).click();
+  const search = page.getByRole('searchbox', { name: 'Search scopes', exact: true });
+  await search.fill(mount.label);
+  await search.press('ArrowDown');
+  await expect(page.getByRole('listbox', { name: 'Mounts', exact: true }).getByRole('option')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(details(page)).toContainText('Select a spot');
+  const edit = page.locator('[data-review-panel="images"]').getByRole('button', { name: 'Edit in grainatlas', exact: true });
+  await expect(edit).toBeEnabled();
+  await edit.click();
+  await expect.poll(async () => (await launches(page, 'grainatlas_launch')).length).toBe(1);
+  const args = (await launches(page, 'grainatlas_launch'))[0][1]!;
+  expect(args.project).toBe('project-demo');
+  expect(args.spot).toBeUndefined();
 });

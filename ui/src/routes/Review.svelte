@@ -6,7 +6,8 @@
   import { grainKey } from '../lib/review-layers';
   import ReviewLayers from '../components/review/ReviewLayers.svelte';
   import { review } from '../lib/review.svelte';
-  import { groupSpots, spotGroupKey, type ReviewSpot } from '../lib/review-data';
+  import { overview } from '../lib/overview.svelte';
+  import { dateLabel, groupSpots, spotGroupKey, type ReviewSpot } from '../lib/review-data';
   import { identity } from '../lib/identity.svelte';
   import { selection } from '../lib/selection.svelte';
   import { equalLayout, presetLayout, presets, readLayout } from '../lib/review-layout';
@@ -26,17 +27,26 @@
     active: boolean; split?: boolean; imagesOnly: boolean; images: Snippet<[boolean, string]>;
   } = $props();
   const dockLayout = $derived(readLayout(split ? settings.reviewDockSplit : settings.reviewDockSolo, split, settings.reviewDataWidth));
+  const selectedSpot = $derived(review.selected);
+  const imageTarget = $derived.by(() => {
+    if (selectedSpot) return { project: selectedSpot.atlasProjectId, mount: selectedSpot.mountId, spot: selectedSpot.atlasSpotId };
+    const mount = review.scope?.kind === 'mount' ? review.scope.id : shown.find(row => row.mountId)?.mountId ?? null;
+    const project = review.rows.find(row => row.mountId === mount && row.atlasProjectId)?.atlasProjectId;
+    const atlas = overview.mounts.find(row => row.mount.id === mount)?.atlas;
+    return { project: project ?? (atlas && atlas !== 'error' ? atlas.projectId : null), mount };
+  });
+  const editTitle = $derived(imageTarget.project ? 'Edit in grainatlas (E)' : 'No published atlas for this spot or mount (E)');
   let layoutsOpen = $state(false);
   let layoutChoices = $state<HTMLDivElement>();
   function layoutEscape(event: KeyboardEvent) {
-    if (active && shell.view === 'review' && review.selected && !event.defaultPrevented
+    if (active && shell.view === 'review' && !event.defaultPrevented
       && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
       && !(event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="dialog"],[role="menu"]'))
       && !document.querySelector(':popover-open')) {
       const spot = review.selected, key = event.key.toLowerCase();
-      if (key === 'e' && spot.atlasProjectId) {
-        event.preventDefault(); void editInAtlas({ project: spot.atlasProjectId, mount: spot.mountId, spot: spot.atlasSpotId }, 'review');
-      } else if (key === 's' && (spot.sessionId || spot.runId)) {
+      if (key === 'e' && imageTarget.project) {
+        event.preventDefault(); void editInAtlas(imageTarget, 'review');
+      } else if (key === 's' && spot && (spot.sessionId || spot.runId)) {
         event.preventDefault(); void openInStudio({ session: spot.sessionId, run: spot.runId, acquisition: spot.acquisitionId }, 'review');
       }
     }
@@ -290,6 +300,26 @@
   {/if}
   {/if}
   <ReviewDock {active} {split} {imagesOnly} ready={review.state==='ready'} {images} bind:this={dock}>
+    {#snippet headerActions(pane)}
+      {#if pane === 'images'}
+        <button class="btn atlas-edit" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}
+          onclick={() => void editInAtlas(imageTarget, 'review')}><span aria-hidden="true">✎</span> <span class="edit-long">Edit in grainatlas</span><span class="edit-short">Edit</span></button>
+      {/if}
+    {/snippet}
+    {#snippet detailsRail(expand)}
+      <div class="details-summary">
+        {#if selectedSpot}
+          <span class="summary-name" title={selectedSpot.label}>{selectedSpot.label}</span><span aria-hidden="true">·</span>
+          <span class="summary-date" title="Preferred date">{dateLabel(selectedSpot)}{selectedSpot.date ? ' Ma' : ''}</span><span aria-hidden="true">·</span>
+          <button class="btn" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}
+            onclick={() => void editInAtlas(imageTarget, 'review')}><span class="edit-long">Edit in grainatlas</span><span class="edit-short">✎ Edit</span></button>
+          <button class="btn" aria-label="Open in Studio" disabled={!selectedSpot.runId && !selectedSpot.sessionId}
+            title={selectedSpot.runId || selectedSpot.sessionId ? 'Open in Studio (S)' : 'Not measured yet'}
+            onclick={() => void openInStudio({ session: selectedSpot!.sessionId, run: selectedSpot!.runId, acquisition: selectedSpot!.acquisitionId }, 'review')}><span class="edit-long">Open in Studio</span><span class="edit-short">Studio</span></button>
+        {:else}<span class="summary-name">Select a spot</span>{/if}
+        <button class="btn" aria-label="Expand Spot metadata" title="Expand Spot metadata" onclick={expand}>⛶</button>
+      </div>
+    {/snippet}
     {#snippet spots()}
       <aside class="tree stack" aria-label="Samples and grains">
         <input type="search" aria-label="Filter spots" placeholder="Filter spots…" bind:value={filter} />
@@ -319,6 +349,18 @@
 </section>
 <style>
   .review {overflow:hidden;}
+  .atlas-edit {font-size:0.7rem;padding:1px 6px;gap:3px;white-space:nowrap;}
+  .edit-short {display:none;}
+  .details-summary {display:flex;align-items:center;gap:5px;min-width:0;height:100%;padding:0 4px;background:var(--accent-soft);font-size:0.73rem;white-space:nowrap;}
+  .summary-name {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+  .summary-date,.details-summary .btn {flex:none;}
+  .details-summary .btn {font-size:0.7rem;padding:1px 4px;}
+  @container (max-width:360px) {
+    .details-summary .edit-long {display:none;}
+    .details-summary .edit-short {display:inline;}
+    .atlas-edit .edit-long {display:none;}
+    .atlas-edit .edit-short {display:inline;}
+  }
   .layout-presets {display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
   .layout-toggle,.layout-drawer {display:none;}
   .layout-presets .chip {font-size:0.72rem;padding:3px 7px;}

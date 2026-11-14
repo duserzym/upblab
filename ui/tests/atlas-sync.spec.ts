@@ -74,10 +74,10 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(strip.getByText(status.name)).toHaveAttribute('title', status.name);
       expect((await strip.boundingBox())!.height).toBeLessThanOrEqual(36);
       await expect.poll(async () => (await calls(page)).filter(([name]) => name === 'module_bounds').some(([, args]) => args?.module === 'images' && (args.bounds as { y: number }).y >= 84)).toBe(true);
-      await strip.getByRole('button', { name: 'Open in GrainAtlas' }).click();
+      await strip.getByRole('button', { name: 'Edit in grainatlas' }).click();
       await expect(strip.getByRole('status')).toContainText(missing);
       expect((await calls(page)).find(([name]) => name === 'grainatlas_launch')?.[1]).toEqual({ project: status.project, server: 'http://localhost:8000', code: 'ONE-TIME-FIXTURE', revision: 41 });
-      await strip.getByRole('button', { name: 'Open in GrainAtlas' }).click();
+      await strip.getByRole('button', { name: 'Edit in grainatlas' }).click();
       await expect(strip.getByRole('status')).toHaveCount(0);
       await expect.poll(() => problems(page, 'Images strip')).toEqual([]);
       await emit(page, drafts);

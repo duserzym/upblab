@@ -10,11 +10,12 @@ type Divider = { path: Path; rect: Rect; area: Rect; axis: Axis; position: numbe
 export const gap = 8;
 
 export function defaultLayout(images: boolean, dataWidth = 50): Layout {
-  const sidebar: Layout = { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' };
-  return {
-    axis: 'x', ratio: 0.20, first: sidebar,
-    second: images ? { axis: 'x', ratio: dataWidth / 100, first: 'plots', second: 'images' } : 'plots',
-  };
+  if (images) return { axis: 'x', ratio: 0.17, first: 'spots', second: {
+    axis: 'x', ratio: dataWidth / 100, first: 'plots',
+    second: { axis: 'y', ratio: 0.6, first: 'images', second: 'details' },
+  } };
+  return { axis: 'x', ratio: 0.20,
+    first: { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' }, second: 'plots' };
 }
 
 export const presets = ['Balanced', 'Plots focus', 'Image focus'] as const;
@@ -22,14 +23,27 @@ export type Preset = typeof presets[number];
 
 export function presetLayout(name: Preset, images: boolean): Layout {
   if (name === 'Balanced' || name === 'Image focus' && !images) return defaultLayout(images);
-  const sidebar: Layout = { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' };
-  return { axis: 'x', ratio: 0.18, first: sidebar,
-    second: images ? { axis: 'x', ratio: name === 'Image focus' ? 0.38 : 0.7, first: 'plots', second: 'images' } : 'plots' };
+  if (images) return defaultLayout(true, name === 'Image focus' ? 38 : 70);
+  return { axis: 'x', ratio: 0.18,
+    first: { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' }, second: 'plots' };
 }
 
 export function equalLayout(a: Layout, b: Layout): boolean {
   if (typeof a === 'string' || typeof b === 'string') return a === b;
   return a.axis === b.axis && a.ratio === b.ratio && equalLayout(a.first, b.first) && equalLayout(a.second, b.second);
+}
+
+// Match only the exact old preset trees. A changed divider or dock position is
+// user-owned. Reading migrates in memory; settings are saved only on an edit.
+export function migrateSplitLayout(layout: Layout, dataWidth: number): Layout {
+  const sidebar: Layout = { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' };
+  for (const name of presets) {
+    const ratio = name === 'Balanced' ? dataWidth / 100 : name === 'Plots focus' ? 0.7 : 0.38;
+    const old: Layout = { axis: 'x', ratio: name === 'Balanced' ? 0.2 : 0.18, first: sidebar,
+      second: { axis: 'x', ratio, first: 'plots', second: 'images' } };
+    if (equalLayout(layout, old)) return name === 'Balanced' ? defaultLayout(true, dataWidth) : presetLayout(name, true);
+  }
+  return layout;
 }
 
 // Ratios reset only when the entire topology still corresponds to the default.
@@ -63,7 +77,7 @@ export function readLayout(raw: string, images: boolean, dataWidth: number): Lay
   }
   try {
     const value: unknown = JSON.parse(raw);
-    if (valid(value) && seen.size === (images ? 4 : 3)) return value;
+    if (valid(value) && seen.size === (images ? 4 : 3)) return images ? migrateSplitLayout(value, dataWidth) : value;
   } catch { /* Use the default if settings were edited or corrupted. */ }
   return defaultLayout(images, dataWidth);
 }
@@ -111,8 +125,15 @@ export function geometry(layout: Layout, width: number, height: number) {
   const dividers: Divider[] = [];
   const collapsed: Pane[] = [];
   const rails: Partial<Record<Pane, Axis>> = {};
+  function hasImageDetailsStack(node: Layout): boolean {
+    return typeof node !== 'string' && (node.axis === 'y' && node.first === 'images' && node.second === 'details'
+      || hasImageDetailsStack(node.first) || hasImageDetailsStack(node.second));
+  }
+  // The under-image reading order needs room for identity, date and actions.
+  // At the shortest window it yields to a useful summary rail instead.
+  const detailsHeight = hasImageDetailsStack(layout) ? 260 : minimum.details.y;
   function minSize(node: Layout, axis: Axis): number {
-    if (typeof node === 'string') return rails[node] ? railSize : minimum[node][axis];
+    if (typeof node === 'string') return rails[node] ? railSize : node === 'details' && axis === 'y' ? detailsHeight : minimum[node][axis];
     const a = minSize(node.first, axis), b = minSize(node.second, axis);
     return node.axis === axis ? a + gap + b : Math.max(a, b);
   }

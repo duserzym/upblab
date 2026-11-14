@@ -17,6 +17,10 @@ it('hands off context and watches a successful atlas opener', async () => {
   expect(apps.atlas?.state).toBe('launched');
   expect(shell.handleLink).not.toHaveBeenCalled();
 });
+it('passes the requested atlas revision alongside spot context', async () => {
+  await editInAtlas({ ...target, revision: 41 }, 'images');
+  expect(platform.launchGrainAtlas).toHaveBeenCalledWith('p', 'https://lab', 'CODE', 41, 's', undefined);
+});
 it('shows install guidance without navigating for a missing app', async () => {
   vi.mocked(platform.launchGrainAtlas).mockRejectedValueOnce(new Error('GrainAtlas is not installed (looked in /Applications and ~/Applications)'));
   await expect(editInAtlas(target, 'review')).resolves.toBeUndefined();

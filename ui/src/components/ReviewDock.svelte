@@ -4,9 +4,10 @@
   import { settings } from '../lib/settings.svelte';
   import { defaultRatio, dock, edgeAt, gap, geometry, panes, presetLayout, readLayout, resize, type Preset, type Edge, type Layout, type Pane, type Rect } from '../lib/review-layout';
 
-  let { active, ready, split, imagesOnly, spots, plots, details, images }: {
+  let { active, ready, split, imagesOnly, spots, plots, details, images, headerActions, detailsRail }: {
     active: boolean; ready: boolean; split: boolean; imagesOnly: boolean;
     spots: Snippet; plots: Snippet; details: Snippet; images: Snippet<[boolean, string]>;
+    headerActions?: Snippet<[Pane]>; detailsRail?: Snippet<[() => void]>;
   } = $props();
 
   const title = { spots: 'Spots', plots: 'Age & plots', details: 'Spot metadata', images: 'SEM images' };
@@ -162,14 +163,18 @@
     <section data-collapsed={!!rail} data-review-panel={pane} class="tile" class:full class:rail={!!rail} class:rail-x={rail === 'x'} class:drag-source={drag?.moving && drag.pane === pane} hidden={!shown} aria-label={title[pane]}
       style={full ? '' : tileStyle(rect)}>
       {#if rail}
-        <button class="rail-button" aria-label={`Expand ${title[pane]}`} title={`Expand ${title[pane]}`} onclick={() => maximise(pane)}>{title[pane]}</button>
+        {#if pane === 'details' && rail === 'y' && detailsRail}
+          {@render detailsRail(() => maximise(pane))}
+        {:else}
+          <button class="rail-button" aria-label={`Expand ${title[pane]}`} title={`Expand ${title[pane]}`} onclick={() => maximise(pane)}>{title[pane]}</button>
+        {/if}
       {/if}
       <!-- svelte-ignore a11y_no_static_element_interactions (Header double-click complements the maximise button.) -->
       <header hidden={full || !!rail} ondblclick={event => headerDoubleClick(event, pane)}>
         <div class="heading"><button class="grip" title="Drag to another panel edge to move" aria-label={`Drag ${title[pane]}`}
           onpointerdown={e => grab(e, pane)} onpointermove={slide} onpointerup={release}
           onpointercancel={release} onlostpointercapture={release}><span aria-hidden="true">⠿</span></button><span class="tile-title" title={title[pane]}>{title[pane]}</span></div>
-        <div class="header-actions"><button class="dock-menu maximise" aria-label={`${maximised === pane ? 'Restore' : 'Maximise'} ${title[pane]}`} aria-pressed={maximised === pane} title={maximised === pane ? 'Restore panel' : 'Maximise panel'} onclick={() => maximise(pane)}>{maximised === pane ? 'Restore' : '⛶'}</button>
+        <div class="header-actions">{#if headerActions}{@render headerActions(pane)}{/if}<button class="dock-menu maximise" aria-label={`${maximised === pane ? 'Restore' : 'Maximise'} ${title[pane]}`} aria-pressed={maximised === pane} title={maximised === pane ? 'Restore panel' : 'Maximise panel'} onclick={() => maximise(pane)}>{maximised === pane ? 'Restore' : '⛶'}</button>
         {#if pane === 'images'}
           <button class="dock-menu" aria-label="Move SEM images" title="Move panel" aria-expanded={imagesMenu} aria-controls="dock-images" onclick={() => imagesMenu = !imagesMenu}>⋯</button>
         {:else}
@@ -216,7 +221,7 @@
 
 <style>
   .dock { position:relative; flex:1; min-height:0; min-width:0; overflow:hidden; }
-  .tile { position:absolute; display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-radius:var(--radius-sm); border:1px solid var(--hairline); background:var(--glass); }
+  .tile { container-type:inline-size; position:absolute; display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-radius:var(--radius-sm); border:1px solid var(--hairline); background:var(--glass); }
   .tile[hidden], .tile header[hidden], .body[hidden], .dock[hidden] { display:none; }
   .tile.full { inset:0; border:0; border-radius:0; }
   .tile header { display:flex; align-items:center; justify-content:space-between; height:29px; padding:0 4px; flex:none; border-bottom:1px solid var(--hairline); background:var(--accent-soft); }

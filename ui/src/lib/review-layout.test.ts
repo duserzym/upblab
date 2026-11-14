@@ -1,16 +1,17 @@
 import { expect, it } from 'vitest';
-import { defaultLayout, defaultRatio, dock, equalLayout, gap, geometry, minimum, presetLayout, presets, railSize, readLayout, resize, type Layout, type Pane } from './review-layout';
+import { defaultLayout, defaultRatio, dock, equalLayout, gap, geometry, minimum, migrateSplitLayout, presetLayout, presets, railSize, readLayout, resize, type Layout, type Pane } from './review-layout';
 
 it('fits the default review into a narrow desktop window', () => {
   const { tiles, dividers } = geometry(defaultLayout(true), 1280, 650);
   expect(dividers).toHaveLength(3);
   expect(tiles.images!.width).toBeGreaterThan(500);
   expect(tiles.plots!.width).toBeGreaterThan(240);
-  expect(tiles.details!.y).toBe(tiles.spots!.height + gap);
-  expect(tiles.details!.x).toBe(tiles.spots!.x);
-  expect(tiles.details!.width).toBe(tiles.spots!.width);
+  expect(tiles.details!.y).toBe(tiles.images!.height + gap);
+  expect(tiles.details!.x).toBe(tiles.images!.x);
+  expect(tiles.details!.width).toBe(tiles.images!.width);
+  expect(tiles.spots!.height).toBe(650);
   expect(tiles.plots!.y).toBe(tiles.images!.y);
-  expect(tiles.plots!.height).toBe(tiles.images!.height);
+  expect(tiles.plots!.height).toBe(tiles.images!.height + gap + tiles.details!.height);
   expect(tiles.images!.x + tiles.images!.width).toBe(1280);
 });
 
@@ -79,12 +80,12 @@ it('clamps saved divider drags and keyboard resizes to the tree minimums', () =>
     expect(tiles.details!.width).toBeGreaterThanOrEqual(240);
     expect(tiles.plots!.width).toBeGreaterThanOrEqual(320);
     expect(tiles.images!.width).toBeGreaterThanOrEqual(320);
-    expect(typeof next !== 'string' && next.ratio).toBeCloseTo(ratio < 0 ? 240 / 1272 : (1272 - 648) / 1272);
+    expect(typeof next !== 'string' && next.ratio).toBeCloseTo(ratio < 0 ? 220 / 1272 : (1272 - 648) / 1272);
   }
 });
 
 it('resets matching splits to the current mode default and moved trees to one half', () => {
-  expect(defaultRatio(defaultLayout(true), [], true)).toBe(0.2);
+  expect(defaultRatio(defaultLayout(true), [], true)).toBe(0.17);
   expect(defaultRatio(defaultLayout(true), ['second'], true, 57)).toBe(0.57);
   expect(defaultRatio(defaultLayout(false), ['first'], false)).toBe(0.62);
   expect(defaultRatio(dock(defaultLayout(true), 'images', 'plots', 'top'), [], true)).toBe(0.5);
@@ -122,9 +123,9 @@ it('preserves primary minimums in a short vertical stack by railing SEM after me
 });
 
 it('clamps nested horizontal and vertical dividers without changing their ancestors', () => {
-  for (const path of [['first'], ['second']] as const) for (const ratio of [-1, 2]) {
+  for (const path of [['second'], ['second', 'second']] as const) for (const ratio of [-1, 2]) {
     const next = resize(defaultLayout(true), [...path], ratio, { width: 1280, height: 800 });
-    expect(typeof next !== 'string' && next.ratio).toBe(0.2);
+    expect(typeof next !== 'string' && next.ratio).toBe(0.17);
     const { tiles, collapsed } = geometry(next, 1280, 800);
     expect(collapsed).toEqual([]);
     for (const pane of Object.keys(tiles) as Pane[]) {
@@ -132,4 +133,62 @@ it('clamps nested horizontal and vertical dividers without changing their ancest
       expect(tiles[pane]!.height).toBeGreaterThanOrEqual(minimum[pane].y);
     }
   }
+});
+
+function oldPreset(name: typeof presets[number], dataWidth = 50): Layout {
+  return { axis: 'x', ratio: name === 'Balanced' ? 0.2 : 0.18,
+    first: { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' },
+    second: { axis: 'x', ratio: name === 'Balanced' ? dataWidth / 100 : name === 'Plots focus' ? 0.7 : 0.38, first: 'plots', second: 'images' } };
+}
+
+it('puts details under images in every preset and preserves dataWidth as the plots share', () => {
+  for (const [name, ratio] of [['Balanced', 0.5], ['Plots focus', 0.7], ['Image focus', 0.38]] as const) {
+    expect(presetLayout(name, true)).toEqual({ axis: 'x', ratio: 0.17, first: 'spots', second: {
+      axis: 'x', ratio, first: 'plots', second: { axis: 'y', ratio: 0.6, first: 'images', second: 'details' },
+    } });
+  }
+  expect(defaultLayout(true, 57)).toEqual({ axis: 'x', ratio: 0.17, first: 'spots', second: {
+    axis: 'x', ratio: 0.57, first: 'plots', second: { axis: 'y', ratio: 0.6, first: 'images', second: 'details' },
+  } });
+  expect(defaultRatio(defaultLayout(true), ['second', 'second'], true)).toBe(0.6);
+  expect(defaultLayout(false, 57)).toEqual(defaultLayout(false));
+  expect(presetLayout('Plots focus', false)).toEqual({ axis: 'x', ratio: 0.18,
+    first: { axis: 'y', ratio: 0.62, first: 'spots', second: 'details' }, second: 'plots' });
+});
+
+it('migrates exact old split presets on read, including stored Balanced data widths, once', () => {
+  for (const dataWidth of [30, 50, 57, 70]) for (const name of presets) {
+    const old = oldPreset(name, dataWidth), before = JSON.stringify(old);
+    const expected = name === 'Balanced' ? defaultLayout(true, dataWidth) : presetLayout(name, true);
+    expect(migrateSplitLayout(old, dataWidth)).toEqual(expected);
+    expect(readLayout(before, true, dataWidth)).toEqual(expected);
+    expect(migrateSplitLayout(expected, dataWidth)).toBe(expected);
+    expect(JSON.stringify(old)).toBe(before);
+  }
+});
+
+it('keeps customised split ratios and topology instead of mistaking them for old presets', () => {
+  for (const name of presets) for (const path of [[], ['first'], ['second']] as const) {
+    const custom = resize(oldPreset(name), [...path], 0.61);
+    expect(migrateSplitLayout(custom, 50)).toBe(custom);
+    expect(readLayout(JSON.stringify(custom), true, 50)).toEqual(custom);
+  }
+  const moved = dock(oldPreset('Balanced'), 'details', 'images', 'left');
+  expect(migrateSplitLayout(moved, 50)).toBe(moved);
+  expect(readLayout(JSON.stringify(moved), true, 50)).toEqual(moved);
+  // A right divider that differs from the stored dataWidth is a custom resize.
+  const changed = oldPreset('Balanced', 57);
+  expect(migrateSplitLayout(changed, 50)).toBe(changed);
+});
+
+it('collapses under-image metadata into a horizontal summary rail in the shortest dock', () => {
+  for (const name of presets) {
+    const result = geometry(presetLayout(name, true), 1024, 490);
+    expect(result.collapsed).toEqual(['details']);
+    expect(result.rails).toEqual({ details: 'y' });
+    expect(result.tiles.details!.height).toBe(railSize);
+    expect(result.tiles.details!.y).toBe(result.tiles.images!.height + gap);
+    expect(result.tiles.images!.height).toBeGreaterThanOrEqual(minimum.images.y);
+  }
+  expect(geometry(defaultLayout(true), 1280, 650).collapsed).toEqual([]);
 });
