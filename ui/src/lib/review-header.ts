@@ -1,3 +1,4 @@
+import { plural } from './plural';
 import type { MountOut, RunOut, SessionOut } from './overview.svelte';
 
 /** A compact local timestamp, with stable English month names. */
@@ -8,7 +9,7 @@ export function formatRunTime(value?: string | null): string {
   return `${date.getDate()} ${month} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 export function sessionStatus(session: SessionOut): string {
-  return session.preferred_run ? 'preferred run' : session.run_count ? `${session.run_count} runs` : 'not reduced';
+  return session.preferred_run ? 'preferred run' : session.run_count ? plural(session.run_count, 'run') : 'not reduced';
 }
 export function scopeRows(sessions: SessionOut[], mounts: MountOut[], query: string) {
   const text = query.trim().toLowerCase();

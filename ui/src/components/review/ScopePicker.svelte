@@ -3,6 +3,7 @@
   let prompted = false;
 </script>
 <script lang="ts">
+  import { plural } from '../../lib/plural';
   import { tick, untrack, type Snippet } from 'svelte';
   import { review } from '../../lib/review.svelte';
   import { settings } from '../../lib/settings.svelte';
@@ -19,8 +20,8 @@
   const name = $derived(session?.session_key ?? mount?.label ?? 'Choose a session or mount');
   const matching = $derived(scopeRows(review.sessions, review.mounts, query));
   const columns = $derived([
-    matching.sessions.map(s => ({ id: s.id, kind: 'session' as const, name: s.session_key, facts: `${s.material} · ${s.acquisition_count} spots · ${sessionStatus(s)}` })),
-    matching.mounts.map(m => ({ id: m.id, kind: 'mount' as const, name: m.label, facts: `${m.spot_count} spots` })),
+    matching.sessions.map(s => ({ id: s.id, kind: 'session' as const, name: s.session_key, facts: `${s.material} · ${plural(s.acquisition_count, 'spot')} · ${sessionStatus(s)}` })),
+    matching.mounts.map(m => ({ id: m.id, kind: 'mount' as const, name: m.label, facts: plural(m.spot_count, 'spot') })),
   ]);
   const runs = $derived(completeRuns(review.runs));
   const resolved = $derived(resolvedRun(runs, review.scope?.kind === 'session' ? review.scope.run : undefined));
@@ -94,7 +95,7 @@
         title={name} bind:this={sessionField} onclick={() => void toggle('scope')}>
         {@render icon('m2 6 8-4 8 4-8 4zm0 4 8 4 8-4M2 14l8 4 8-4', 'leading')}
         <span class="field-text"><small>{review.scope?.kind === 'mount' ? 'Mount' : 'Session'}</small><span class="value">{name}</span></span>
-        {#if review.scope}<span class="facts">{session ? `${session.material} · ${session.acquisition_count} spots` : `${mount?.spot_count ?? review.rows.length} spots`}</span>{/if}
+        {#if review.scope}<span class="facts">{session ? `${session.material} · ${plural(session.acquisition_count, 'spot')}` : plural(mount?.spot_count ?? review.rows.length, 'spot')}</span>{/if}
         {@render icon('m5 7 5 5 5-5', 'chevron')}
       </button>
       {#if review.scope?.kind === 'session'}
@@ -147,7 +148,7 @@
               onfocus={() => cursor = { column: 0, index }} onkeydown={e => navigate(e, 0, index)} onclick={() => chooseRun(choice.value)}>
               <span class="run-description">
                 <span>{choice.alias ? (r.is_preferred_for_session ? 'Preferred run' : 'Newest run, not preferred') : `${formatRunTime(r.started_at)} · ${r.id.slice(0, 8)}`}</span>
-                <small class="muted">{choice.alias ? `${formatRunTime(r.started_at)} · ${r.id.slice(0, 8)} · ` : ''}{[r.run_by, r.upbrpy_version || r.pipeline_version].filter(Boolean).join(' · ')} · {r.result_count} spots</small>
+                <small class="muted">{choice.alias ? `${formatRunTime(r.started_at)} · ${r.id.slice(0, 8)} · ` : ''}{[r.run_by, r.upbrpy_version || r.pipeline_version].filter(Boolean).join(' · ')} · {plural(r.result_count, 'spot')}</small>
                 {#if r.parsing_changed_at}<small class="warning">made before spot names were re-parsed</small>{/if}
               </span>
               <span class="run-badges">{#if r.is_preferred_for_session}<span class="badge success">Preferred</span>{/if}{#if r.id === runs[0]?.id}<span class="badge warning">Newest</span>{/if}</span>

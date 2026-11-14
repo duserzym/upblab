@@ -36,7 +36,6 @@ body { min-height: 0; overflow: hidden; }
   cursor: pointer;
   font-weight: 550;
   white-space: nowrap;
-  transition: background var(--motion), color var(--motion), border-color var(--motion);
 }
 .tab:hover { color: var(--text); background: var(--row-hover); }
 .tab[aria-selected='true'], .tab[aria-pressed='true'] {

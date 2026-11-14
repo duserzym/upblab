@@ -2,6 +2,7 @@
   import { openInStudio } from '../../lib/apps.svelte';
   import type { SessionRow } from '../../lib/overview.svelte';
   import MineralIcon from './MineralIcon.svelte';
+  import { plural } from '../../lib/plural';
   import { day, kindColor, kindLabel, kindSegments, runStatus } from '../../lib/home';
   import { shell } from '../../lib/shell.svelte';
   import { review } from '../../lib/review.svelte';
@@ -10,7 +11,9 @@
   const status = $derived(runStatus(row));
   const segments = $derived(kindSegments(s.acquisition_count, maximum, row.kindCounts));
   const counts = $derived(segments.map(({ kind, count }) => `${kindLabel(kind)}: ${count}`).join(' · ') || 'No spots');
-  const byline = $derived([day(s.started_at), s.analyst, s.instrument?.name].filter(Boolean).join(' · ') || 'Date and analyst not recorded');
+  const date = $derived(day(s.started_at));
+  const people = $derived([s.analyst, s.instrument?.name].filter(Boolean).join(' · '));
+  const byline = $derived([date, people].filter(Boolean).join(' · ') || 'Date and analyst not recorded');
 </script>
 <article class="glass panel session-card" data-testid="session-card">
   <div class="heading">
@@ -18,11 +21,11 @@
     <span class="chip mineral"><MineralIcon mineral={s.material} /><span>{s.material || 'Unspecified'}</span></span>
   </div>
   <div class="byline">
-    <p class="muted small ellipsis" title={byline}>{byline}</p>
+    <p class="muted small byline-text" title={byline}>{#if date || people}{#if date}<span class="date">{date}</span>{/if}{#if date && people}<span aria-hidden="true">·</span>{/if}{#if people}<span class="ellipsis">{people}</span>{/if}{:else}<span class="ellipsis">{byline}</span>{/if}</p>
     {#if row.access}<span class="chip access" title={row.access.owner ? `Session owner: ${row.access.owner}` : 'Your session access'}>{row.access.role}</span>{/if}
   </div>
   <details class="spot-details">
-    <summary class="spot-line" title={counts} aria-label={`Spot breakdown for ${s.session_key}, ${s.acquisition_count} spots`}>
+    <summary class="spot-line" title={counts} aria-label={`Spot breakdown for ${s.session_key}, ${plural(s.acquisition_count, 'spot')}`}>
       <svg viewBox="0 0 100 5" preserveAspectRatio="none" aria-hidden="true">
         <rect width="100" height="5" rx="2" fill="var(--hairline)"/>
         {#each segments as segment (segment.kind)}
@@ -31,7 +34,7 @@
           </rect>
         {/each}
       </svg>
-      <span>{s.acquisition_count} spots</span>
+      <span>{plural(s.acquisition_count, 'spot')}</span>
       <span class="chevron" aria-hidden="true"></span>
     </summary>
     <ul class="breakdown small">
@@ -63,6 +66,8 @@
   .byline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); min-width: 0; }
   .access { position: relative; z-index: 1; }
   p { margin: 0; }
+  .byline-text { display: flex; gap: 0.3em; min-width: 0; }
+  .date { flex: none; white-space: nowrap; }
   .ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .spot-details { position: relative; z-index: 1; }
   .spot-line { display: flex; align-items: center; gap: var(--space-1); color: var(--text-muted); cursor: pointer; list-style: none; }

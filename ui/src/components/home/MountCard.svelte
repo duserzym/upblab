@@ -2,6 +2,7 @@
   import { editInAtlas } from '../../lib/apps.svelte';
   import AtlasGuidance from '../AtlasGuidance.svelte';
   import Thumbnail from './Thumbnail.svelte';
+  import { plural } from '../../lib/plural';
   import { overview, type MountRow } from '../../lib/overview.svelte';
   import { atlasStatus } from '../../lib/home';
   import { shell } from '../../lib/shell.svelte';
@@ -21,7 +22,7 @@
       <button class="main" title={action} aria-label={action} onclick={() => void shell.handleLink(target, 'home')}><span class="key">{label}</span></button>
       <p class="muted small ellipsis atlas-name" title={atlasName || undefined}>{atlasName}</p>
       <p class="muted small ellipsis" title={row.mount.mount_type}>{row.mount.mount_type || 'Mount'}</p>
-      <p class="small counts">{row.mount.grain_count} grains · {row.mount.spot_count} spots</p>
+      <p class="small counts">{plural(row.mount.grain_count, 'grain')} · {plural(row.mount.spot_count, 'spot')}</p>
     </div>
   </div>
   <div class="footer">
