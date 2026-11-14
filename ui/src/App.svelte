@@ -181,7 +181,7 @@
 <svelte:document onvisibilitychange={() => { appWatch.visibilityChanged(); }} />
 <div class="shell">
   <header class="bar glass">
-    <span class="brand"><img class="mark" src="./favicon.svg" alt="" width="22" height="22" />UPb Lab</span>
+    <span class="brand"><img class="mark" src="./brand-22.png" srcset="./brand-44.png 2x, ./brand-66.png 3x" alt="" width="22" height="22" />UPb Lab</span>
     {#if !firstRun}
     <div class="tabs" role="tablist" aria-label="Modules">
       {#each tabs as t, i (t.id)}
