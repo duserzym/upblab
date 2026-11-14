@@ -69,7 +69,10 @@ tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tokio = { version = "1", features = ["macros", "rt"] }
 
 [profile.release]
-codegen-units = 1
-lto = true
+# Thin LTO with 16 units: with the kept release target (Makefile RELEASE_TARGET)
+# a one-file rebuild takes about 22 s instead of 77 s; the binary is about 6 %
+# larger (105.6 MB instead of 99.4 MB). Chosen by the owner on 2026-11-14.
+codegen-units = 16
+lto = "thin"
 opt-level = "s"
 strip = true

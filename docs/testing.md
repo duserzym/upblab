@@ -79,8 +79,8 @@ saved per UPb Lab build, about 3 GB of disk kept between installs.
 - Cargo locks the target, so two builds at once wait for each other instead
   of corrupting it.
 
-Not changed, for the owner to decide: thin LTO with 16 codegen units in
-`[profile.release]` instead of full LTO with one unit. With the kept target a
+`[profile.release]` uses thin LTO with 16 codegen units (owner's choice,
+2026-11-14) instead of full LTO with one unit. With the kept target a
 one-file rebuild drops from 77 s to 22 s; a cold build is unchanged (149 s);
 the binary grows from 99.4 MB to 105.6 MB (6 %).
 
