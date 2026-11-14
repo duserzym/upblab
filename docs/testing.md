@@ -63,17 +63,26 @@ Review and atlas-sync specs, which drive many real screens.
 | Rust release, one file changed | 77 s |
 | bundling `.app` and `.dmg` | a few seconds |
 
-Installs build each app in a fresh checkout, so the Rust release build is cold
-every time. Two options for the owner to choose between:
+Installs build each app in a fresh checkout. On the owner's request
+(2026-11-14) local macOS release builds keep one shared Cargo target,
+`~/Library/Caches/lab-builds/upblab-target`, set by `RELEASE_TARGET` in the
+Makefile, so a fresh checkout reuses the compiled dependencies: about 65 s
+saved per UPb Lab build, about 3 GB of disk kept between installs.
 
-- Keep a shared release target between installs (for example
-  `CARGO_TARGET_DIR=~/Library/Caches/lab-builds/upblab-target`): saves about
-  65 s per UPb Lab build and costs 2.9 GB of disk. This conflicts with the
-  standing rule that removes target folders after a major update.
-- Thin LTO with 16 codegen units in `[profile.release]` instead of full LTO
-  with one unit: a one-file rebuild drops from 77 s to 22 s; a cold build is
-  unchanged (149 s); the binary grows from 99.4 MB to 105.6 MB (6 %). Only
-  worth it together with a kept target.
+- `make build` writes the `.app` and `.dmg` under
+  `~/Library/Caches/lab-builds/upblab-target/release/bundle/`. Copy the `.app`
+  to `/Applications` and delete it there, as before.
+- `make clean-build` (after a major update) keeps the shared target and prints
+  its size; `make clean-release-cache` removes it, only when asked.
+- `make build RELEASE_TARGET=` builds into `src-tauri/target` as before.
+  GitHub Actions always does.
+- Cargo locks the target, so two builds at once wait for each other instead
+  of corrupting it.
+
+Not changed, for the owner to decide: thin LTO with 16 codegen units in
+`[profile.release]` instead of full LTO with one unit. With the kept target a
+one-file rebuild drops from 77 s to 22 s; a cold build is unchanged (149 s);
+the binary grows from 99.4 MB to 105.6 MB (6 %).
 
 The grainatlas module is copied from grainatlas's own `ui/dist` by
 `scripts/fetch-modules.mjs`; rebuilding that dist is grainatlas's step and is

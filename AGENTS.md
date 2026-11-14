@@ -69,7 +69,12 @@ any app built from it is installed in `/Applications` and smoke-tested:
 
 1. Note free space (`df -h /`).
 2. Run `make clean-build`. It removes `src-tauri/target/` (Rust and Tauri builds, `.app` and `.dmg` bundles). It keeps `bridge/dist` (grainatlas builds against it), `ui/dist`, `ui/public/modules` and `node_modules` (`make clean` removes those too). It stops if a build
-   is still writing there, and prints free space before and after.
+   is still writing there, and prints free space before and after. It also
+   keeps the shared release target `~/Library/Caches/lab-builds/upblab-target`
+   (about 3 GB, kept on the owner's request so installs are faster;
+   `docs/testing.md`). Delete the `.app` left in its `release/bundle/` after
+   copying it out; remove the whole cache (`make clean-release-cache`) only
+   when the owner asks.
 3. Remove the worktrees and build checkouts you created for this work
    (`git worktree remove`, then `git branch -d` for merged branches).
 4. Keep installed apps and review artifacts (screenshots, previews, print

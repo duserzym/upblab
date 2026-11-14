@@ -4,6 +4,18 @@
 TAURI ?= cargo tauri
 PNPM  ?= pnpm
 
+# Local macOS release builds share one Cargo target outside the checkout, so a
+# fresh build checkout reuses the compiled dependencies (about 65 s saved per
+# build, about 3 GB of disk; docs/testing.md). `make clean-build` keeps it;
+# `make clean-release-cache` removes it; `make build RELEASE_TARGET=` builds
+# into src-tauri/target as before. GitHub Actions always uses src-tauri/target.
+ifeq ($(shell uname -s),Darwin)
+ifndef GITHUB_ACTIONS
+RELEASE_TARGET ?= $(HOME)/Library/Caches/lab-builds/upblab-target
+endif
+endif
+BUNDLE_DIR = $(if $(RELEASE_TARGET),$(RELEASE_TARGET),src-tauri/target)/release/bundle
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -41,8 +53,8 @@ ui-dev: ## Run only the shell page in a browser at http://localhost:1420 (web de
 # window: it needs Automation permission for Finder and times out without it.
 # GitHub Actions sets CI too, so local and CI disk images are the same.
 build: ## Build the release app and installers (.app/.dmg on macOS, .msi/.exe on Windows)
-	CI=true $(TAURI) build
-	@echo "Installers: src-tauri/target/release/bundle/"
+	CI=true $(if $(RELEASE_TARGET),CARGO_TARGET_DIR="$(RELEASE_TARGET)") $(TAURI) build
+	@echo "Installers: $(BUNDLE_DIR)/ (copy the .app out, then delete it there)"
 
 .PHONY: quick
 quick: ## Quick check: only the tests the changed files affect (Chromium), in parallel; see docs/testing.md
@@ -72,6 +84,15 @@ clean-build: ## After a major update: remove src-tauri/target only (keeps bridge
 	@if pgrep -f "$(CURDIR)/src-tauri/target/" >/dev/null; then echo "A build is writing to $(CURDIR)/src-tauri/target; not cleaning."; exit 1; fi
 	@df -h / | awk 'NR==2 {print "Free on /: " $$4 " (before)"}'
 	rm -rf ./src-tauri/target
+	@df -h / | awk 'NR==2 {print "Free on /: " $$4 " (after)"}'
+	@$(if $(RELEASE_TARGET),test -d "$(RELEASE_TARGET)" && du -sh "$(RELEASE_TARGET)" | awk '{print "Kept shared release target: " $$1 " in " $$2}' || true,true)
+
+.PHONY: clean-release-cache
+clean-release-cache: ## Remove the shared release target (only when asked; the next build is cold again)
+	@test -n "$(RELEASE_TARGET)" || { echo "No shared release target on this machine."; exit 0; }
+	@if pgrep -f "cargo.*$(RELEASE_TARGET)|$(RELEASE_TARGET)/" >/dev/null; then echo "A build is writing to $(RELEASE_TARGET); not cleaning."; exit 1; fi
+	@df -h / | awk 'NR==2 {print "Free on /: " $$4 " (before)"}'
+	rm -rf "$(RELEASE_TARGET)"
 	@df -h / | awk 'NR==2 {print "Free on /: " $$4 " (after)"}'
 
 .PHONY: updater-setup
