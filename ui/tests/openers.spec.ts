@@ -415,3 +415,16 @@ test('a Studio spot action resolves a result outside the loaded Review rows', as
   expect((await calls(page)).some(([name, args]) => name === 'api_get' && args?.path === '/v1/spots/by-atlas/atlas-2/results')).toBe(true);
   await expect(details(page).getByRole('heading', { name: 'Zircon_2', exact: true })).toBeVisible();
 });
+
+test('opening the Reduce tab does not block the page (effect loop regression)', async ({ page, browserName }) => {
+  test.skip(browserName !== 'chromium', 'Long-task timing is a Chromium API');
+  await openReview(page, { studioFound: true, fixtures });
+  await page.evaluate(() => {
+    (window as unknown as { __long: number[] }).__long = [];
+    new PerformanceObserver(list => { for (const e of list.getEntries()) (window as unknown as { __long: number[] }).__long.push(e.duration); }).observe({ type: 'longtask' });
+  });
+  await tab(page, 'Reduce').click();
+  await expect(page.getByTestId('reduce-sessions')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(Math.max(0, ...await page.evaluate(() => (window as unknown as { __long: number[] }).__long))).toBeLessThan(2000);
+});

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { overview } from '../lib/overview.svelte';
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
@@ -8,7 +9,8 @@
   import { day } from '../lib/home';
   import StudioGuidance from '../components/StudioGuidance.svelte';
   let { active }: { active: boolean } = $props();
-  $effect(() => { if (active && settings.loaded) void overview.load(); });
+  // Load once per activation; untracked so the state load() reads cannot re-run this effect.
+  $effect(() => { if (active && settings.loaded) untrack(() => void overview.load()); });
 </script>
 <section class="view scroll" class:hidden={!active}>
   <div class="page stack">
