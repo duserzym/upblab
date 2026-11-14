@@ -42,6 +42,8 @@ browser and app checks and makes the commits.
 ## Commands
 
 ```bash
+make quick     # quick check: only what the changed files affect (docs/testing.md)
+make check     # full check: everything, before a build/install or a risky change
 pnpm --filter @lab/bridge build && pnpm --filter @lab/bridge test   # bridge
 pnpm --filter upbstudio-ui test                                     # vitest + svelte-check
 pnpm --filter upbstudio-ui build                                    # ui/dist

@@ -44,8 +44,15 @@ build: ## Build the release app and installers (.app/.dmg on macOS, .msi/.exe on
 	CI=true $(TAURI) build
 	@echo "Installers: src-tauri/target/release/bundle/"
 
+.PHONY: quick
+quick: ## Quick check: only the tests the changed files affect (Chromium), in parallel; see docs/testing.md
+	node scripts/quick-check.mjs
+
+.PHONY: check
+check: test ## Full check: everything; before a build or install, and after bridge, hosting, storage or database-writing changes
+
 .PHONY: test
-test: ## Run bridge, UI, module-pinning, screen-size and Rust tests
+test: ## Run bridge, UI, module-pinning, screen-size and Rust tests (the full check)
 	$(PNPM) test
 	@test -f ui/dist/index.html || $(PNPM) --filter upbstudio-ui build
 	cargo test --manifest-path src-tauri/Cargo.toml
