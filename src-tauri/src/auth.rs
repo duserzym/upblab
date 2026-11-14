@@ -151,12 +151,25 @@ pub struct ApiReply {
     body: Value,
 }
 
-/// laicpmsdb (django-ninja) errors are `{"detail": "..."}`.
+/// laicpmsdb errors are `{"detail": "...", "code": "..."}` (sync contract,
+/// November 2026): show `detail`, or `message` when `detail` is a list, else a
+/// sentence for the status. Mirrors `ui/src/lib/server-error.ts`.
 fn detail(body: &Value, status: u16) -> String {
-    match body.get("detail") {
-        Some(Value::String(s)) => s.clone(),
-        Some(other) => other.to_string(),
-        None => format!("HTTP {status}"),
+    for key in ["detail", "message"] {
+        if let Some(Value::String(s)) = body.get(key) {
+            if !s.trim().is_empty() {
+                return s.trim().to_owned();
+            }
+        }
+    }
+    match status {
+        401 => "Sign in again to continue.".into(),
+        403 => "Your account does not have access to this.".into(),
+        404 => "The server does not have this item.".into(),
+        409 => "This changed on the server in the meantime. Reload and try again.".into(),
+        400 | 422 => "The server did not accept the request.".into(),
+        500..=599 => "The server had a problem. Try again in a moment.".into(),
+        _ => format!("The server refused the request (status {status})."),
     }
 }
 
@@ -282,7 +295,7 @@ impl Identity {
             .send_json(self.http.post(target.endpoint("/v1/auth/handoff")?).bearer_auth(token).json(&serde_json::json!({})))
             .await?;
         if !(200..300).contains(&status) {
-            return Err(format!("handoff refused: {}", detail(&reply, status)));
+            return Err(format!("Could not open the app: {}", detail(&reply, status)));
         }
         reply.get("code").and_then(Value::as_str).map(str::to_string).ok_or_else(|| "no code in the handoff reply".into())
     }
@@ -464,6 +477,29 @@ mod tests {
         assert_eq!(s.account.unwrap()["username"], "analyst");
         assert_eq!(id.vault.get(&t.key).unwrap().as_deref(), Some("tok-1"));
         assert_eq!(id.current_token().as_deref(), Some("tok-1"));
+    }
+
+    #[test]
+    fn error_detail_prefers_detail_then_message_then_a_sentence() {
+        assert_eq!(
+            detail(
+                &serde_json::json!({"detail": "Mount changed.", "code": "revision_conflict"}),
+                409
+            ),
+            "Mount changed."
+        );
+        assert_eq!(
+            detail(
+                &serde_json::json!({"detail": ["a"], "message": "1 item needs fixing."}),
+                422
+            ),
+            "1 item needs fixing."
+        );
+        assert_eq!(
+            detail(&Value::Null, 503),
+            "The server had a problem. Try again in a moment."
+        );
+        assert!(!detail(&Value::Null, 418).starts_with("HTTP"));
     }
 
     #[test]

@@ -14,6 +14,7 @@
 // the new token, or their own sign-in screen after a sign-out.
 
 import { SHELL_EVENTS } from '@lab/bridge';
+import { serverMessage, statusSentence } from './server-error';
 import {
   desktopAuth,
   isDesktop,
@@ -89,8 +90,7 @@ async function json(res: Response): Promise<unknown> {
 }
 
 function detail(body: unknown, status: number): string {
-  const d = (body as { detail?: unknown } | null)?.detail;
-  return typeof d === 'string' ? d : `HTTP ${status}`;
+  return serverMessage(body, status);
 }
 
 const memory = new Map<string, string>();
@@ -106,7 +106,7 @@ const webBackend: Backend = {
         writeToken(t, null);
         return { ...SIGNED_OUT, error: 'Your sign-in expired; please sign in again' };
       }
-      if (!res.ok) return { signedIn: true, account: null, offline: true, error: `HTTP ${res.status}` };
+      if (!res.ok) return { signedIn: true, account: null, offline: true, error: statusSentence(res.status) };
       return { signedIn: true, account: (await res.json()) as Account, offline: false };
     } catch (err) {
       return { signedIn: true, account: null, offline: true, error: String(err) };
@@ -134,7 +134,7 @@ const webBackend: Backend = {
     req.headers.Authorization = `Bearer ${token}`;
     const res = await fetch(endpoint(t, '/v1/auth/handoff'), req);
     const body = (await json(res)) as { code?: string } | null;
-    if (!res.ok || !body?.code) throw new Error(`handoff refused: ${detail(body, res.status)}`);
+    if (!res.ok || !body?.code) throw new Error(`Could not open the app: ${detail(body, res.status)}`);
     return body.code;
   },
   async get<T>(t: AuthTarget, path: string) {
