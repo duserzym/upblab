@@ -418,13 +418,15 @@ test('a Studio spot action resolves a result outside the loaded Review rows', as
 
 test('opening the Reduce tab does not block the page (effect loop regression)', async ({ page, browserName }) => {
   test.skip(browserName !== 'chromium', 'Long-task timing is a Chromium API');
-  await openReview(page, { studioFound: true, fixtures });
+  // A server that answers with no session list made the tracked effect loop for ~12 s.
+  await page.route('http://localhost:8000/**', route => route.fulfill({ json: {} }));
+  await page.goto('./?server=http://localhost:8000');
+  await page.getByRole('tab', { name: 'Home', exact: true }).click();
   await page.evaluate(() => {
     (window as unknown as { __long: number[] }).__long = [];
     new PerformanceObserver(list => { for (const e of list.getEntries()) (window as unknown as { __long: number[] }).__long.push(e.duration); }).observe({ type: 'longtask' });
   });
-  await tab(page, 'Reduce').click();
-  await expect(page.getByTestId('reduce-sessions')).toBeVisible();
+  await page.getByRole('tab', { name: 'Reduce', exact: true }).click();
   await page.waitForTimeout(500);
   expect(Math.max(0, ...await page.evaluate(() => (window as unknown as { __long: number[] }).__long))).toBeLessThan(2000);
 });
