@@ -142,7 +142,7 @@ fn grant_bridge<R: Runtime>(
 /// Set before any page script: tells @lab/bridge it runs inside the shell.
 fn marker_script(module: &str, theme: &str) -> String {
     format!(
-        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 5, minor: 0, theme: {:?} }}), configurable: false }});{}",
+        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 5, minor: 1, theme: {:?} }}), configurable: false }});{}",
         module_name(&format!("module-{module}")),
         theme,
         theme_script(theme).expect("resolved theme")
@@ -343,7 +343,7 @@ mod tests {
         assert!(marker_script("sessions", "light").contains("\"laicpmsdb\""));
         assert!(marker_script("people", "light").contains("\"laicpmsdb\""));
         let script = marker_script("images", "dark");
-        assert!(script.contains("v: 5, minor: 0, theme: \"dark\""));
+        assert!(script.contains("v: 5, minor: 1, theme: \"dark\""));
         assert!(script.contains("new MutationObserver"));
     }
 }

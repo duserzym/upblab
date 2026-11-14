@@ -6,6 +6,13 @@
 import { isDesktop } from './platform';
 import { resolveServerUrl } from './server-url';
 import { readHomeSections, type HomeSection, type HomeSectionLayout, type HomeSections } from './home-sections';
+import { viewerInset, type ViewerInset } from '@lab/bridge';
+
+/** A stored inset, checked like a bridge report; anything else is forgotten. */
+export function readInset(value: unknown): ViewerInset | null {
+  const v = value && typeof value === 'object' ? viewerInset({ ...(value as object), type: 'lab.viewer.inset' }) : null;
+  return v ? { width: v.width, collapsed: v.collapsed } : null;
+}
 
 export type ThemePref = 'dark' | 'light' | 'system';
 /** '' until the first-run wizard has run. */
@@ -34,6 +41,8 @@ export interface SettingsData {
   reviewDataWidth: number;
   reviewDockSolo: string;
   reviewDockSplit: string;
+  /** The Review viewer's mount inset as last left (bridge v5.1); null until first changed. */
+  reviewInset: ViewerInset | null;
   updateChannel: 'stable' | 'beta';
   updateAuto: boolean;
   updateLastCheck: number;
@@ -61,6 +70,7 @@ export const DEFAULTS: SettingsData = {
   reviewDataWidth: 42,
   reviewDockSolo: '',
   reviewDockSplit: '',
+  reviewInset: null,
   updateChannel: 'stable',
   updateAuto: true,
   updateLastCheck: 0,
@@ -155,6 +165,7 @@ export class Settings {
   reviewDataWidth = $state(DEFAULTS.reviewDataWidth);
   reviewDockSolo = $state(DEFAULTS.reviewDockSolo);
   reviewDockSplit = $state(DEFAULTS.reviewDockSplit);
+  reviewInset = $state<ViewerInset | null>(DEFAULTS.reviewInset);
   updateChannel = $state<SettingsData['updateChannel']>(DEFAULTS.updateChannel);
   updateAuto = $state(DEFAULTS.updateAuto);
   updateLastCheck = $state(DEFAULTS.updateLastCheck);
@@ -231,6 +242,7 @@ export class Settings {
       this.reviewDataWidth = clampReviewDataWidth(data.reviewDataWidth);
       this.reviewDockSolo = typeof data.reviewDockSolo === 'string' ? data.reviewDockSolo : '';
       this.reviewDockSplit = typeof data.reviewDockSplit === 'string' ? data.reviewDockSplit : '';
+      this.reviewInset = readInset(data.reviewInset);
       this.updateChannel = data.updateChannel === 'beta' ? 'beta' : 'stable';
       this.updateAuto = typeof data.updateAuto === 'boolean' ? data.updateAuto : true;
       this.updateLastCheck = Number.isFinite(data.updateLastCheck) && data.updateLastCheck > 0 ? data.updateLastCheck : 0;
@@ -271,6 +283,7 @@ export class Settings {
       reviewDataWidth: this.reviewDataWidth,
       reviewDockSolo: this.reviewDockSolo,
       reviewDockSplit: this.reviewDockSplit,
+      reviewInset: this.reviewInset ? { ...this.reviewInset } : null,
       updateChannel: this.updateChannel,
       updateAuto: this.updateAuto,
       updateLastCheck: this.updateLastCheck,

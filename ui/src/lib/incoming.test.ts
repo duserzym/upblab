@@ -12,7 +12,7 @@ vi.mock('./platform', () => ({
 vi.mock('./identity.svelte', () => ({ identity: {}, SIGN_OUT_EVENTS: [] }));
 vi.mock('./opener.svelte', () => ({ opener: { seen: vi.fn(), outcome: vi.fn() } }));
 vi.mock('./shell.svelte', () => ({ shell: {} }));
-vi.mock('./settings.svelte', () => ({ settings: { reviewSplit: false } }));
+vi.mock('./settings.svelte', () => ({ settings: { reviewSplit: false, loaded: true, reviewInset: null, update: vi.fn(async () => {}) } }));
 vi.mock('./spot-actions', () => ({ dispatchSpotAction: vi.fn(async () => {}) }));
 
 const platform = await import('./platform');
@@ -31,6 +31,7 @@ beforeEach(() => {
   frames.clear();
   shell.view = 'home';
   settings.reviewSplit = false;
+  settings.reviewInset = null;
   selection.fromImages = null;
   vi.clearAllMocks();
 });
@@ -160,6 +161,20 @@ describe('Atlas adoption', () => {
 });
 
 describe('Images presentation delivery', () => {
+  it('carries the remembered inset (v5.1) and stores the viewer\'s inset reports', async () => {
+    const frame = { postMessage: vi.fn() };
+    registerFrame('images', frame as unknown as Window);
+    settings.reviewInset = { width: 240, collapsed: true };
+    await publishImagesPresentation();
+    expect(frame.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ command: { type: 'set-presentation', presentation: 'viewer', inset: { width: 240, collapsed: true } } }), '*');
+    frame.postMessage.mockClear();
+    onModuleEvent({ type: 'lab.viewer.inset', width: 300, collapsed: false }, 'images');
+    expect(settings.update).toHaveBeenCalledExactlyOnceWith({ reviewInset: { width: 300, collapsed: false } });
+    expect(frame.postMessage).not.toHaveBeenCalled();
+    onModuleEvent({ type: 'lab.viewer.inset', width: 20, collapsed: false }, 'images');
+    onModuleEvent({ type: 'lab.viewer.inset', width: 300, collapsed: false }, 'sessions');
+    expect(settings.update).toHaveBeenCalledOnce();
+  });
   it('reapplies on each frame load and native ready, without replacing a queued focus', async () => {
     shell.view = 'review'; settings.reviewSplit = true;
     await sendCommand('images', command);

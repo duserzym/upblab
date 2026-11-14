@@ -14,9 +14,13 @@
 //      its editor) and lab.spot.action (the module asks the shell to open a
 //      spot elsewhere: edit in grainatlas, open in Studio). A v4 module never
 //      gets set-presentation; a v5 module on a v4 shell stays an editor.
+//   5.1 the viewer's mount inset: set-presentation may carry the remembered
+//      inset size and state (`inset`), and the viewer reports changes with
+//      lab.viewer.inset so the shell can store them. The viewer itself never
+//      writes storage. Without the field the inset lasts one session.
 
 export const PROTOCOL_VERSION = 5;
-export const PROTOCOL_MINOR = 0;
+export const PROTOCOL_MINOR = 1;
 
 export type Theme = 'light' | 'dark';
 export function isTheme(value: unknown): value is Theme {
@@ -87,6 +91,8 @@ export const ATLAS_EVENTS = {
   commandResult: 'lab.command.result',
   /** v5: the user asked to open a spot in another app (context menu or E / S in the viewer). */
   spotAction: 'lab.spot.action',
+  /** v5.1: the viewer's mount inset was resized, collapsed or expanded; the shell stores it. */
+  viewerInset: 'lab.viewer.inset',
 } as const;
 
 /** A module event for the shell (timeline entries, status, title changes). */
@@ -259,9 +265,19 @@ export interface AtlasSyncedCommand {
  * legend and spot selection only. `editor`: the full module, as before v5.
  */
 export type Presentation = 'viewer' | 'editor';
+/** v5.1: the viewer's mount locator inset, remembered by the shell (width in CSS px). */
+export interface ViewerInset { width: number; collapsed: boolean }
+export const INSET_WIDTH = { min: 120, max: 1200 } as const;
 export interface SetPresentationCommand {
   type: 'set-presentation';
   presentation: Presentation;
+  /** v5.1, viewer only, optional: the inset as the user last left it. */
+  inset?: ViewerInset;
+}
+export interface ViewerInsetEvent extends BridgeEvent, ViewerInset { type: 'lab.viewer.inset' }
+function isInset(value: unknown): value is ViewerInset {
+  return isRecord(value) && typeof value.collapsed === 'boolean' && Number.isInteger(value.width) &&
+    (value.width as number) >= INSET_WIDTH.min && (value.width as number) <= INSET_WIDTH.max;
 }
 
 export type BridgeCommand = FocusSpotCommand | FocusGrainCommand | ReviewSpotsCommand |
@@ -321,7 +337,8 @@ export function isBridgeCommand(x: unknown): x is BridgeCommand {
   const c = x as Record<string, unknown>;
   if (isAtlasCommandName(c.type) && c.id !== undefined && !isCommandId(c.id)) return false;
   if (c.type === 'report-status') return true;
-  if (c.type === 'set-presentation') return c.presentation === 'viewer' || c.presentation === 'editor';
+  if (c.type === 'set-presentation') return (c.presentation === 'viewer' || c.presentation === 'editor') &&
+    (c.inset === undefined || isInset(c.inset));
   if (c.type === 'open-project') return isId(c.project) &&
     (c.server === undefined || isServer(c.server)) &&
     (c.mode === undefined || isAtlasMode(c.mode)) &&
@@ -388,6 +405,12 @@ export function spotAction(event: unknown): SpotActionEvent | null {
       (event.action !== 'edit' && event.action !== 'studio') ||
       !isId(event.project) || !isId(event.spot)) return null;
   return { type: ATLAS_EVENTS.spotAction, action: event.action, project: event.project, spot: event.spot };
+}
+
+/** v5.1: normalise a viewer inset report; anything malformed is null. */
+export function viewerInset(event: unknown): ViewerInsetEvent | null {
+  if (!isRecord(event) || event.type !== ATLAS_EVENTS.viewerInset || !isInset(event)) return null;
+  return { type: ATLAS_EVENTS.viewerInset, width: event.width, collapsed: event.collapsed };
 }
 
 /** Normalise current and legacy spot selections; reject malformed ids and fields. */

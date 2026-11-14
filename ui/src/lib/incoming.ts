@@ -11,7 +11,7 @@ import { dispatchSpotAction } from './spot-actions';
 import { presentationFor } from './presentation';
 import { atlasSync } from './atlas-sync.svelte';
 import { atlasSyncedNotice } from './atlas-refresh';
-import { EVENTS, atlasStatus, spotSelection, isBridgeCommand, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
+import { EVENTS, atlasStatus, spotSelection, isBridgeCommand, viewerInset, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
 import { createFrameHost, pushOpenFiles, pushCommand } from '@lab/bridge/host';
 import { fileUrlToPath } from './drop';
 import { identity, SIGN_OUT_EVENTS } from './identity.svelte';
@@ -63,6 +63,9 @@ export function onModuleEvent(event: BridgeEvent, source: string) {
       void publishImagesPresentation();
     }
     void dispatchSpotAction(event, source).catch(err => shell.note('Images spot action', 'review', String(err), true));
+    // v5.1: the viewer cannot write storage, so the shell remembers its inset.
+    const inset = viewerInset(event);
+    if (inset && settings.loaded) void settings.update({ reviewInset: { width: inset.width, collapsed: inset.collapsed } });
     if (synced) void atlasSyncedNotice(synced).catch(err => logWarn(`[atlas] refresh after a sync notice failed: ${String(err)}`));
   }
   const selected = spotSelection(event);
@@ -100,7 +103,9 @@ let imagesReportedReady = false;
 
 export function publishImagesPresentation(): Promise<boolean> {
   const presentation = presentationFor(shell.view, settings.reviewSplit, 'images');
-  return presentation ? sendCommand('images', { type: 'set-presentation', presentation }).catch(() => false) : Promise.resolve(false);
+  if (!presentation) return Promise.resolve(false);
+  const inset = settings.reviewInset;
+  return sendCommand('images', { type: 'set-presentation', presentation, ...(inset ? { inset: { ...inset } } : {}) }).catch(() => false);
 }
 
 /** Reapply after a frame load or native page load, including a menu reload. */

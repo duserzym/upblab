@@ -41,9 +41,10 @@ inside a module webview is intercepted and routed like `open()`.
 
 The shell side of the `postMessage` transport is `createFrameHost` from
 `@lab/bridge/host`. The wire format is in `src/protocol.ts`
-(`PROTOCOL_VERSION` 4, `PROTOCOL_MINOR` 0; version 1 had `open`, `token` and
+(`PROTOCOL_VERSION` 5, `PROTOCOL_MINOR` 1; version 1 had `open`, `token` and
 `notify`, version 2 added `open-files`, version 3 added commands and spot
-selection, version 3.1 added theme, and version 4 adds atlas sync).
+selection, version 3.1 added theme, version 4 added atlas sync, version 5 the
+viewer presentation and spot actions, and version 5.1 the viewer's inset).
 
 ## `open-files`: files the user opened in the shell (protocol v2)
 
@@ -422,6 +423,20 @@ await notify({ type: 'lab.spot.action', action: 'edit' | 'studio', project, spot
 `edit` opens the spot in standalone grainatlas; `studio` opens its analysis in
 UPbRPy Studio. The shell validates it with `spotAction()`; malformed events are
 ignored, and a v4 shell ignores the type.
+
+## Protocol v5.1: the viewer's mount inset
+
+The viewer presentation shows a small locator inset of the whole mount. The
+viewer never writes storage, so the shell remembers the inset for the user:
+
+- `set-presentation` may carry `inset: { width, collapsed }` (`ViewerInset`;
+  `width` an integer in CSS px, 120 to 1200). The viewer applies it; without
+  it the viewer keeps its in-memory state, so an older shell gives a
+  session-only inset.
+- After the user resizes, collapses or expands the inset, the viewer sends
+  `notify({ type: 'lab.viewer.inset', width, collapsed })`
+  (`ATLAS_EVENTS.viewerInset`, normalised by `viewerInset()`). It does not
+  send one when it applies a received inset. An older shell ignores the event.
 
 ## Adopting the bridge in a module
 

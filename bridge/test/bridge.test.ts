@@ -7,6 +7,7 @@ import {
   isBridgePush,
   spotSelection,
   spotAction,
+  viewerInset,
   ATLAS_EVENTS,
   atlasStatus,
   atlasDrafts,
@@ -824,5 +825,19 @@ describe('protocol v5: presentation and spot actions', () => {
     expect(spotAction({ ...event, spot: 'a/b' })).toBeNull();
     expect(spotAction({ ...event, type: 'lab.spot.selected' })).toBeNull();
     expect(spotAction(null)).toBeNull();
+  });
+});
+
+describe('viewer inset (v5.1)', () => {
+  it('set-presentation accepts an optional, well-formed inset only', () => {
+    expect(isBridgeCommand({ type: 'set-presentation', presentation: 'viewer' })).toBe(true);
+    expect(isBridgeCommand({ type: 'set-presentation', presentation: 'viewer', inset: { width: 180, collapsed: false } })).toBe(true);
+    for (const inset of [{ width: 80, collapsed: false }, { width: 180.5, collapsed: true }, { width: 5000, collapsed: true }, { width: 180 }, null, 'big'])
+      expect(isBridgeCommand({ type: 'set-presentation', presentation: 'viewer', inset })).toBe(false);
+  });
+  it('normalises the inset report and drops extra fields', () => {
+    expect(viewerInset({ type: 'lab.viewer.inset', width: 240, collapsed: true, extra: 1 })).toEqual({ type: 'lab.viewer.inset', width: 240, collapsed: true });
+    expect(viewerInset({ type: 'lab.viewer.inset', width: 100, collapsed: true })).toBeNull();
+    expect(viewerInset({ type: 'lab.spot.action', width: 240, collapsed: true })).toBeNull();
   });
 });

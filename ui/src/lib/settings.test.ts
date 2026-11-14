@@ -212,3 +212,12 @@ it('keeps only the newest 200 valid Studio opener timestamps', async () => {
   expect(kept['s-0']).toBeUndefined();
   expect(readStudioOpened(null)).toEqual({});
 });
+
+describe('readInset', () => {
+  it('keeps a well-formed inset and forgets anything else', async () => {
+    const { readInset } = await import('./settings.svelte');
+    expect(readInset({ width: 200, collapsed: false })).toEqual({ width: 200, collapsed: false });
+    for (const bad of [null, undefined, 'x', { width: 50, collapsed: false }, { width: 200 }, { width: 200.5, collapsed: true }])
+      expect(readInset(bad)).toBeNull();
+  });
+});
