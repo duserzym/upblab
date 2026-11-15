@@ -26,7 +26,7 @@ const { shell } = await import('./shell.svelte');
 const { settings } = await import('./settings.svelte');
 
 const PKG = '/Users/lab/grainatlas/tests/fixtures/tm4000/Mount_XS_150X';
-const QTEGRA = '/Users/lab/laicpmsdb/tests/fixtures/qtegra/Apatite_demo';
+const QTEGRA = '/Users/lab/upbdb/tests/fixtures/qtegra/Apatite_demo';
 scans[PKG] = {
   scan: 's1',
   roots: [{ path: PKG, name: 'Mount_XS_150X', dir: true }],
@@ -107,13 +107,13 @@ describe('opener (desktop)', () => {
   it('records when the module takes the files, or that it does not read them yet', async () => {
     vi.useFakeTimers();
     await opener.openPaths([QTEGRA], 'drop');
-    opener.taken('o1', 'laicpmsdb', 2, 2150);
+    opener.taken('o1', 'upbdb', 2, 2150);
     expect(opener.status?.state).toBe('taken');
-    expect(shell.links[0].outcome).toBe('laicpmsdb took 2 files (2.1 KB)');
+    expect(shell.links[0].outcome).toBe('UPbDB took 2 files (2.1 KB)');
 
     await opener.openPaths([QTEGRA], 'drop');
     vi.advanceTimersByTime(TAKE_TIMEOUT_MS + 1);
-    expect(shell.links[0].outcome).toMatch(/laicpmsdb has not taken the files: it does not read open-files/);
+    expect(shell.links[0].outcome).toMatch(/UPbDB has not taken the files: it does not read open-files/);
     vi.useRealTimers();
   });
 });
@@ -147,9 +147,9 @@ describe('opener (web delivery)', () => {
     const r = opener.openWebFiles(set, 'drop');
     expect(r.target).toBe('sessions');
     expect(opener.takeWeb('grainatlas', true)).toBeNull();
-    expect(opener.takeWeb('laicpmsdb', false)?.files).toHaveLength(2);
-    const t = opener.takeWeb('laicpmsdb', true);
+    expect(opener.takeWeb('upbdb', false)?.files).toHaveLength(2);
+    const t = opener.takeWeb('upbdb', true);
     expect(await t?.files[0].file.text()).toBe('x');
-    expect(opener.takeWeb('laicpmsdb', true)).toBeNull();
+    expect(opener.takeWeb('upbdb', true)).toBeNull();
   });
 });

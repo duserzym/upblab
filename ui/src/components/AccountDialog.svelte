@@ -59,7 +59,7 @@
 {#if identity.dialog && !identity.signedIn}
   <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && close()}>
     <div class="glass panel dialog stack" role="dialog" aria-modal="true" aria-labelledby="account-title">
-      <h2 id="account-title">Sign in to laicpmsdb</h2>
+      <h2 id="account-title">Sign in to UPbDB</h2>
       <p class="muted small mono">{server || 'no server configured'}</p>
       {#if identity.pending}
         <div class="stack tight">
@@ -92,7 +92,7 @@
             {#if providers.orcid}<button class="btn" onclick={() => browser('orcid')}>Sign in with ORCID</button>{/if}
             {#if providers.google}<button class="btn" onclick={() => browser('google')}>Sign in with Google</button>{/if}
           </div>
-          <p class="faint small">Opens your web browser; it returns to UPb Lab through a <code>laicpmsdb://</code> link.</p>
+          <p class="faint small">Opens your web browser; it returns to UPb Lab through a <code>upbdb://</code> link.</p>
         {/if}
       {/if}
     </div>

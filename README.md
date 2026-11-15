@@ -7,7 +7,7 @@ and links continue to work.
 
 The unified desktop and web shell for the lab's LA-ICP-MS workflow: one window
 with tabs for grain images ([grainatlas](../grainatlas)), sessions and data
-([laicpmsdb](../laicpmsdb)) and reduction (UPbRPy Studio), with one sign-in and
+([UPbDB](../upbdb)) and reduction (UPbRPy Studio), with one sign-in and
 links between them, so a click on a spot in an image opens that spot's raw
 sweep and reduced result.
 
@@ -15,23 +15,23 @@ sweep and reduced result.
 | --- | --- | --- |
 | Home | the shell | a tiled board: action tiles (Open folder, Open files, Upload LA-ICP-MS session, Upload image set; anything dropped on the window goes to the right tab by itself), module status, then Sessions, Mounts and Atlases as searchable, sortable card grids (spot-count bar by acquisition kind and run status dot per session; grain and spot counts, atlas badge and thumbnail per mount), link box and log |
 | Images | grainatlas | pinned static build bundled into the app (`modules.lock.json`) |
-| Sessions | laicpmsdb | `/app/` in a native webview, from a lab server or from the laicpmsdb the app runs on this computer |
+| Sessions | UPbDB | `/app/` in a native webview, from a lab server or from the UPbDB the app runs on this computer |
 | Review | the shell | stored results by session or mount with sample chips; Concordia, a multi-panel geochemistry board with mineral presets, depth profiles and spot details linked to Images |
 | Reduce | UPbRPy Studio | launched as its own application with a `upbr://` link and a one-time sign-in code |
-| People & access | laicpmsdb | `/app/#/people` in its own module webview, after Reduce, for accounts allowed to manage people |
+| People & access | UPbDB | `/app/#/people` in its own module webview, after Reduce, for accounts allowed to manage people |
 
 People & access is visible only while signed in and online, as decided by
-laicpmsdb’s `can_manage_people` account field (falling back to `is_lab_staff`
-on older servers). laicpmsdb enforces access to the page and its management
+UPbDB’s `can_manage_people` account field (falling back to `is_lab_staff`
+on older servers). UPbDB enforces access to the page and its management
 API. This tab has no numbered shortcut and is never restored on restart;
 losing permission while viewing it returns to Home.
 
 Status: roadmap phases 0 and 1 done, phase 2b (ADR-0003, "This computer"
 mode) implemented on the shell side: the app bundles PostgreSQL 17, runs
-laicpmsdb on this machine, and a first-run wizard chooses between that and a
-lab server. Until laicpmsdb publishes its service bundle
+UPbDB on this machine, and a first-run wizard chooses between that and a
+lab server. Until UPbDB publishes its service bundle
 ([docs/service-bundle-contract.md](docs/service-bundle-contract.md)),
-"This computer" runs a laicpmsdb checkout, so it works in development builds
+"This computer" runs a UPbDB checkout, so it works in development builds
 and release builds offer only "Lab server". Phases 3 and 4 on the shell side
 (2026-11-03): one sign-in in the tab bar (password, ORCID or Google), the
 token in the OS keychain and handed to the module tabs through `@lab/bridge`;
@@ -72,7 +72,7 @@ set intended for the other module with a line saying what it accepts.
 
 ## Review
 
-Review reads laicpmsdb's stored results by session and run, or by mount,
+Review reads UPbDB's stored results by session and run, or by mount,
 including spots not measured yet. A compact scope bar picks the session or
 mount and run; sample chips (one per sample, with its plot colour and spot
 count) show one sample on click and toggle with Cmd/Ctrl-click, with All and
@@ -121,7 +121,7 @@ make test
 1440 × 900 and 1280 × 800 in Chromium and WebKit (`ui/tests/sizes.spec.ts`,
 with a stand-in for the Tauri host); `make setup` installs the two browsers.
 
-An opt-in check, not part of `make test`, runs against a running laicpmsdb with the demo
+An opt-in check, not part of `make test`, runs against a running UPbDB with the demo
 data and the real keychain (signs in, reads, mints and redeems a handoff code,
 signs out):
 
@@ -137,20 +137,20 @@ make dev
 first-run wizard:
 
 - **This computer**: When you first open Sessions or Review, UPb Lab starts
-  PostgreSQL 17 (port 55432 or the next free port, never 5432) and laicpmsdb
+  PostgreSQL 17 (port 55432 or the next free port, never 5432) and UPbDB
   (port 8000 or the next free port). It creates your first account and can load
   the demo sessions. Both services stop when the app quits. For development, run
-  `make venv` and `make ui` in `../laicpmsdb`, the local checkout for
-  `laicpmsdb-service` in `modules.lock.json`. The first `cargo build` downloads
+  `make venv` and `make ui` in `../upbdb`, the local checkout for
+  `upbdb-service` in `modules.lock.json`. The first `cargo build` downloads
   the pinned PostgreSQL archive (13 MB on macOS) into `~/.theseus/postgresql/`.
-- **Lab server**: a laicpmsdb URL, e.g. `http://localhost:8000` for
-  `make dev` in the laicpmsdb repository; then **Sign in** in the tab bar
-  (the demo accounts are in laicpmsdb's `.env.example`).
+- **Lab server**: a UPbDB URL, e.g. `http://localhost:8000` for
+  `make dev` in the UPbDB repository; then **Sign in** in the tab bar
+  (the demo accounts are in UPbDB's `.env.example`).
 
 To launch UPbRPy Studio from a checkout instead of an installed app, set
 Settings → UPbRPy Studio → UPbRPy checkout (it runs `python -m GUI --open
 <link>` with the checkout's `.venv`). macOS cannot deliver `upbr://` or
-`laicpmsdb://` links from the OS to `make dev`; use the Home link box, or the
+`upbdb://` links from the OS to `make dev`; use the Home link box, or the
 built app (`make build`) for ORCID/Google sign-in, whose callback is such a
 link.
 
@@ -178,11 +178,11 @@ updates; publish the draft to make it available in the app. Manual runs
 Without `make` (Windows PowerShell): `pnpm install`, `pnpm --filter @lab/bridge build`,
 `node scripts/fetch-modules.mjs`, then `cargo tauri dev` or `cargo tauri build`.
 
-### The laicpmsdb service bundle
+### The UPbDB service bundle
 
-`make fetch-modules` also unpacks the laicpmsdb service bundle pinned for the
-build platform in `modules.lock.json` into `src-tauri/resources/laicpmsdb-service/`,
-which the installers ship. Its URLs are empty until laicpmsdb publishes the
+`make fetch-modules` also unpacks the UPbDB service bundle pinned for the
+build platform in `modules.lock.json` into `src-tauri/resources/upbdb-service/`,
+which the installers ship. Its URLs are empty until UPbDB publishes the
 bundle, so the folder holds only a README and the start-up log says the
 build has no bundled service.
 
@@ -223,21 +223,21 @@ Back up `~/.tauri/upbstudio-updater.key`. See
 ```text
 src-tauri/        Rust host: window (geometry), module webviews, deep links, dropped and opened
                   files (files.rs), probe, auth (sign-in, keychain, handoff), Studio detection
-                  and launch, local_service/ (PostgreSQL and laicpmsdb on this computer)
+                  and launch, local_service/ (PostgreSQL and UPbDB on this computer)
 ui/               shell page (Svelte 5): tab bar, Home, Settings, link resolver, drop routing;
                   tests/ the screen-size check
-bridge/           @lab/bridge, the API grainatlas and laicpmsdb call to talk to the shell
+bridge/           @lab/bridge, the API grainatlas and UPbDB call to talk to the shell
 scripts/          fetch-modules (pinning)
-modules.lock.json pinned module builds and the laicpmsdb service bundle
+modules.lock.json pinned module builds and the UPbDB service bundle
 docs/             decisions (ADRs), cross-platform contract, deep links, installing
 ```
 
 ## Documents
 
 - [docs/cross-platform-contract.md](docs/cross-platform-contract.md): rules every module follows on macOS and Windows
-- [docs/service-bundle-contract.md](docs/service-bundle-contract.md): what the laicpmsdb service bundle provides and how the shell runs it
+- [docs/service-bundle-contract.md](docs/service-bundle-contract.md): what the UPbDB service bundle provides and how the shell runs it
 - [docs/installing.md](docs/installing.md): installing, opening files and folders with UPb Lab, the two modes, data and log locations
-- [docs/deep-links.md](docs/deep-links.md): the `laicpmsdb://`, `grainatlas://` and `upbr://` links
+- [docs/deep-links.md](docs/deep-links.md): the `upbdb://`, `grainatlas://` and `upbr://` links
 - [docs/ux-conventions.md](docs/ux-conventions.md): where the shell follows the lab's UX rules (source: grainatlas `docs/ux-conventions.md`)
 - [bridge/README.md](bridge/README.md): `@lab/bridge` for module authors
 - [docs/decisions/](docs/decisions/): ADR-0001 hosting pinned builds, ADR-0002 tab hosting, ADR-0003 local service mode

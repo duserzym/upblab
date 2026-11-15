@@ -64,12 +64,12 @@ describe('detectTransport', () => {
 
   it('is postMessage inside a named shell iframe', () => {
     const parent = { postMessage: vi.fn() };
-    const env: BridgeEnv = { name: frameName('laicpmsdb'), parent, self: {} };
+    const env: BridgeEnv = { name: frameName('upbdb'), parent, self: {} };
     expect(detectTransport(env)).toBe('postMessage');
   });
 
   it('is none for a top-level page that happens to have the frame name', () => {
-    const env: BridgeEnv = { name: frameName('laicpmsdb') };
+    const env: BridgeEnv = { name: frameName('upbdb') };
     env.parent = env as never;
     env.self = env;
     expect(detectTransport(env)).toBe('none');
@@ -81,7 +81,7 @@ describe('no-op bridge', () => {
     const b = createBridge({});
     expect(b.transport).toBe('none');
     expect(b.isHosted()).toBe(false);
-    expect(await b.open('laicpmsdb://acquisition/x')).toBe(false);
+    expect(await b.open('upbdb://acquisition/x')).toBe(false);
     expect(await b.token()).toBeNull();
     await expect(b.notify({ type: 'x' })).resolves.toBeUndefined();
   });
@@ -93,8 +93,8 @@ describe('tauri bridge', () => {
     const b = createBridge({ __LAB_SHELL__: { module: 'grainatlas', v: 1 }, __TAURI_INTERNALS__: { invoke } });
     expect(b.module).toBe('grainatlas');
     expect(b.isHosted()).toBe(true);
-    expect(await b.open('laicpmsdb://acquisition/a1')).toBe(true);
-    expect(invoke).toHaveBeenCalledWith(COMMANDS.open, { url: 'laicpmsdb://acquisition/a1' });
+    expect(await b.open('upbdb://acquisition/a1')).toBe(true);
+    expect(invoke).toHaveBeenCalledWith(COMMANDS.open, { url: 'upbdb://acquisition/a1' });
     expect(await b.token()).toBe('tok');
     await b.notify({ type: 'grainatlas.spot.selected', spot: 's1' });
     expect(invoke).toHaveBeenCalledWith(COMMANDS.notify, { event: { type: 'grainatlas.spot.selected', spot: 's1' } });
@@ -104,7 +104,7 @@ describe('tauri bridge', () => {
     const invoke = vi.fn(async () => {
       throw new Error('not allowed');
     });
-    const b = createBridge({ __LAB_SHELL__: { module: 'laicpmsdb', v: 1 }, __TAURI_INTERNALS__: { invoke } });
+    const b = createBridge({ __LAB_SHELL__: { module: 'upbdb', v: 1 }, __TAURI_INTERNALS__: { invoke } });
     expect(await b.open('x://y')).toBe(false);
     expect(await b.token()).toBeNull();
     await expect(b.notify({ type: 't' })).resolves.toBeUndefined();
@@ -112,7 +112,7 @@ describe('tauri bridge', () => {
 
   it('treats an empty token as signed out', async () => {
     const b = createBridge({
-      __LAB_SHELL__: { module: 'laicpmsdb', v: 1 },
+      __LAB_SHELL__: { module: 'upbdb', v: 1 },
       __TAURI_INTERNALS__: { invoke: async () => '' },
     });
     expect(await b.token()).toBeNull();
@@ -144,7 +144,7 @@ function framePair(origin = 'https://lab.example') {
     },
   });
   const env: BridgeEnv = {
-    name: frameName('laicpmsdb'),
+    name: frameName('upbdb'),
     parent,
     self: child,
     addEventListener: (t, l) => childTarget.addEventListener(t, l as EventListener),
@@ -169,20 +169,20 @@ describe('postMessage bridge with frame host', () => {
       },
       {
         allowedOrigins: () => [origin],
-        moduleOf: (src) => ((src as unknown) === child ? 'laicpmsdb' : null),
+        moduleOf: (src) => ((src as unknown) === child ? 'upbdb' : null),
         target: parentTarget as never,
       },
     );
     const b = createBridge(env, { timeoutMs: 200 });
     expect(b.transport).toBe('postMessage');
-    expect(b.module).toBe('laicpmsdb');
+    expect(b.module).toBe('upbdb');
     expect(await b.open('grainatlas://project/p/spot/s')).toBe(true);
     expect(await b.open('mailto:x@y')).toBe(false);
     expect(await b.token()).toBe('secret');
-    await b.notify({ type: 'laicpmsdb.session.viewed', id: 's1' });
+    await b.notify({ type: 'upbdb.session.viewed', id: 's1' });
     await new Promise((r) => setTimeout(r, 0));
-    expect(opened).toEqual(['laicpmsdb grainatlas://project/p/spot/s', 'laicpmsdb mailto:x@y']);
-    expect(events).toEqual([{ module: 'laicpmsdb', type: 'laicpmsdb.session.viewed', id: 's1' }]);
+    expect(opened).toEqual(['upbdb grainatlas://project/p/spot/s', 'upbdb mailto:x@y']);
+    expect(events).toEqual([{ module: 'upbdb', type: 'upbdb.session.viewed', id: 's1' }]);
     stop();
   });
 
@@ -192,11 +192,11 @@ describe('postMessage bridge with frame host', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const stop = createFrameHost(
       { open, token: () => 'secret', notify: () => {} },
-      { allowedOrigins: () => ['https://lab.example'], moduleOf: () => 'laicpmsdb', target: parentTarget as never },
+      { allowedOrigins: () => ['https://lab.example'], moduleOf: () => 'upbdb', target: parentTarget as never },
     );
     const b = createBridge(env, { timeoutMs: 50 });
     expect(await b.token()).toBeNull();
-    expect(await b.open('laicpmsdb://session/1')).toBe(false);
+    expect(await b.open('upbdb://session/1')).toBe(false);
     expect(open).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
@@ -281,7 +281,7 @@ describe('open-files (protocol v2)', () => {
     const invoke = vi.fn(async () => {
       throw new Error('command bridge_open_files not found');
     });
-    const b = createBridge({ __LAB_SHELL__: { module: 'laicpmsdb', v: 1 }, __TAURI_INTERNALS__: { invoke } });
+    const b = createBridge({ __LAB_SHELL__: { module: 'upbdb', v: 1 }, __TAURI_INTERNALS__: { invoke } });
     const handler = vi.fn();
     b.onOpenFiles(handler);
     await new Promise((r) => setTimeout(r, 10));
@@ -297,12 +297,12 @@ describe('open-files (protocol v2)', () => {
         token: () => null,
         notify: () => {},
         openFiles: (module, take) => {
-          const w = module === 'laicpmsdb' ? waiting : null;
+          const w = module === 'upbdb' ? waiting : null;
           if (take) waiting = null;
           return w;
         },
       },
-      { allowedOrigins: () => [origin], moduleOf: (src) => ((src as unknown) === child ? 'laicpmsdb' : null), target: parentTarget as never },
+      { allowedOrigins: () => [origin], moduleOf: (src) => ((src as unknown) === child ? 'upbdb' : null), target: parentTarget as never },
     );
     const b = createBridge(env, { timeoutMs: 200 });
     const got: OpenedFiles[] = [];
@@ -330,7 +330,7 @@ describe('open-files (protocol v2)', () => {
     const { env, parentTarget, child, origin } = framePair();
     const stop = createFrameHost(
       { open: () => true, token: () => null, notify: () => {} },
-      { allowedOrigins: () => [origin], moduleOf: (src) => ((src as unknown) === child ? 'laicpmsdb' : null), target: parentTarget as never },
+      { allowedOrigins: () => [origin], moduleOf: (src) => ((src as unknown) === child ? 'upbdb' : null), target: parentTarget as never },
     );
     const handler = vi.fn();
     createBridge(env, { timeoutMs: 100 }).onOpenFiles(handler);

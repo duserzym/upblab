@@ -126,7 +126,7 @@ test('submitted run link opens Review on that run with the same acquisition sele
   await openReview(page, { fixtures }); await select(page);
   await tab(page, 'Home').click();
   // The same plugin event used by the desktop OS deep-link delivery.
-  await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('deep-link://new-url', ['laicpmsdb://run/run-newer']));
+  await page.evaluate(() => (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('deep-link://new-url', ['upbdb://run/run-newer']));
   await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
   await expect(details(page).getByRole('heading', { name: 'Zircon_2', exact: true })).toBeVisible();
   await expect(details(page)).toContainText('run-newer');

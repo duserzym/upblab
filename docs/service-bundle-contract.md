@@ -1,26 +1,26 @@
-# laicpmsdb service bundle contract
+# UPbDB service bundle contract
 
 **Status:** v1, 2026-11-03. Implements ADR-0003 ("This computer" mode) and
-`ARCHITECTURE_PLAN.md` decision 9. The laicpmsdb repository builds the bundle;
+`ARCHITECTURE_PLAN.md` decision 9. The UPbDB repository builds the bundle;
 UPb Lab (this repository) runs it. Both sides follow this page; change it
 here first and bump the version line.
 
 UPb Lab already implements its side, including a development fallback that
-runs a laicpmsdb checkout until the bundle exists (last section).
+runs a UPbDB checkout until the bundle exists (last section).
 
 ## 1. Bundle layout
 
-One folder per operating system, named `laicpmsdb-service/`:
+One folder per operating system, named `upbdb-service/`:
 
 ```text
-laicpmsdb-service/
-  VERSION                 one line: the laicpmsdb version, e.g. 0.4.0 (no "v")
+upbdb-service/
+  VERSION                 one line: the UPbDB version, e.g. 0.4.0 (no "v")
   python/                 relocatable CPython 3.12 from python-build-standalone
     bin/python3           interpreter on macOS
     python.exe            interpreter on Windows
     lib/python3.12/site-packages/   (macOS)  or  Lib/site-packages/  (Windows)
-      laicpmsdb_service/  the Django project package, with __main__.py
-      apps/, ingest/      the rest of laicpmsdb
+      upbdb_service/  the Django project package, with __main__.py
+      apps/, ingest/      the rest of UPbDB
       upbrpy/ ...         UPbRPy and every other dependency, installed
   ui/                     optional: the built Svelte UI, if not inside the package
 ```
@@ -40,12 +40,12 @@ laicpmsdb-service/
   runtime of a signed UPb Lab accept them.
 
 UPb Lab ships the folder as a Tauri resource at
-`<resources>/laicpmsdb-service/` (`Contents/Resources/laicpmsdb-service/` in
+`<resources>/upbdb-service/` (`Contents/Resources/upbdb-service/` in
 the macOS app, next to `upbstudio.exe` on Windows).
 
 ## 2. Commands
 
-The shell runs `<python> -m laicpmsdb_service <command> [options]` with the
+The shell runs `<python> -m upbdb_service <command> [options]` with the
 working directory set to the data root and the environment from section 3.
 `<python>` is `python/bin/python3` (macOS) or `python/python.exe` (Windows).
 Arguments never carry secrets.
@@ -64,15 +64,15 @@ The commands must also be usable headless on the lab server (`serve
 
 | Variable | Value in "This computer" mode |
 | --- | --- |
-| `DATABASE_URL` | `postgres://laicpmsdb:<generated>@127.0.0.1:<pg port>/laicpmsdb` (the shell's own PostgreSQL 17; role `laicpmsdb` has `LOGIN CREATEDB CREATEROLE` and owns database `laicpmsdb`, as in laicpmsdb's `make db-start`) |
-| `LAICPMSDB_DATA_ROOT` | the data root chosen in the first-run wizard, default `~/laicpmsdb` expanded, forward slashes |
+| `DATABASE_URL` | `postgres://upbdb:<generated>@127.0.0.1:<pg port>/upbdb` (the shell's own PostgreSQL 17; role `upbdb` has `LOGIN CREATEDB CREATEROLE` and owns database `upbdb`, as in UPbDB's `make db-start`) |
+| `UPBDB_DATA_ROOT` | the data root chosen in the first-run wizard, default `~/upbdb` expanded, forward slashes |
 | `DJANGO_SECRET_KEY` | 64 random hex characters, generated once per installation and kept in the shell's store |
 | `DJANGO_DEBUG` | `0` |
 | `DJANGO_ALLOWED_HOSTS` | `127.0.0.1,localhost` |
-| `LAICPMSDB_CORS_ORIGINS` | `tauri://localhost,http://tauri.localhost` |
-| `LAICPMSDB_REGISTRATION` | `closed` (one person's machine; the wizard creates the account) |
+| `UPBDB_CORS_ORIGINS` | `tauri://localhost,http://tauri.localhost` |
+| `UPBDB_REGISTRATION` | `closed` (one person's machine; the wizard creates the account) |
 | `PYTHONDONTWRITEBYTECODE` | `1` |
-| `PYTHONUNBUFFERED` | `1` (log lines reach `laicpmsdb.log` as they happen) |
+| `PYTHONUNBUFFERED` | `1` (log lines reach `upbdb.log` as they happen) |
 | `PYTHONUTF8` | `1` (UTF-8 I/O on Windows whatever the code page) |
 
 The service must take every setting from the environment and must not read a
@@ -80,7 +80,7 @@ The service must take every setting from the environment and must not read a
 around it; the development fallback below has one, and the variables above
 take precedence there because `load_dotenv` does not override).
 
-stdout and stderr go to `laicpmsdb.log` in the shell's log folder; write
+stdout and stderr go to `upbdb.log` in the shell's log folder; write
 logs there, not to files of your own.
 
 ## 4. Health
@@ -104,16 +104,16 @@ Content-Type: application/json
 
 ## 5. Release asset and pinning
 
-- laicpmsdb's CI publishes, per release, one archive per platform:
-  `laicpmsdb-service-<version>-macos-arm64.tar.gz` and
-  `laicpmsdb-service-<version>-windows-x64.tar.gz`, each with
+- UPbDB's CI publishes, per release, one archive per platform:
+  `upbdb-service-<version>-macos-arm64.tar.gz` and
+  `upbdb-service-<version>-windows-x64.tar.gz`, each with
   `<archive>.sha256` beside it (`<hex>  <filename>`). The archive holds the
-  `laicpmsdb-service/` folder at its top level.
-- UPb Lab pins it as the `laicpmsdb-service` entry in `modules.lock.json`
+  `upbdb-service/` folder at its top level.
+- UPb Lab pins it as the `upbdb-service` entry in `modules.lock.json`
   with one `url` and `sha256` per platform (`platforms.macos-arm64`,
   `platforms.windows-x64`); `scripts/fetch-modules.mjs` downloads the one for
   the build machine, checks the SHA-256 and unpacks it into
-  `src-tauri/resources/laicpmsdb-service/`. A build without it is a "Lab
+  `src-tauri/resources/upbdb-service/`. A build without it is a "Lab
   server only" build and says so in its log.
 
 ## 6. Life cycle (what the shell does)
@@ -122,7 +122,7 @@ Content-Type: application/json
    ensure role and database.
 2. Run `serve` on port 8000 if free, else the next free port up to 8099,
    else any free port.
-3. Poll health (section 4). On failure, show the tail of `laicpmsdb.log`.
+3. Poll health (section 4). On failure, show the tail of `upbdb.log`.
 4. First run only: `bootstrap`, then `load-demo` if asked.
 5. On quit: stop `serve` (SIGTERM, SIGKILL after 5 s; on Windows the process
    is terminated), then PostgreSQL (`pg_ctl stop -m fast`). If the shell
@@ -130,8 +130,8 @@ Content-Type: application/json
 
 ## 7. Development fallback (until the bundle exists)
 
-When no bundle is in the resources folder, the shell runs a laicpmsdb
-checkout configured in Settings ("laicpmsdb checkout", default `../laicpmsdb`
+When no bundle is in the resources folder, the shell runs a UPbDB
+checkout configured in Settings ("UPbDB checkout", default `../upbdb`
 next to the UPb Lab checkout in development builds). It needs
 `.venv/bin/python` (Windows `.venv/Scripts/python.exe`) and
 `service/manage.py`, i.e. `make venv` and `make ui` done in that checkout.

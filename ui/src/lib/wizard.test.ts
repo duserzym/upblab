@@ -5,7 +5,7 @@ const dev: Context = { localAvailable: true, bundled: false };
 const bundled: Context = { localAvailable: true, bundled: true };
 const serverOnly: Context = { localAvailable: false, bundled: false };
 
-const start = () => initialState({ dataRoot: '~/laicpmsdb', serverUrl: 'http://localhost:8000', devPath: '/src/laicpmsdb' });
+const start = () => initialState({ dataRoot: '~/upbdb', serverUrl: 'http://localhost:8000', devPath: '/src/upbdb' });
 
 function run(events: WizardEvent[], ctx = dev, from = start()): WizardState {
   return events.reduce((s, e) => reduce(s, e, ctx), from);
@@ -100,10 +100,10 @@ describe('first-run wizard', () => {
     let s = run([{ type: 'choose', mode: 'server' }, { type: 'edit', field: 'serverUrl', value: 'ftp://x' }, { type: 'submit' }]);
     expect(s.step).toBe('server');
     expect(s.errors.serverUrl).toBeDefined();
-    s = run([{ type: 'edit', field: 'serverUrl', value: 'https://laicpmsdb.example.edu/' }, { type: 'submit' }], dev, s);
+    s = run([{ type: 'edit', field: 'serverUrl', value: 'https://upbdb.example.edu/' }, { type: 'submit' }], dev, s);
     expect(s.step).toBe('done');
     expect(s.mode).toBe('server');
-    expect(s.form.serverUrl).toBe('https://laicpmsdb.example.edu');
+    expect(s.form.serverUrl).toBe('https://upbdb.example.edu');
   });
 
   it('back returns to the choice', () => {

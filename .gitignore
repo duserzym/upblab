@@ -10,8 +10,8 @@
 .DS_Store
 Thumbs.db
 /node_modules
-# laicpmsdb service bundle unpacked by scripts/fetch-modules.mjs (kept: its README)
-/src-tauri/resources/laicpmsdb-service/*
-!/src-tauri/resources/laicpmsdb-service/README.md
+# UPbDB service bundle unpacked by scripts/fetch-modules.mjs (kept: its README)
+/src-tauri/resources/upbdb-service/*
+!/src-tauri/resources/upbdb-service/README.md
 /ui/test-results
 /ui/playwright-report

@@ -105,7 +105,7 @@ for (const desktop of [true, false]) {
     if (desktop) await expect.poll(async () => (await calls(page)).filter(([c, a]) => c === 'module_open' && a?.module === 'sessions').pop()?.[1]?.url).toContain(`#/sessions/${session.id}`);
     else await expect(page.locator('iframe.surface:visible')).toHaveAttribute('src', new RegExp(`#/sessions/${session.id}`));
     await page.getByRole('tab', { name: 'Home', exact: true }).click();
-    await expect(page.getByRole('row').filter({ hasText: `laicpmsdb://session/${session.id}` })).toHaveCount(1);
+    await expect(page.getByRole('row').filter({ hasText: `upbdb://session/${session.id}` })).toHaveCount(1);
     await page.getByTestId('session-card').filter({ hasText: 'Demo session J' }).getByRole('button', { name: 'Review', exact: true }).click();
     await expect(page.getByRole('tab', { name: 'Review', exact: true })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('treeitem').first()).toBeVisible();
@@ -152,7 +152,7 @@ test('eight sessions and eight mounts leave the first row of every section in vi
     expect(box.y).toBeGreaterThanOrEqual(48);
     expect(box.y + box.height).toBeLessThanOrEqual(900);
   }
-  const box = (await page.getByRole('button', { name: /Sessions · laicpmsdb/ }).boundingBox())!;
+  const box = (await page.getByRole('button', { name: /Sessions · UPbDB/ }).boundingBox())!;
   expect(box.y + box.height).toBeLessThan(900);
 });
 

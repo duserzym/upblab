@@ -1,6 +1,6 @@
 # Cross-platform contract
 
-Applies to UPb Lab and to the modules it hosts (grainatlas, laicpmsdb, and
+Applies to UPb Lab and to the modules it hosts (grainatlas, UPbDB, and
 UPbRPy Studio where relevant). macOS (arm64) and Windows (x86-64) are both
 first-class: a feature that works on only one of them is not done. Module
 repositories link here instead of copying the rules.
@@ -13,21 +13,21 @@ and here together.
 | Webview | WKWebView on macOS, WebView2 on Windows. Modules use only features both support: no File System Access API (grainatlas desktop reads files through Tauri commands, the web build through `<input type=file webkitdirectory>` and drag-drop), OPFS only behind a feature check, `backdrop-filter` with a solid fallback |
 | Paths | modules exchange paths as UTF-8 strings with forward slashes and resolve them with the host's path library; NAS locations are configured as a mount root per OS (`/Volumes/lab` vs `L:\`) with the same relative layout under it |
 | Fonts and DPI | UI scales with device pixel ratio; print layouts specify sizes in millimetres and are tested on both OS print paths |
-| Deep links | all three schemes (`laicpmsdb`, `grainatlas`, `upbr`) registered by the shell installer on both OS; modules' own installers register only their own scheme |
+| Deep links | all three schemes (`upbdb`, `grainatlas`, `upbr`) registered by the shell installer on both OS; modules' own installers register only their own scheme |
 | Processes | the shell launches Studio by its installed path (macOS `.app`, Windows `.exe`) found through a settings entry with auto-detection |
 | Line endings and encodings | instrument files are read by explicit encoding (TM4000 sidecars are UTF-16LE, Qtegra CSV is UTF-8 with CRLF); never rely on the OS default |
 | Builds | GitHub Actions matrix `macos-latest` (arm64) and `windows-latest`; artifacts `.dmg` (notarised when a Developer ID is available) and `.msi` plus `.exe` (NSIS); unsigned builds documented with the SmartScreen and Gatekeeper steps |
-| Tests | Playwright smoke test of the shell on both OS: sign in to a local laicpmsdb, open the Images tab, place a spot, follow its link to the Sessions tab |
+| Tests | Playwright smoke test of the shell on both OS: sign in to a local UPbDB, open the Images tab, place a spot, follow its link to the Sessions tab |
 
 ## How UPb Lab meets it today
 
 | Concern | Where |
 | --- | --- |
-| Webview | the shell page uses `-webkit-backdrop-filter` with an `@supports` solid fallback (tokens from laicpmsdb); module tabs are native child webviews on both OS (ADR-0002) |
+| Webview | the shell page uses `-webkit-backdrop-filter` with an `@supports` solid fallback (tokens from UPbDB); module tabs are native child webviews on both OS (ADR-0002) |
 | Deep links | `plugins.deep-link.desktop.schemes` in `src-tauri/tauri.conf.json`; single-instance forwarding on Windows; see [deep-links.md](deep-links.md) |
 | Processes | `src-tauri/src/studio.rs`: Settings path, else on macOS `/Applications`, `~/Applications` and LaunchServices (`org.upbrpy.studio`, launched with `open -n -b … --args --open <url>`), on Windows the registry (App Paths, the Uninstall entry, Studio's `upbr` handler) then `%LOCALAPPDATA%\Programs` and `%ProgramFiles%` (`"<exe>" --open <url>`), else a UPbRPy checkout from Settings (`python -m GUI --open <url>`, `.venv` Python, `pythonw.exe` on Windows); Studio runs detached in its own process group |
 | Identity | `src-tauri/src/auth.rs`: tokens in the macOS Keychain or the Windows Credential Manager (`keyring` crate), service `edu.umn.upbstudio`, one entry per server |
-| Local service (ADR-0003) | `src-tauri/src/local_service/`: PostgreSQL and laicpmsdb as children tied to the shell (process group plus watchdog on macOS, job object and no console window on Windows), loopback only, forward-slash paths in the environment; the bundle layout per OS is in [service-bundle-contract.md](service-bundle-contract.md) |
+| Local service (ADR-0003) | `src-tauri/src/local_service/`: PostgreSQL and UPbDB as children tied to the shell (process group plus watchdog on macOS, job object and no console window on Windows), loopback only, forward-slash paths in the environment; the bundle layout per OS is in [service-bundle-contract.md](service-bundle-contract.md) |
 | Builds | `.github/workflows/build.yml`; unsigned-install steps in [installing.md](installing.md) |
 | Tests | unit tests run on both OS in CI; the Playwright smoke test is roadmap phase 6 |
 
@@ -37,7 +37,7 @@ and here together.
   its own webview, not an iframe; in the web shell (`/desk/`) it is an
   iframe. Use [`@lab/bridge`](../bridge/README.md) for anything that talks to
   the shell, and keep the page working when `isHosted()` is false.
-- **Framing.** For the web shell, laicpmsdb must allow its own origin to frame
+- **Framing.** For the web shell, UPbDB must allow its own origin to frame
   `/app/` and `/atlas/` (`X-Frame-Options: SAMEORIGIN` or CSP
   `frame-ancestors 'self'`); it currently sends `DENY`.
 - **Hash routing or query strings** keep module builds working under

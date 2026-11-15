@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { moduleLabel } from '../lib/links';
   import { untrack } from 'svelte';
   import { localService } from '../lib/localService.svelte';
   import { isDesktop, openExternal } from '../lib/platform';
@@ -75,10 +76,10 @@
 <table class="data" aria-label="In this build">
   <tbody>
     {#each versions?.modules ?? [] as module (module.name)}
-      <tr><th scope="row">{module.name}</th><td>{module.version} ({module.source === 'release' ? 'release' : 'local build'}{module.commit ? ` of ${module.commit.slice(0, 7)}${module.dirty ? ' with uncommitted changes' : ''}` : ''})</td></tr>
+      <tr><th scope="row">{moduleLabel(module.name)}</th><td>{module.version} ({module.source === 'release' ? 'release' : 'local build'}{module.commit ? ` of ${module.commit.slice(0, 7)}${module.dirty ? ' with uncommitted changes' : ''}` : ''})</td></tr>
     {/each}
     {#if !versions?.modules.some((m) => m.name === 'grainatlas')}<tr><th scope="row">grainatlas</th><td>not bundled</td></tr>{/if}
-    <tr><th scope="row">laicpmsdb service</th><td>{versions?.service ?? 'not bundled'}</td></tr>
+    <tr><th scope="row">UPbDB service</th><td>{versions?.service ?? 'not bundled'}</td></tr>
     <tr><th scope="row">PostgreSQL</th><td>{versions?.postgres ?? 'not available'}</td></tr>
     <tr><th scope="row">UPbRPy Studio</th><td>{versions?.studio.found ? `${versions.studio.kind ?? 'installed'} · ${versions.studio.path ?? ''}` : 'not found'}</td></tr>
   </tbody>

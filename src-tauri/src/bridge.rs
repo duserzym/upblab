@@ -1,6 +1,6 @@
 //! Host side of @lab/bridge's Tauri transport. Module webviews call these
 //! commands (allowed by capabilities/modules.json and, for the remote
-//! laicpmsdb origin, by the runtime capability in modules.rs); the host
+//! UPbDB origin, by the runtime capability in modules.rs); the host
 //! re-emits them as events to the shell webview, which owns link routing.
 //! Event names match `EVENTS` in bridge/src/protocol.ts.
 
@@ -37,7 +37,7 @@ struct NotifyPayload<'a> {
 pub fn module_name(webview_label: &str) -> &str {
     match webview_label {
         "module-images" => "grainatlas",
-        "module-sessions" | "module-people" => "laicpmsdb",
+        "module-sessions" | "module-people" => "upbdb",
         other => other,
     }
 }
@@ -66,7 +66,7 @@ pub fn bridge_open<R: Runtime>(app: AppHandle<R>, webview: Webview<R>, url: Stri
     forward_open(&app, &url, webview.label())
 }
 
-/// The laicpmsdb bearer token of the shell's sign-in (plan decision 5), for
+/// The UPbDB bearer token of the shell's sign-in (plan decision 5), for
 /// the bundled grainatlas build and for pages of the configured server only;
 /// `None` when signed out. See `auth::token_for`.
 #[tauri::command]
@@ -426,8 +426,8 @@ mod tests {
     #[test]
     fn module_labels_name_their_hosted_app() {
         assert_eq!(module_name("module-images"), "grainatlas");
-        assert_eq!(module_name("module-sessions"), "laicpmsdb");
-        assert_eq!(module_name("module-people"), "laicpmsdb");
+        assert_eq!(module_name("module-sessions"), "upbdb");
+        assert_eq!(module_name("module-people"), "upbdb");
         assert_eq!(module_name("shell"), "shell");
     }
     #[test]

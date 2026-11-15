@@ -26,7 +26,7 @@
 
   const fixedTabs: { id: View; label: string; hint: string }[] = [
     { id: 'home', label: 'Home', hint: 'Overview and links' },
-    { id: 'sessions', label: 'Sessions', hint: 'laicpmsdb' },
+    { id: 'sessions', label: 'Sessions', hint: 'UPbDB' },
     { id: 'review', label: 'Review', hint: 'Results with their images' },
     { id: 'reduce', label: 'Reduce', hint: 'UPbRPy Studio' },
   ];
@@ -236,7 +236,7 @@
       <Sessions active={shell.view === 'sessions'} />
       {#if peopleAllowed}
         <Sessions module="people" title="People & access" active={shell.view === 'people'}
-          unreachable="The People & access tab shows laicpmsdb’s accounts, groups and access page from" />
+          unreachable="The People & access tab shows UPbDB’s accounts, groups and access page from" />
       {/if}
       <Review active={shell.view === 'review'} split={reviewSplit}>
         {#snippet images(active, layoutKey)}

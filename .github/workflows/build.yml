@@ -79,9 +79,9 @@ jobs:
       - name: Fetch pinned module builds
         # grainatlas has no release URL yet (modules.lock.json TODO) and its
         # local build is not in this checkout, so it is skipped and the Images
-        # tab shows its placeholder. The laicpmsdb service bundle has no
+        # tab shows its placeholder. The UPbDB service bundle has no
         # release URL yet either: the installers are "Lab server only" builds
-        # until laicpmsdb publishes it (docs/service-bundle-contract.md).
+        # until UPbDB publishes it (docs/service-bundle-contract.md).
         run: node scripts/fetch-modules.mjs
 
       - name: Tag matches the version

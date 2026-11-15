@@ -12,7 +12,7 @@
       "todo": "Set url and sha256 to the grainatlas static web-build release asset (.tar.gz or .zip) once grainatlas publishes one (its roadmap phase 3); until then the local development build is used."
     },
     {
-      "name": "laicpmsdb-service",
+      "name": "upbdb-service",
       "kind": "service",
       "version": "0.0.0-dev",
       "platforms": {
@@ -25,9 +25,9 @@
           "sha256": null
         }
       },
-      "local": "../laicpmsdb",
-      "out": "src-tauri/resources/laicpmsdb-service",
-      "todo": "Set url and sha256 per platform to laicpmsdb's laicpmsdb-service-<version>-<platform>.tar.gz release assets once its CI publishes them (docs/service-bundle-contract.md section 5). Until then release builds offer only Lab server mode, and development builds run the local checkout."
+      "local": "../upbdb",
+      "out": "src-tauri/resources/upbdb-service",
+      "todo": "Set url and sha256 per platform to UPbDB's upbdb-service-<version>-<platform>.tar.gz release assets once its CI publishes them (docs/service-bundle-contract.md section 5). Until then release builds offer only Lab server mode, and development builds run the local checkout."
     }
   ]
 }

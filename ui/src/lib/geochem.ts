@@ -16,7 +16,7 @@ export interface Quantity {
 export interface AvailableQuantity extends Quantity { available: boolean; derived: boolean }
 export const ELEMENTS = 'H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U'.split(' ');
 export const REE = Object.keys(CI) as (keyof typeof CI)[];
-// Pending metric names are returned unchanged by laicpmsdb. Keep all tolerated
+// Pending metric names are returned unchanged by UPbDB. Keep all tolerated
 // aliases here, including UPbRPy export_table_spec.md §§2.5–2.7 spellings.
 export const ALIASES: Record<string, readonly string[]> = {
   preferred_date: ['preferred date'],

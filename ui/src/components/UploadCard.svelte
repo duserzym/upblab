@@ -51,7 +51,7 @@
     </ol>
     {#if sessions && card.session}
       <div class="row">
-        <button class="btn" onclick={() => void shell.handleLink(`laicpmsdb://session/${card.session!.id}`, 'home')}>Open in Sessions</button>
+        <button class="btn" onclick={() => void shell.handleLink(`upbdb://session/${card.session!.id}`, 'home')}>Open in Sessions</button>
         <button class="btn" onclick={() => void shell.handleLink(`upbr://session/${card.session!.id}`, 'home')}>Reduce in UPbRPy Studio</button>
         <button class="btn" disabled={!card.ready} onclick={showReview}>Review</button>
       </div>

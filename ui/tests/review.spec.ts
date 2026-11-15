@@ -607,7 +607,7 @@ for (const [tab, module] of [['Sessions', 'sessions']] as const) {
     const box = await surface.boundingBox();
     const start = (await calls(page)).length;
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    const dialog = page.getByRole('dialog', { name: 'Sign in to laicpmsdb' });
+    const dialog = page.getByRole('dialog', { name: 'Sign in to UPbDB' });
     await expect(dialog).toBeVisible();
     await expect.poll(async () => (await calls(page)).slice(start).some(([c, a]) => c === 'module_hide' && a?.module === module)).toBe(true);
     await expect(surface.getByRole('status')).toHaveText('Hidden while a dialog is open');

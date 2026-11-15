@@ -63,7 +63,7 @@
       const leavingLocal = settings.mode === 'local';
       await settings.update({ mode: 'server', serverUrl: url });
       if (leavingLocal) await localService.stop().catch(() => {});
-      saved = leavingLocal ? 'Saved. The local laicpmsdb was stopped.' : 'Saved.';
+      saved = leavingLocal ? 'Saved. The local UPbDB was stopped.' : 'Saved.';
       return;
     }
     const restart = settings.mode === 'local' && localChanged && running;
@@ -76,10 +76,10 @@
     });
     if (restart) {
       await localService.restart();
-      saved = 'Saved; restarting the local laicpmsdb.';
+      saved = 'Saved; restarting the local UPbDB.';
     } else if (entering || !running) {
       void localService.start();
-      saved = 'Saved; starting the local laicpmsdb.';
+      saved = 'Saved; starting the local UPbDB.';
     } else {
       saved = 'Saved.';
     }
@@ -110,8 +110,8 @@
 
   const localNote = $derived(
     status?.bundle
-      ? `This app includes laicpmsdb ${status.bundle} and PostgreSQL ${status.postgres.version ?? '17'}.`
-      : 'This build has no bundled laicpmsdb service yet: "This computer" runs the laicpmsdb checkout below.',
+      ? `This app includes UPbDB ${status.bundle} and PostgreSQL ${status.postgres.version ?? '17'}.`
+      : 'This build has no bundled UPbDB service yet: "This computer" runs the UPbDB checkout below.',
   );
 </script>
 
@@ -121,8 +121,8 @@
 
     {#if isDesktop}
       <form class="glass panel stack" onsubmit={saveConnection}>
-        <h3>laicpmsdb</h3>
-        <div class="row" role="radiogroup" aria-label="Where laicpmsdb runs">
+        <h3>UPbDB</h3>
+        <div class="row" role="radiogroup" aria-label="Where UPbDB runs">
           <button type="button" class="chip" role="radio" aria-checked={mode === 'local'} onclick={() => (mode = 'local')}>This computer</button>
           <button type="button" class="chip" role="radio" aria-checked={mode === 'server'} onclick={() => (mode = 'server')}>Lab server</button>
         </div>
@@ -143,8 +143,8 @@
           </label>
           {#if !status?.bundle}
             <label class="field">
-              laicpmsdb checkout
-              <input type="text" bind:value={devPath} placeholder={status?.devDefault ?? '/path/to/laicpmsdb'} spellcheck="false" />
+              UPbDB checkout
+              <input type="text" bind:value={devPath} placeholder={status?.devDefault ?? '/path/to/upbdb'} spellcheck="false" />
               <span class="faint">Development fallback: a checkout with <code>make venv</code> and <code>make ui</code> done.{status?.devDefault ? ' Empty uses the one pinned in modules.lock.json.' : ''}</span>
             </label>
           {/if}
@@ -192,7 +192,7 @@
               <button class="btn" type="button" onclick={refreshLogs}>Refresh</button>
               <button class="btn" type="button" onclick={() => void localServiceApi.openLogs()}>Open log folder</button>
             </div>
-            <h4>laicpmsdb.log</h4>
+            <h4>upbdb.log</h4>
             <pre class="log-tail">{logs.service || '(empty)'}</pre>
             <h4>postgres.log</h4>
             <pre class="log-tail">{logs.postgres || '(empty)'}</pre>
@@ -201,7 +201,7 @@
       </form>
     {:else}
       <div class="glass panel stack">
-        <h3>laicpmsdb</h3>
+        <h3>UPbDB</h3>
         <dl class="grid-kv">
           <dt>Server</dt><dd><code>{settings.serverUrl}</code></dd>
         </dl>

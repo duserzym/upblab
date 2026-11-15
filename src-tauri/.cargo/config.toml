@@ -6,5 +6,5 @@
 # Major version 17 only: a major upgrade needs pg_upgrade (ADR-0003, step 5).
 POSTGRESQL_VERSION = "=17.11.0"
 # 17.11.0 rather than 17.11.1: the .1 rebuilds add PL/Python and JIT bitcode,
-# which grows the macOS archive from 13 MB to 90 MB for features laicpmsdb
+# which grows the macOS archive from 13 MB to 90 MB for features UPbDB
 # does not use.

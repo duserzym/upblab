@@ -126,12 +126,12 @@ describe('module upload outcomes', () => {
     expect(opener.outcome).not.toHaveBeenCalled();
     const seen = { type: 'lab.open-files.seen', id: 'o1', files: 2, bytes: 1024 };
     onModuleEvent(seen, 'sessions');
-    expect(opener.seen).toHaveBeenCalledWith('laicpmsdb', seen);
+    expect(opener.seen).toHaveBeenCalledWith('upbdb', seen);
   });
 
-  it('names People notifications as laicpmsdb', () => {
+  it('names People notifications as UPbDB', () => {
     onModuleEvent({ type: 'lab.people.changed' }, 'people');
-    expect(platform.logInfo).toHaveBeenCalledWith('[bridge] laicpmsdb: {"type":"lab.people.changed"}');
+    expect(platform.logInfo).toHaveBeenCalledWith('[bridge] upbdb: {"type":"lab.people.changed"}');
   });
 });
 

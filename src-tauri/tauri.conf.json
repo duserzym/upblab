@@ -21,7 +21,7 @@
     "targets": "all",
     "category": "Education",
     "shortDescription": "One window for the lab's LA-ICP-MS workflow",
-    "longDescription": "UPb Lab hosts grainatlas (Images), laicpmsdb (Sessions) and launches UPbRPy Studio (Reduce), with links between them.",
+    "longDescription": "UPb Lab hosts grainatlas (Images), UPbDB (Sessions) and launches UPbRPy Studio (Reduce), with links between them.",
     "copyright": "MIT License",
     "fileAssociations": [
       {
@@ -41,7 +41,7 @@
       }
     ],
     "resources": {
-      "resources/laicpmsdb-service/": "laicpmsdb-service/"
+      "resources/upbdb-service/": "upbdb-service/"
     },
     "icon": [
       "icons/32x32.png",
@@ -67,7 +67,7 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["laicpmsdb", "grainatlas", "upbr"]
+        "schemes": ["upbdb", "grainatlas", "upbr"]
       }
     }
   }

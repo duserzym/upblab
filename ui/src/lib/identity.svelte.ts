@@ -1,13 +1,13 @@
-// One identity (plan decision 5): the shell signs in to laicpmsdb once and
+// One identity (plan decision 5): the shell signs in to UPbDB once and
 // gives the bearer token to the module tabs through @lab/bridge `token()`.
 //
 //   desktop  the token lives in the OS keychain and in Rust (src-tauri/src/auth.rs);
 //            this page only learns the account. Password sign-in posts to
 //            /v1/auth/login; ORCID and Google open the system browser at
-//            /v1/auth/<provider>/start?next=laicpmsdb://auth/callback, and the
+//            /v1/auth/<provider>/start?next=upbdb://auth/callback, and the
 //            OS hands the callback back to the shell, which exchanges the
 //            one-time code at /v1/auth/exchange.
-//   web      (/desk/, same origin as laicpmsdb) the token is kept in this
+//   web      (/desk/, same origin as UPbDB) the token is kept in this
 //            tab's sessionStorage and handed to module iframes by the frame host.
 //
 // Module tabs reload when the account changes (`revision`), so they pick up
@@ -27,11 +27,11 @@ import {
   type AuthTarget,
 } from './platform';
 
-/** Where laicpmsdb sends the browser back to after ORCID or Google. */
-export const CALLBACK_URL = 'laicpmsdb://auth/callback';
+/** Where UPbDB sends the browser back to after ORCID or Google. */
+export const CALLBACK_URL = 'upbdb://auth/callback';
 
 /** A module's `notify()` of one of these signs the shell out. */
-export const SIGN_OUT_EVENTS: readonly string[] = [SHELL_EVENTS.signedOut, 'laicpmsdb.auth.signed-out'];
+export const SIGN_OUT_EVENTS: readonly string[] = [SHELL_EVENTS.signedOut, 'upbdb.auth.signed-out'];
 
 /** How long a browser sign-in may take before its callback is refused. */
 const PENDING_MS = 10 * 60_000;
@@ -95,7 +95,7 @@ function detail(body: unknown, status: number): string {
 
 const memory = new Map<string, string>();
 
-/** Web delivery: fetch from the shell page, same origin as laicpmsdb at /desk/. */
+/** Web delivery: fetch from the shell page, same origin as UPbDB at /desk/. */
 const webBackend: Backend = {
   async restore(t) {
     const token = readToken(t) ?? memory.get(t.key) ?? null;
@@ -161,7 +161,7 @@ async function adopt(t: AuthTarget, res: Response): Promise<AuthState> {
 
 const desktopBackend: Backend = { ...desktopAuth, token: () => null };
 
-/** laicpmsdb's sign-in error slugs (accounts/api.py, oidc.py), in words. */
+/** UPbDB's sign-in error slugs (accounts/api.py, oidc.py), in words. */
 export function providerError(slug: string, provider: Provider): string {
   const name = provider === 'orcid' ? 'ORCID' : 'Google';
   const known: Record<string, string> = {
@@ -171,9 +171,9 @@ export function providerError(slug: string, provider: Provider): string {
     token_exchange_failed: `${name} did not confirm the sign-in; please try again.`,
     bad_id_token: `${name}'s answer could not be verified; please try again.`,
     email_unverified: 'Google has not verified this email address.',
-    identity_in_use: `That ${name} account is already linked to another laicpmsdb account.`,
-    account_disabled: 'This laicpmsdb account is disabled; ask a lab administrator.',
-    registration_closed: `No laicpmsdb account is linked to that ${name} account, and this server does not create accounts on sign-in; ask a lab administrator, or sign in with your password and link ${name} under Account.`,
+    identity_in_use: `That ${name} account is already linked to another UPbDB account.`,
+    account_disabled: 'This UPbDB account is disabled; ask a lab administrator.',
+    registration_closed: `No UPbDB account is linked to that ${name} account, and this server does not create accounts on sign-in; ask a lab administrator, or sign in with your password and link ${name} under Account.`,
   };
   if (known[slug]) return known[slug];
   if (/_access_denied$/.test(slug)) return `${name} sign-in was cancelled.`;
@@ -247,7 +247,7 @@ class Identity {
   /** Password sign-in. `target` defaults to the current server (the wizard passes the new local one). */
   async login(username: string, password: string, target: AuthTarget | null = this.target): Promise<boolean> {
     if (!target) {
-      this.error = 'No laicpmsdb server is configured yet.';
+      this.error = 'No UPbDB server is configured yet.';
       return false;
     }
     this.error = '';
@@ -274,7 +274,7 @@ class Identity {
     }
   }
 
-  /** ORCID or Google: the system browser, back through laicpmsdb://auth/callback. */
+  /** ORCID or Google: the system browser, back through upbdb://auth/callback. */
   async beginProvider(provider: Provider) {
     if (!this.target) return;
     this.error = '';
@@ -284,7 +284,7 @@ class Identity {
   }
 
   /**
-   * The OS handed us laicpmsdb://auth/callback?code=…. Only a sign-in this
+   * The OS handed us upbdb://auth/callback?code=…. Only a sign-in this
    * shell started is completed, so a link from elsewhere cannot sign the
    * user in to someone else's account.
    */
@@ -307,7 +307,7 @@ class Identity {
     }
   }
 
-  /** laicpmsdb://auth/callback?error=<slug>: show why, if this shell started that sign-in. */
+  /** upbdb://auth/callback?error=<slug>: show why, if this shell started that sign-in. */
   failProvider(error: string, from: string): { ok: boolean; outcome: string } {
     const pending = this.pending;
     if (from !== 'os' && from !== 'you') return { ok: false, outcome: `sign-in callbacks are only accepted from the OS, not ${from}` };
@@ -334,9 +334,9 @@ class Identity {
     return this.backend.handoff(this.target);
   }
 
-  /** GET a laicpmsdb read endpoint as the signed-in account. */
+  /** GET a UPbDB read endpoint as the signed-in account. */
   async get<T>(path: string): Promise<ApiReply<T>> {
-    if (!this.target) throw new Error('No laicpmsdb server is configured yet.');
+    if (!this.target) throw new Error('No UPbDB server is configured yet.');
     return this.backend.get<T>(this.target, path);
   }
 

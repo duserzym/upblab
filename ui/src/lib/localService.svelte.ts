@@ -1,4 +1,4 @@
-// "This computer" mode (ADR-0003): the shell page's view of the laicpmsdb
+// "This computer" mode (ADR-0003): the shell page's view of the UPbDB
 // service and PostgreSQL that the desktop host runs on this machine.
 // Status arrives as `local-service://status` events from Rust.
 

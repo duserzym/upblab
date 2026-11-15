@@ -9,7 +9,7 @@ async function preview(page: Page, scenario: string, manifest = true) {
   });
   await page.route('**/modules/manifest.json', (route) => manifest ? route.fulfill({ json: { modules: [
     { name: 'grainatlas', version: '0.1.0', source: 'local', commit: 'abc1234'.padEnd(40, '0'), sha256: 'a'.repeat(64), entry: 'modules/grainatlas/index.html' },
-    { name: 'laicpmsdb', version: '0.3.0', source: 'release', sha256: 'b'.repeat(64), entry: 'modules/laicpmsdb/index.html' },
+    { name: 'upbdb', version: '0.3.0', source: 'release', sha256: 'b'.repeat(64), entry: 'modules/upbdb/index.html' },
   ] } }) : route.fulfill({ status: 404, body: '' }));
   await page.route('http://localhost:8000/**', (route) => route.fulfill({ json: {} }));
   await page.goto(`./?server=http://localhost:8000&update-preview=${scenario}`);
@@ -57,7 +57,7 @@ for (const [width, height] of [[1512, 982], [1024, 640]]) {
     await expect(popup).toContainText('Update available: v0.2.0');
     await expect(popup).toContainText('UPb Lab v0.1.0');
     await expect(popup.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
-    await expect(popup).toContainText('Modules: grainatlas 0.1.0 (local abc1234), laicpmsdb 0.3.0');
+    await expect(popup).toContainText('Modules: grainatlas 0.1.0 (local abc1234), UPbDB 0.3.0');
     await expect(popup).toContainText('Modules update with UPb Lab.');
     await insideViewport(page, popup);
     const settingsBox = (await page.getByRole('button', { name: 'Settings', exact: true }).boundingBox())!;

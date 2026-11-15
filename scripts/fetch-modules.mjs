@@ -12,7 +12,7 @@
 //                  its HEAD commit and whether the checkout had uncommitted
 //                  changes are recorded too (`commit`, `dirty`).
 //
-// Per service (`"kind": "service"`, the laicpmsdb service bundle of ADR-0003):
+// Per service (`"kind": "service"`, the UPbDB service bundle of ADR-0003):
 //   platforms.<platform>.url + sha256
 //                  download the archive for the build platform (macos-arm64,
 //                  windows-x64), verify it, and unpack it into `out` (relative

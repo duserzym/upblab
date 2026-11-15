@@ -1,7 +1,7 @@
 //! The local PostgreSQL 17 (ADR-0003, life cycle 1 and 3).
 //!
 //! Binaries: the theseus-rs build embedded by `postgresql_embedded`'s
-//! `bundled` feature, unpacked once into `<app local data>/laicpmsdb/postgresql/<version>/`.
+//! `bundled` feature, unpacked once into `<app local data>/upbdb/postgresql/<version>/`.
 //! A `PG_BIN` override (environment, or Settings) points at another
 //! PostgreSQL 17 `bin` folder instead, e.g. Homebrew's
 //! `/opt/homebrew/opt/postgresql@17/bin`, for development.
@@ -19,8 +19,8 @@ use super::pidfile::{assess_postmaster, PostmasterState};
 use super::process::{self, OsProbe};
 
 pub const SUPERUSER: &str = "postgres";
-pub const ROLE: &str = "laicpmsdb";
-pub const DATABASE: &str = "laicpmsdb";
+pub const ROLE: &str = "upbdb";
+pub const DATABASE: &str = "upbdb";
 /// Data directories of another major version need pg_upgrade (out of scope).
 pub const MAJOR: &str = "17";
 
@@ -265,7 +265,7 @@ pub fn ensure_database(bins: &Binaries, port: u16, superuser_password: &str, rol
     if status.success() {
         Ok(())
     } else {
-        Err(format!("could not create the laicpmsdb role and database ({status}); see postgres.log"))
+        Err(format!("could not create the UPbDB role and database ({status}); see postgres.log"))
     }
 }
 
@@ -291,9 +291,9 @@ mod tests {
     fn sql_quotes_the_password_and_creates_only_when_missing() {
         let sql = bootstrap_sql("a'b");
         assert!(sql.contains("PASSWORD 'a''b'"));
-        assert!(sql.contains("IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'laicpmsdb')"));
-        assert!(sql.contains("CREATE ROLE laicpmsdb LOGIN CREATEDB CREATEROLE"));
-        assert!(sql.contains("WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'laicpmsdb')\\gexec"));
+        assert!(sql.contains("IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'upbdb')"));
+        assert!(sql.contains("CREATE ROLE upbdb LOGIN CREATEDB CREATEROLE"));
+        assert!(sql.contains("WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'upbdb')\\gexec"));
     }
 
     #[test]
@@ -353,7 +353,7 @@ mod tests {
             .env("PGPASSWORD", "role-pw2")
             .output()
             .unwrap();
-        assert_eq!(String::from_utf8_lossy(&ok.stdout).trim(), "laicpmsdb", "{}", String::from_utf8_lossy(&ok.stderr));
+        assert_eq!(String::from_utf8_lossy(&ok.stdout).trim(), "upbdb", "{}", String::from_utf8_lossy(&ok.stderr));
         // A running postmaster on this directory is an orphan for the next start.
         assert!(clear_previous(&bins, &data, &log).unwrap().contains("stopped PostgreSQL"));
         let _ = child.wait();

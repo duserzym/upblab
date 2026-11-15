@@ -41,8 +41,8 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
     const card = page.getByTestId('upload-sessions');
     await expect(card).toContainText('Files listed (2 files, 2.00 MB)');
     await expect(card).toContainText('Sent to Sessions');
-    await page.evaluate(() => (window as unknown as FakeWindow).__emit('lab-bridge://files-taken', { id: 'o1', source: 'laicpmsdb', files: 2, bytes: 2 * 1024 * 1024 }));
-    await expect(card).toContainText('Taken by laicpmsdb (2 files, 2.00 MB)');
+    await page.evaluate(() => (window as unknown as FakeWindow).__emit('lab-bridge://files-taken', { id: 'o1', source: 'upbdb', files: 2, bytes: 2 * 1024 * 1024 }));
+    await expect(card).toContainText('Taken by UPbDB (2 files, 2.00 MB)');
     await page.evaluate(s => { (window as unknown as FakeWindow).__fake.fixtures['/v1/sessions'] = [s]; }, session);
     await page.clock.fastForward(5_000);
     await expect(card).toContainText('Session Qtegra_demo ingested, 2 acquisitions');

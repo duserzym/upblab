@@ -1,4 +1,4 @@
-// Shell settings: how to reach laicpmsdb (ADR-0003: "This computer" or a lab
+// Shell settings: how to reach UPbDB (ADR-0003: "This computer" or a lab
 // server URL), UPbRPy Studio path (or a development checkout), theme.
 // Desktop: Tauri store plugin (settings.json in the app config directory).
 // Web: localStorage. System is the default; an explicit choice is kept per viewer.
@@ -21,9 +21,9 @@ export type Mode = '' | 'local' | 'server';
 export interface SettingsData {
   mode: Mode;
   serverUrl: string;
-  /** This computer: laicpmsdb data root (raw files, attachments, exports). */
+  /** This computer: UPbDB data root (raw files, attachments, exports). */
   dataRoot: string;
-  /** This computer, without a bundled service: a laicpmsdb checkout with its .venv. */
+  /** This computer, without a bundled service: a UPbDB checkout with its .venv. */
   devServicePath: string;
   /** This computer: a PostgreSQL 17 `bin` folder instead of the bundled one (development). */
   pgBin: string;
@@ -48,7 +48,7 @@ export interface SettingsData {
   updateLastCheck: number;
 }
 
-export const DEFAULT_DATA_ROOT = '~/laicpmsdb';
+export const DEFAULT_DATA_ROOT = '~/upbdb';
 export const REVIEW_DATA_WIDTH_MIN = 30;
 export const REVIEW_DATA_WIDTH_MAX = 70;
 

@@ -56,7 +56,7 @@
       </section>
     {/if}
     <div class="more row">
-      {#if spot.acquisitionId}<button class="btn" onclick={()=>void shell.handleLink(`laicpmsdb://acquisition/${spot!.acquisitionId}`,'review')}>Raw sweeps in Sessions</button>{/if}
+      {#if spot.acquisitionId}<button class="btn" onclick={()=>void shell.handleLink(`upbdb://acquisition/${spot!.acquisitionId}`,'review')}>Raw sweeps in Sessions</button>{/if}
     </div>
     {#if spot.acquisitionId && spot.runId}
       <section class="run-info" data-testid="spot-run">

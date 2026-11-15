@@ -1,4 +1,4 @@
-//! Free loopback ports for PostgreSQL and the laicpmsdb service.
+//! Free loopback ports for PostgreSQL and the UPbDB service.
 //!
 //! A port counts as free when nothing answers a connect on 127.0.0.1 *and* we
 //! can bind it. Both checks are needed: std sets SO_REUSEADDR on Unix, so on
@@ -10,7 +10,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::time::Duration;
 
 /// Preferred PostgreSQL port: not 5432, so a developer's own cluster (and
-/// laicpmsdb's `make db-start`) is never touched.
+/// UPbDB's `make db-start`) is never touched.
 pub const PG_PREFERRED: u16 = 55432;
 pub const PG_LAST: u16 = 55499;
 /// Preferred service port (ADR-0003: 8000 when free, else the next free one).

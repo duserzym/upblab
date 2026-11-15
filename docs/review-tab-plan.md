@@ -8,7 +8,7 @@ spots, clicking from a plot point to the spot in the registered CL image and
 back. This page records what exists, the gaps, and the design. It changes
 `docs/WORKFLOW.md` stage 9 (results) and `ARCHITECTURE_PLAN.md` section 4.3.
 
-## 1. What exists (audit at upbstudio 410c551, laicpmsdb 2cde680, grainatlas eb31692)
+## 1. What exists (audit at upbstudio 410c551, UPbDB 2cde680, grainatlas eb31692)
 
 ### The shell has no reduction
 
@@ -16,7 +16,7 @@ Searched `ui/src`, `src-tauri/src` and `bridge/src` for decay constants,
 ratios, Concordia, weighted means, MSWD, baseline or down-hole code: none.
 The only UPbRPy path is `src-tauri/src/studio.rs`, which finds UPbRPy Studio
 and launches it with a `upbr://` link. The Review tab keeps it that way: it
-reads values a reduction run already stored in laicpmsdb and plots them. The
+reads values a reduction run already stored in UPbDB and plots them. The
 one piece of arithmetic it does is drawing reference lines (the Concordia
 curve from the standard decay constants, and the 2σ ellipse of a point from
 its stored uncertainties and error correlation), which is display, not
@@ -29,7 +29,7 @@ Home has **Open folder…** / **Open files…** (desktop: the native dialog;
 web: file inputs) and accepts drops anywhere on the window. `ui/src/lib/drop.ts`
 decides by content: TM4000 packages, area folders, images and `.grainatlas`
 project folders go to Images; Qtegra export folders, zips and CSVs go to
-Sessions (`laicpmsdb://ingest?path=` on the desktop). The files reach the
+Sessions (`upbdb://ingest?path=` on the desktop). The files reach the
 module through `@lab/bridge` `open-files` (protocol v2). Home shows one status
 line for the last opened set and the module's outcome
 (`grainatlas.files.opened`, `lab.open-files.seen`). There is no explicit
@@ -42,7 +42,7 @@ and `spots.json` but no pixels (`mosaic/` is empty); `project.json` records the
 SEM package it came from (`package.path`). Hosted grainatlas opens the package
 and then the project's `project.json` on its Open screen.
 
-### Results in laicpmsdb (`service/apps/results/api.py`, `docs/workflow_api.md`)
+### Results in UPbDB (`service/apps/results/api.py`, `docs/workflow_api.md`)
 
 | Endpoint | Gives | Carries spot links |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ Gaps:
 
 1. No query by physical spot or grain (all runs of one spot across sessions;
    all spots of one grain).
-2. No lookup from a grainatlas spot id to the laicpmsdb spot and its
+2. No lookup from a grainatlas spot id to the UPbDB spot and its
    acquisitions, which the reverse click needs when the spot is not in the
    loaded table.
 3. Session result rows lack `atlas_project_id`, `grain_id`, `grain_label` and
@@ -78,21 +78,21 @@ Gaps:
   request means reloading the webview, which loses the open project.
 - In: `open-files` (packages, areas, images).
 - Out: `notify({type: 'grainatlas.spot.selected', project, spot, name})` on
-  every single-spot selection; `open('laicpmsdb://…')` links.
+  every single-spot selection; `open('upbdb://…')` links.
 - No message from the shell to a module after load (other than the
   open-files nudge), so no "focus this spot" without a reload, and no grain
   focus at all.
 
 ### Local data on 2026-11-06
 
-The local laicpmsdb (`:8000`, data root `~/laicpmsdb`) has VISIT-2026 with
+The local UPbDB (`:8000`, data root `~/upbdb`) has VISIT-2026 with
 mounts Demo_S_150X, Mount_S_150X, Mount_XS_150X, 461 physical spots
 with atlas ids (grainatlas projects in `2026_visit/SEM_grainatlas/`), and
 sessions Zircon_demoA_Run1 (232 acquisitions) and Run2 (324), plus the
 demo sessions. **No reduction run has been submitted and no atlas is
 published.** The walkthrough therefore runs on a scratch copy of that
 database and data root, with Run1 reduced headlessly by
-`laicpmsdb/scripts/reduce_session_bundle.py` (UPbRPy defaults, not Yiming's
+`upbdb/scripts/reduce_session_bundle.py` (UPbRPy defaults, not Yiming's
 reviewed reduction) and imported there.
 
 ## 2. Design
@@ -104,12 +104,12 @@ Reduce (`Ctrl/⌘ 1–5`).
 
 - **Scope picker** (top): a session or a mount, and the run (preferred by
   default; any complete run of the session selectable; a mount scope uses each
-  session's preferred run, as laicpmsdb does).
+  session's preferred run, as UPbDB does).
 - **Left, samples and grains:** samples, grains under them, spots under the
   grains; each spot row has a badge (preferred date ± 2σ, coloured by pass or
   flags; grey when not measured; reference materials grouped apart). Filter
   box. Unknowns only by default, reference materials on a toggle.
-- **Centre, plots** (uPlot, as laicpmsdb's `TracePlot`/`OverlayPlot`):
+- **Centre, plots** (uPlot, as UPbDB's `TracePlot`/`OverlayPlot`):
   - *Concordia*: Wetherill (207Pb/235U vs 206Pb/238U, `err_corr`) and
     Tera-Wasserburg (238U/206Pb vs 207Pb/206Pb, `tw_rho`), 2σ ellipses from
     stored values, coloured by sample, Concordia curve with age ticks.
@@ -117,14 +117,14 @@ Reduce (`Ctrl/⌘ 1–5`).
     Th/U, log axes optional); *REE pattern*: chondrite-normalised La…Lu per
     spot (the normalising values are a constant table, shown in the legend).
   - *Depth profile*: one spot's sweep-level ratios from the run's derived
-    depth profile (new laicpmsdb endpoint), against sweep time or depth.
+    depth profile (new UPbDB endpoint), against sweep time or depth.
   Click a point to select its spot; the selected spot is drawn on top with a
   ring; the others dim.
 - **Right, spot details:** label, sample, grain, mount, session, acquisition
   time, preferred date and method with 2σ, key ratios, U, Th, Th/U,
   discordance, flags, run (preferred or not, pipeline version), links: *Show
   in images* (`focus-spot`), *Raw sweeps in Sessions*
-  (`laicpmsdb://acquisition/<id>`), *Open run in Studio* (`upbr://run/<id>`).
+  (`upbdb://acquisition/<id>`), *Open run in Studio* (`upbr://run/<id>`).
 - **Read-only.** No settings that change a value; the plot options are view
   options only.
 
@@ -152,8 +152,8 @@ onCommand((cmd) => {
 notify({ type: SHELL_EVENTS.spotSelected /* 'lab.spot.selected' */, project, spot, name, grain, via: 'user' | 'shell' });
 ```
 
-- `project`, `spot`: grainatlas project and spot ids (laicpmsdb
-  `atlas_project_id`, `atlas_spot_id`). `grain`: the grain label as laicpmsdb
+- `project`, `spot`: grainatlas project and spot ids (UPbDB
+  `atlas_project_id`, `atlas_spot_id`). `grain`: the grain label as UPbDB
   stores it (`<area_id>/<grain_number>`, what grainatlas sends), or a
   grainatlas grain id.
 - Desktop: the host keeps the latest command per module webview and
@@ -179,7 +179,7 @@ notify({ type: SHELL_EVENTS.spotSelected /* 'lab.spot.selected' */, project, spo
   screen), as a deep link waits, and is applied when the package opens.
 - Standalone behaviour unchanged.
 
-### 2.5 laicpmsdb (minimal, its own commit)
+### 2.5 UPbDB (minimal, its own commit)
 
 - `GET /v1/spots/{spot_id}/results?run=preferred|latest|all` (all
   acquisitions of the physical spot across sessions, full value columns),
@@ -197,26 +197,26 @@ per-spot folder, or both; goes to Sessions' ingest with the files) and
 **Upload image set** (SEM package or `.grainatlas` project; goes to Images,
 then offers to publish the atlas to the mount from grainatlas). Each shows
 progress (files listed and read, taken by the module, the module's outcome)
-and ends with **Review this session** / **Review this mount** once laicpmsdb
+and ends with **Review this session** / **Review this mount** once UPbDB
 has it.
 
 ## 3. Checks
 
 Playwright at 1440 × 900 and 1280 × 800 in Chromium and WebKit for Home, the
-Review tab (fake laicpmsdb replies), and the split view; bridge unit tests for
-v3 in both transports; laicpmsdb pytest for the new endpoints; grainatlas
+Review tab (fake UPbDB replies), and the split view; bridge unit tests for
+v3 in both transports; UPbDB pytest for the new endpoints; grainatlas
 Playwright for `focus-spot` and `lab.spot.selected` through the web shell.
-Then the Tauri app against the scratch laicpmsdb with Run1 and the demo
+Then the Tauri app against the scratch UPbDB with Run1 and the demo
 or second project: concordia point to the spot in the CL image, and back.
 Screenshots in `docs/screenshots/`.
 
 ## 4. Walkthrough with the lab-visit data, 2026-11-06
 
 Desktop app (`cargo tauri dev`, macOS) against a scratch copy of the local
-laicpmsdb: the VISIT-2026 database and data root copied, served on
+UPbDB: the VISIT-2026 database and data root copied, served on
 `127.0.0.1:8001`; Yiming's own database on `:8000` was not touched.
 Zircon_demoA_Run1 and Run2 were reduced headlessly with
-`laicpmsdb/scripts/reduce_session_bundle.py` (UPbRPy defaults and automatic
+`upbdb/scripts/reduce_session_bundle.py` (UPbRPy defaults and automatic
 windows, not the reviewed reductions still open in UPbRPy Studio) and
 imported; Run1's run was marked preferred, Run2's left as the newest
 non-preferred run. The Demo_S_150X atlas was built from the TM4000

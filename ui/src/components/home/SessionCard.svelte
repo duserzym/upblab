@@ -17,7 +17,7 @@
 </script>
 <article class="glass panel session-card" data-testid="session-card">
   <div class="heading">
-    <button class="main mono" title={`${s.session_key} · ${counts} · ${status.text}`} aria-label="Open session {s.session_key}" onclick={() => void shell.handleLink(`laicpmsdb://session/${s.id}`, 'home')}><span class="key">{s.session_key}</span></button>
+    <button class="main mono" title={`${s.session_key} · ${counts} · ${status.text}`} aria-label="Open session {s.session_key}" onclick={() => void shell.handleLink(`upbdb://session/${s.id}`, 'home')}><span class="key">{s.session_key}</span></button>
     <span class="chip mineral"><MineralIcon mineral={s.material} /><span>{s.material || 'Unspecified'}</span></span>
   </div>
   <div class="byline">

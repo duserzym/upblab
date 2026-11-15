@@ -68,7 +68,7 @@ describe('shell.handleLink', () => {
   });
 
   it('switches to Sessions with the hash route of an acquisition', async () => {
-    expect(await shell.handleLink(`laicpmsdb://acquisition/${A}`, 'os')).toBe(true);
+    expect(await shell.handleLink(`upbdb://acquisition/${A}`, 'os')).toBe(true);
     expect(shell.view).toBe('sessions');
     expect(shell.targets.sessions?.url).toBe(`http://localhost:8000/app/?theme=light#/acquisitions/${A}`);
   });
@@ -76,8 +76,8 @@ describe('shell.handleLink', () => {
   it('opens grainatlas links in the standalone app without switching tabs', async () => {
     const { editInAtlas } = await import('./apps.svelte');
     const before = shell.targets.images;
-    expect(await shell.handleLink(`grainatlas://project/${A}/spot/${A}`, 'laicpmsdb')).toBe(true);
-    expect(editInAtlas).toHaveBeenCalledExactlyOnceWith({ project: A, mount: null, spot: A }, 'laicpmsdb');
+    expect(await shell.handleLink(`grainatlas://project/${A}/spot/${A}`, 'upbdb')).toBe(true);
+    expect(editInAtlas).toHaveBeenCalledExactlyOnceWith({ project: A, mount: null, spot: A }, 'upbdb');
     expect(shell.view).toBe('home');
     expect(shell.targets.images).toBe(before);
     await shell.handleLink(`grainatlas://project/${A}`, 'os');
@@ -85,21 +85,21 @@ describe('shell.handleLink', () => {
   });
 
   it('gives every request a new sequence number so the same link navigates again', async () => {
-    await shell.handleLink(`laicpmsdb://session/${A}`, 'os');
+    await shell.handleLink(`upbdb://session/${A}`, 'os');
     const first = shell.targets.sessions!.seq;
-    await shell.handleLink(`laicpmsdb://session/${A}`, 'os');
+    await shell.handleLink(`upbdb://session/${A}`, 'os');
     expect(shell.targets.sessions!.seq).toBeGreaterThan(first);
   });
 
   it('sends https links to the system browser', async () => {
-    await shell.handleLink('https://example.org/paper', 'laicpmsdb');
+    await shell.handleLink('https://example.org/paper', 'upbdb');
     expect(platform.openExternal).toHaveBeenCalledWith('https://example.org/paper');
     expect(shell.view).toBe('home');
   });
 
   it('keeps the active view when Studio launches while signed out', async () => {
     identity.state = { signedIn: false, account: null, offline: false };
-    await shell.handleLink(`upbr://session/${A}`, 'laicpmsdb');
+    await shell.handleLink(`upbr://session/${A}`, 'upbdb');
     expect(shell.view).toBe('home');
     expect(platform.desktopAuth.handoff).not.toHaveBeenCalled();
     expect(platform.launchStudio).toHaveBeenCalledWith({ path: '', checkout: '' }, `upbr://session/${A}?server=http%3A%2F%2Flocalhost%3A8000`);
@@ -123,7 +123,7 @@ describe('shell.handleLink', () => {
   it('shows install instructions and mints nothing when Studio is missing', async () => {
     identity.state = { signedIn: true, account: { username: 'analyst' }, offline: false };
     vi.mocked(platform.studioStatus).mockResolvedValueOnce({ found: false, path: null, error: 'UPbRPy Studio is not installed' });
-    expect(await shell.handleLink(`upbr://session/${A}`, 'laicpmsdb')).toBe(true);
+    expect(await shell.handleLink(`upbr://session/${A}`, 'upbdb')).toBe(true);
     expect(shell.studio).toMatchObject({ state: 'missing' });
     expect(platform.desktopAuth.handoff).not.toHaveBeenCalled();
     expect(platform.launchStudio).not.toHaveBeenCalled();
@@ -183,7 +183,7 @@ describe('This computer mode', () => {
     expect(shell.homeUrl('sessions')).toBe('http://127.0.0.1:8000/app/?theme=light');
     localService.status = ready;
     expect(shell.homeUrl('sessions')).toBe('http://127.0.0.1:8001/app/?theme=light');
-    expect(await shell.handleLink(`laicpmsdb://session/${A}`, 'grainatlas')).toBe(true);
+    expect(await shell.handleLink(`upbdb://session/${A}`, 'grainatlas')).toBe(true);
     expect(shell.targets.sessions?.url).toBe(`http://127.0.0.1:8001/app/?theme=light#/sessions/${A}`);
   });
 
@@ -195,7 +195,7 @@ describe('This computer mode', () => {
   });
 });
 
-describe('shell sign-in callback (laicpmsdb://auth/callback)', () => {
+describe('shell sign-in callback (upbdb://auth/callback)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     settings.mode = 'server';
@@ -206,30 +206,30 @@ describe('shell sign-in callback (laicpmsdb://auth/callback)', () => {
   });
 
   it('refuses a callback nobody asked for (login CSRF)', async () => {
-    expect(await shell.handleLink('laicpmsdb://auth/callback?code=evil', 'os')).toBe(false);
+    expect(await shell.handleLink('upbdb://auth/callback?code=evil', 'os')).toBe(false);
     expect(platform.desktopAuth.exchange).not.toHaveBeenCalled();
-    expect(shell.links[0]).toMatchObject({ refused: true, url: 'laicpmsdb://auth/callback?code=…' });
+    expect(shell.links[0]).toMatchObject({ refused: true, url: 'upbdb://auth/callback?code=…' });
   });
 
   it('refuses callbacks posted by a module', async () => {
     identity.pending = { provider: 'orcid', at: Date.now() };
-    expect(await shell.handleLink('laicpmsdb://auth/callback?code=x', 'grainatlas')).toBe(false);
+    expect(await shell.handleLink('upbdb://auth/callback?code=x', 'grainatlas')).toBe(false);
     expect(platform.desktopAuth.exchange).not.toHaveBeenCalled();
   });
 
   it('exchanges the code of a sign-in the shell started, once', async () => {
     identity.pending = { provider: 'orcid', at: Date.now() };
     const before = identity.revision;
-    expect(await shell.handleLink('laicpmsdb://auth/callback#/auth/callback?code=abc', 'os')).toBe(true);
+    expect(await shell.handleLink('upbdb://auth/callback#/auth/callback?code=abc', 'os')).toBe(true);
     expect(platform.desktopAuth.exchange).toHaveBeenCalledWith(identity.target, 'abc');
     expect(identity.signedIn).toBe(true);
     expect(identity.revision).toBe(before + 1);
-    expect(await shell.handleLink('laicpmsdb://auth/callback?code=again', 'os')).toBe(false);
+    expect(await shell.handleLink('upbdb://auth/callback?code=again', 'os')).toBe(false);
   });
 
   it('shows a failed browser sign-in and ends the wait', async () => {
     identity.pending = { provider: 'orcid', at: Date.now() };
-    expect(await shell.handleLink('laicpmsdb://auth/callback?error=orcid_access_denied', 'os')).toBe(false);
+    expect(await shell.handleLink('upbdb://auth/callback?error=orcid_access_denied', 'os')).toBe(false);
     expect(identity.pending).toBeNull();
     expect(identity.dialog).toBe(true);
     expect(identity.error).toMatch(/cancelled/);
@@ -239,7 +239,7 @@ describe('shell sign-in callback (laicpmsdb://auth/callback)', () => {
 
   it('redacts one-time codes', () => {
     expect(redact('upbr://session/x?server=http://h&code=s3cret')).toBe('upbr://session/x?server=http://h&code=…');
-    expect(redact('laicpmsdb://auth/callback#/auth/callback?code=s3cret')).toBe('laicpmsdb://auth/callback#/auth/callback?code=…');
+    expect(redact('upbdb://auth/callback#/auth/callback?code=s3cret')).toBe('upbdb://auth/callback#/auth/callback?code=…');
   });
 });
 
@@ -288,10 +288,10 @@ describe('in-context Studio and submission routing', () => {
   it('looks up a submitted run and records the link', async () => {
     const get = vi.spyOn(identity, 'get').mockResolvedValueOnce({ status: 200, body: { session_id: 's' } });
     const { review } = await import('./review.svelte');
-    expect(await shell.handleLink('laicpmsdb://run/r', 'os')).toBe(true);
+    expect(await shell.handleLink('upbdb://run/r', 'os')).toBe(true);
     expect(get).toHaveBeenCalledWith('/v1/runs/r');
     expect(review.open).toHaveBeenCalledWith({ kind: 'session', id: 's', run: 'r' });
-    expect(shell.links[0]).toMatchObject({ url: 'laicpmsdb://run/r', outcome: 'Review run r' });
+    expect(shell.links[0]).toMatchObject({ url: 'upbdb://run/r', outcome: 'Review run r' });
     get.mockRestore();
   });
   it('records the successful session opener and watches it', async () => {

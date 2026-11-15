@@ -87,7 +87,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function validateLocal(form: Form, ctx: Context): Errors {
   const e: Errors = {};
   if (!form.dataRoot.trim()) e.dataRoot = 'Choose a folder for the data root.';
-  if (!ctx.bundled && !form.devPath.trim()) e.devPath = 'This build has no bundled service: give the path of a laicpmsdb checkout.';
+  if (!ctx.bundled && !form.devPath.trim()) e.devPath = 'This build has no bundled service: give the path of a UPbDB checkout.';
   if (!USERNAME.test(form.username.trim())) e.username = 'Letters, digits and @ . + - _ only, not starting with -.';
   if (!EMAIL.test(form.email.trim())) e.email = 'Enter an email address.';
   if ([...form.password].length < 8) e.password = 'At least 8 characters.';
@@ -97,7 +97,7 @@ export function validateLocal(form: Form, ctx: Context): Errors {
 }
 
 export function validateServer(form: Form): Errors {
-  return normaliseServerUrl(form.serverUrl) ? {} : { serverUrl: 'Enter a full http:// or https:// URL, e.g. https://laicpmsdb.example.edu' };
+  return normaliseServerUrl(form.serverUrl) ? {} : { serverUrl: 'Enter a full http:// or https:// URL, e.g. https://upbdb.example.edu' };
 }
 
 /** Drop secrets once they are no longer needed. */

@@ -75,12 +75,12 @@
               <tbody>
                 {#each rows as { session, access } (session.id)}
                   <tr>
-                    <td><button class="session-link mono" onclick={() => void shell.handleLink(`laicpmsdb://session/${session.id}`, 'account')}>{session.session_key}</button></td>
+                    <td><button class="session-link mono" onclick={() => void shell.handleLink(`upbdb://session/${session.id}`, 'account')}>{session.session_key}</button></td>
                     <td>{access?.role ?? 'Unavailable'}</td>
                     <td>{access?.owner ?? '—'}</td>
                     <td>{#if access?.canShare}
                       <button class="btn small" aria-label={`Manage sharing for ${session.session_key}`}
-                        onclick={() => void shell.handleLink(`laicpmsdb://session/${session.id}?panel=sharing`, 'account')}>Manage sharing</button>
+                        onclick={() => void shell.handleLink(`upbdb://session/${session.id}?panel=sharing`, 'account')}>Manage sharing</button>
                     {/if}</td>
                   </tr>
                 {/each}

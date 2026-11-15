@@ -1,6 +1,6 @@
 import type { AuthState } from './platform';
 
-/** Presentation only; laicpmsdb enforces access on every management endpoint. */
+/** Presentation only; UPbDB enforces access on every management endpoint. */
 export function canManagePeople(state: AuthState): boolean {
   const account = state.account;
   if (!state.signedIn || state.offline || !account) return false;

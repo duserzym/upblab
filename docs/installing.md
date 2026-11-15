@@ -35,7 +35,7 @@ ad-hoc signature; clear it once in Terminal:
 xattr -dr com.apple.quarantine "/Applications/UPb Lab.app"
 ```
 
-Launch Services learns the `laicpmsdb://`, `grainatlas://` and `upbr://`
+Launch Services learns the `upbdb://`, `grainatlas://` and `upbr://`
 links after the first launch from Applications.
 
 ## Windows (x86-64)
@@ -87,28 +87,28 @@ like the link schemes.
 
 ## After installing: the first run
 
-The first launch asks where laicpmsdb, the Sessions tab, should live. Settings
+The first launch asks where UPbDB, the Sessions tab, should live. Settings
 (gear icon or Ctrl/⌘ ,) changes it later.
 
-- **This computer**: UPb Lab runs its own laicpmsdb and PostgreSQL 17 on
-  this machine. Choose the data root (default `~/laicpmsdb`, the same layout
+- **This computer**: UPb Lab runs its own UPbDB and PostgreSQL 17 on
+  this machine. Choose the data root (default `~/upbdb`, the same layout
   as the lab NAS), create your account (user name, email and a password of
-  your choice; it is the first administrator of this laicpmsdb), and
+  your choice; it is the first administrator of this UPbDB), and
   optionally load the demo sessions. After setup, both programs start when Sessions or Review is opened
   (a few seconds) and stop when UPb Lab quits; they listen on 127.0.0.1
   only. If the start fails, the screen shows the end of the log with
   **Retry** and **Use a lab server instead**.
   The wizard signs UPb Lab in with that account.
-- **Lab server**: the URL of the lab's laicpmsdb (e.g.
-  `https://laicpmsdb.example.edu`); then sign in with **Sign in** in the tab
+- **Lab server**: the URL of the lab's UPbDB (e.g.
+  `https://upbdb.example.edu`); then sign in with **Sign in** in the tab
   bar.
 
 ## Signing in
 
-UPb Lab signs in to laicpmsdb once, with **Sign in** at the right of the
+UPb Lab signs in to UPbDB once, with **Sign in** at the right of the
 tab bar: a user name and password, or **Sign in with ORCID** / **with
 Google** when the server offers them (your web browser opens, and returns to
-UPb Lab through a `laicpmsdb://auth/callback` link). The Sessions and
+UPb Lab through a `upbdb://auth/callback` link). The Sessions and
 Images tabs and UPbRPy Studio use that sign-in; the button then shows your
 name, and clicking it shows the account and **Sign out**. The token is kept
 in the system keychain, one entry per server under `edu.umn.upbstudio`
@@ -121,7 +121,7 @@ make macOS ask once to allow keychain access.
 ## Reducing a session in UPbRPy Studio
 
 **Reduce** on Home (or *Reduce in UPbRPy Studio* in the Sessions tab) opens
-the session in UPbRPy Studio in database mode: UPb Lab asks laicpmsdb for a
+the session in UPbRPy Studio in database mode: UPb Lab asks UPbDB for a
 one-time, five-minute code with your sign-in and launches Studio with
 `upbr://session/<id>?server=<server>&code=<code>` (docs/WORKFLOW.md section 4).
 A `upbr://` link clicked elsewhere (an email, a notebook) arrives the same way.
@@ -141,7 +141,7 @@ Without Studio, the Reduce tab shows how to install it and the link to open
 in Studio by hand. Both UPb Lab and UPbRPy Studio register `upbr://`;
 whichever the system picks, the link works (Studio alone asks you to sign in).
 
-Release builds include "This computer" only once laicpmsdb publishes its
+Release builds include "This computer" only once UPbDB publishes its
 service bundle (`docs/service-bundle-contract.md`); until then the option is
 greyed out and the log says so at start-up.
 
@@ -155,18 +155,18 @@ administrator*: PostgreSQL refuses to start under an administrator token.
 | Settings (`settings.json`: mode, server URL, data root, paths) | `~/Library/Application Support/edu.umn.upbstudio/` | `%APPDATA%\edu.umn.upbstudio\` |
 | Generated database passwords and secret key (`local-service.json`) | same folder as settings | same folder as settings |
 | Window size and position (`window.json`; Settings → Reset layout forgets it) | same folder as settings | same folder as settings |
-| PostgreSQL data directory (This computer) | `~/Library/Application Support/edu.umn.upbstudio/laicpmsdb/pg/` | `%LOCALAPPDATA%\edu.umn.upbstudio\laicpmsdb\pg\` |
-| Unpacked PostgreSQL binaries | `…/laicpmsdb/postgresql/<version>/` next to `pg/` | same, under `%LOCALAPPDATA%` |
-| laicpmsdb data root (raw files, attachments, exports) | `~/laicpmsdb` unless changed in the wizard or Settings | `%USERPROFILE%\laicpmsdb` unless changed |
+| PostgreSQL data directory (This computer) | `~/Library/Application Support/edu.umn.upbstudio/upbdb/pg/` | `%LOCALAPPDATA%\edu.umn.upbstudio\upbdb\pg\` |
+| Unpacked PostgreSQL binaries | `…/upbdb/postgresql/<version>/` next to `pg/` | same, under `%LOCALAPPDATA%` |
+| UPbDB data root (raw files, attachments, exports) | `~/upbdb` unless changed in the wizard or Settings | `%USERPROFILE%\upbdb` unless changed |
 | Logs | `~/Library/Logs/edu.umn.upbstudio/` | `%LOCALAPPDATA%\edu.umn.upbstudio\logs\` |
-| laicpmsdb sign-in token | Keychain, service `edu.umn.upbstudio`, account = server URL or `this-computer` | Credential Manager, `this-computer.edu.umn.upbstudio` or `<server URL>.edu.umn.upbstudio` |
+| UPbDB sign-in token | Keychain, service `edu.umn.upbstudio`, account = server URL or `this-computer` | Credential Manager, `this-computer.edu.umn.upbstudio` or `<server URL>.edu.umn.upbstudio` |
 
 The log folder holds `upbstudio.log` (the shell), `postgres.log` and
-`laicpmsdb.log` (This computer mode); Settings → **Logs** shows their ends and
+`upbdb.log` (This computer mode); Settings → **Logs** shows their ends and
 opens the folder. A log over 10 MB is rotated to `.1` when the program starts.
 
 Back up the PostgreSQL data directory and the data root together (with UPb Lab closed). Deleting `local-service.json` makes the database unreachable,
-because its password is lost: move `laicpmsdb/pg` aside to start over.
+because its password is lost: move `upbdb/pg` aside to start over.
 
 UPbRPy Studio: if it is not in its usual place, set its path in Settings (see
 *Reducing a session* above).

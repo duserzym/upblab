@@ -4,8 +4,8 @@
 //! one child webview per module tab (`module-images`, `module-sessions`, `module-people`),
 //! laid over the area the shell reserves for them (ADR-0002). The host owns
 //! no scientific data: it positions webviews, forwards @lab/bridge calls and
-//! deep links to the shell, probes the laicpmsdb server, launches UPbRPy
-//! Studio, and in "This computer" mode runs laicpmsdb and PostgreSQL locally
+//! deep links to the shell, probes the UPbDB server, launches UPbRPy
+//! Studio, and in "This computer" mode runs UPbDB and PostgreSQL locally
 //! (`local_service`, ADR-0003).
 
 mod auth;
@@ -31,7 +31,7 @@ pub const MAIN_WINDOW: &str = "main";
 pub const SHELL_WEBVIEW: &str = "shell";
 /// URL schemes the shell routes (plan section 4.4). Registered by the
 /// installers through `plugins.deep-link.desktop.schemes` in tauri.conf.json.
-pub const SCHEMES: [&str; 3] = ["laicpmsdb", "grainatlas", "upbr"];
+pub const SCHEMES: [&str; 3] = ["upbdb", "grainatlas", "upbr"];
 
 /// Light base from the glass tokens (`--bg`, light is the default theme), so a
 /// fresh window does not flash dark before the shell page paints.
@@ -174,7 +174,7 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building UPb Lab")
         .run(|app, event| {
-            // Quit (menu, last window closed, Cmd-Q): stop laicpmsdb, then
+            // Quit (menu, last window closed, Cmd-Q): stop UPbDB, then
             // PostgreSQL, before the process ends (ADR-0003, life cycle 3).
             if let tauri::RunEvent::Exit = event {
                 local_service::shutdown(app);

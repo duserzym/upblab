@@ -104,9 +104,9 @@ export interface BridgeEvent {
 
 export interface FocusSpotCommand {
   type: 'focus-spot';
-  /** grainatlas project id (laicpmsdb atlas_project_id). */
+  /** grainatlas project id (UPbDB atlas_project_id). */
   project: string;
-  /** grainatlas spot id (laicpmsdb atlas_spot_id). */
+  /** grainatlas spot id (UPbDB atlas_spot_id). */
   spot: string;
   /** Published atlas server, an http(s) URL of at most 2048 characters. */
   server?: string;
@@ -118,7 +118,7 @@ export interface FocusSpotCommand {
 export interface FocusGrainCommand {
   type: 'focus-grain';
   project: string;
-  /** laicpmsdb grain label (<area_id>/<grain_number>) or grainatlas grain id. */
+  /** UPbDB grain label (<area_id>/<grain_number>) or grainatlas grain id. */
   grain: string;
   spot?: string;
   /** Published atlas server, an http(s) URL of at most 2048 characters. */
@@ -156,7 +156,7 @@ export interface AtlasStatusEvent extends BridgeEvent {
   state: AtlasState;
   /** Mount content revision; null whenever mount is null. */
   revision: number | null;
-  /** Mount's current published bundle (laicpmsdb atlas_version). */
+  /** Mount's current published bundle (UPbDB atlas_version). */
   atlasVersion: number | null;
   changes: AtlasChanges | null;
   syncedAt: string | null;
@@ -492,11 +492,11 @@ export type OpenFilesKind =
   | 'images'
   /** grainatlas: a saved `<name>.grainatlas` project folder */
   | 'project'
-  /** laicpmsdb: a Qtegra export folder */
+  /** UPbDB: a Qtegra export folder */
   | 'export'
-  /** laicpmsdb: zips of an export */
+  /** UPbDB: zips of an export */
   | 'zip'
-  /** laicpmsdb: loose per-spot CSVs */
+  /** UPbDB: loose per-spot CSVs */
   | 'csv';
 
 /** One file of an offer, without its bytes. */

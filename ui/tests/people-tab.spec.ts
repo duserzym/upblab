@@ -40,7 +40,7 @@ test('People hosts the management page and has no number shortcut', async ({ pag
   const frame = page.locator('iframe[title="People & access"]');
   await expect(frame).toBeVisible();
   await expect(frame).toHaveAttribute('src', /\/app\/(?:\?theme=(?:light|dark))?#\/people$/);
-  await expect(frame).toHaveAttribute('name', 'lab-shell:laicpmsdb');
+  await expect(frame).toHaveAttribute('name', 'lab-shell:upbdb');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('upbstudio.settings')!).lastTab)).toBe('home');
   // People has no number shortcut; its title shows none.
   await expect(tab).not.toHaveAttribute('title', /Ctrl/);

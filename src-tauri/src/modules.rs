@@ -103,7 +103,7 @@ fn is_local(url: &Url) -> bool {
             && url.port() == Some(1420))
 }
 
-/// Remote module pages (the configured laicpmsdb server) get the bridge
+/// Remote module pages (the configured UPbDB server) get the bridge
 /// commands for their origin only, in their own webview only.
 fn grant_bridge<R: Runtime>(
     app: &AppHandle<R>,
@@ -189,7 +189,7 @@ fn build_webview<R: Runtime>(
             }
         })
         .initialization_script(crate::files::probe_script())
-        // A plain <a href="laicpmsdb://…"> in a module goes to the shell's resolver.
+        // A plain <a href="upbdb://…"> in a module goes to the shell's resolver.
         .on_navigation(move |url| {
             let scheme = url.scheme();
             if SCHEMES.contains(&scheme) {
@@ -319,7 +319,7 @@ mod tests {
         assert!(parse_url("tauri://localhost/modules/grainatlas/index.html").is_ok());
         assert!(parse_url("file:///etc/passwd").is_err());
         assert!(parse_url("javascript:alert(1)").is_err());
-        assert!(parse_url("laicpmsdb://session/x").is_err());
+        assert!(parse_url("upbdb://session/x").is_err());
     }
 
     #[test]
@@ -340,8 +340,8 @@ mod tests {
     #[test]
     fn marker_names_the_module() {
         assert!(marker_script("images", "dark").contains("\"grainatlas\""));
-        assert!(marker_script("sessions", "light").contains("\"laicpmsdb\""));
-        assert!(marker_script("people", "light").contains("\"laicpmsdb\""));
+        assert!(marker_script("sessions", "light").contains("\"upbdb\""));
+        assert!(marker_script("people", "light").contains("\"upbdb\""));
         let script = marker_script("images", "dark");
         assert!(script.contains("v: 5, minor: 1, theme: \"dark\""));
         assert!(script.contains("new MutationObserver"));

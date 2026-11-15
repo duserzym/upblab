@@ -32,7 +32,7 @@ describe('Home upload handoffs', () => {
     const t = opener.takeWeb('sessions', true)!;
     expect(t).not.toBeNull();
     expect(c.taken).toEqual({ files: 1, bytes: 1 });
-    expect(c.steps[2].text).toBe('Taken by laicpmsdb (1 files, 0.00 MB)');
+    expect(c.steps[2].text).toBe('Taken by UPbDB (1 files, 0.00 MB)');
     expect(c.ready).toBe(false);
   });
 
@@ -40,7 +40,7 @@ describe('Home upload handoffs', () => {
     const c = card('sessions');
     await c.openWebFiles(image);
     expect(c.error).toContain('This button takes a Rich CSV');
-    expect(opener.takeWeb('laicpmsdb', true)).toBeNull();
+    expect(opener.takeWeb('upbdb', true)).toBeNull();
     expect(shell.show).not.toHaveBeenCalled();
     scan.mockResolvedValue({ scan: 'scan', ...image, missing: [], truncated: false });
     await c.openPaths(['/SEM']);
@@ -54,7 +54,7 @@ describe('Home upload handoffs', () => {
   it('handles a desktop take arriving before the offer command returns', async () => {
     scan.mockResolvedValue({ scan: 'scan', ...csv, missing: [], truncated: false });
     offer.mockImplementation(async () => {
-      opener.taken('instant', 'laicpmsdb', 1, 1024);
+      opener.taken('instant', 'upbdb', 1, 1024);
       return { id: 'instant' };
     });
     const c = card('sessions');
@@ -81,7 +81,7 @@ describe('Home upload handoffs', () => {
     const c = card('sessions');
     await c.openWebFiles(csv);
     expect(replies).toBe(1);
-    opener.takeWeb('laicpmsdb', true);
+    opener.takeWeb('upbdb', true);
     await vi.advanceTimersByTimeAsync(POLL_MS);
     expect(c.session?.id).toBe('s-new');
     expect(c.outcome).toBe('Session Qtegra_demo ingested, 2 acquisitions');
@@ -97,7 +97,7 @@ describe('Home upload handoffs', () => {
     get.mockResolvedValue({ status: 200, body: [session] });
     const c = card('sessions');
     await c.openWebFiles(csv);
-    opener.takeWeb('laicpmsdb', true);
+    opener.takeWeb('upbdb', true);
     await vi.advanceTimersByTimeAsync(POLL_MS);
     expect(c.session?.id).toBe(session.id);
   });
@@ -143,7 +143,7 @@ describe('Home upload handoffs', () => {
     expect(c.sent).toBe(false);
     const s = card('sessions');
     await s.openWebFiles(csv);
-    opener.takeWeb('laicpmsdb', true);
+    opener.takeWeb('upbdb', true);
     s.close();
     const calls = get.mock.calls.length;
     await vi.advanceTimersByTimeAsync(POLL_MS * 2);
@@ -156,7 +156,7 @@ describe('Home upload handoffs', () => {
   it('stops after ten minutes with a visible reason', async () => {
     const c = card('sessions');
     await c.openWebFiles(csv);
-    opener.takeWeb('laicpmsdb', true);
+    opener.takeWeb('upbdb', true);
     await vi.advanceTimersByTimeAsync(WATCH_MS);
     expect(c.error).toContain('No session detected after 10 minutes');
     const calls = get.mock.calls.length;

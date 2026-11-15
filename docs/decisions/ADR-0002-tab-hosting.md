@@ -14,11 +14,11 @@ macOS 26 (arm64):
 
 - `Window::add_child`, `Webview::set_bounds`, `show`, `hide`, `navigate`,
   `reload`, `on_navigation`, `on_new_window` and `initialization_script` all
-  work with the `unstable` feature; the laicpmsdb `/app/` page loads in a
+  work with the `unstable` feature; the UPbDB `/app/` page loads in a
   child webview and keeps its state while hidden.
-- laicpmsdb answers with `X-Frame-Options: DENY` (Django's clickjacking
+- UPbDB answers with `X-Frame-Options: DENY` (Django's clickjacking
   middleware). An iframe in the desktop shell (origin `tauri://localhost`)
-  cannot show it without a laicpmsdb change; a child webview is a top-level
+  cannot show it without a UPbDB change; a child webview is a top-level
   page and is not affected.
 
 ## Decision
@@ -40,12 +40,12 @@ user switches tabs.
   stop working as soon as the user clicks into a module.
 - Each module webview gets `window.__LAB_SHELL__ = { module, v: 1 }` before
   any page script, which is how `@lab/bridge` picks its Tauri transport.
-  Navigations to `laicpmsdb:`, `grainatlas:` and `upbr:` inside a module are
+  Navigations to `upbdb:`, `grainatlas:` and `upbr:` inside a module are
   cancelled and forwarded to the shell's resolver; `target=_blank` web links
   open in the system browser.
 - Capabilities: the `shell` webview has the shell commands and plugins;
   module webviews have only `bridge_open`, `bridge_token`, `bridge_notify`.
-  The laicpmsdb origin is remote, so the host grants those three to the
+  The UPbDB origin is remote, so the host grants those three to the
   configured server origin at runtime (`CapabilityBuilder`), scoped to the
   `module-sessions` webview.
 
@@ -72,7 +72,7 @@ the CI build is run on a Windows machine.
   survives tab switches.
 - The shell depends on Tauri's `unstable` multi-webview API; a Tauri upgrade
   must be smoke-tested on both OS. The fallback (iframes, as on the web) needs
-  laicpmsdb to send `X-Frame-Options: SAMEORIGIN` or a CSP `frame-ancestors`
+  UPbDB to send `X-Frame-Options: SAMEORIGIN` or a CSP `frame-ancestors`
   that includes the shell's origin.
 - The web delivery needs that header change anyway, for `/app/` and `/atlas/`
   framed by `/desk/` on the same origin.

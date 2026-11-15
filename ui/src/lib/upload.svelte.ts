@@ -1,4 +1,5 @@
 // Home watches the handoff; the modules alone read and ingest the files.
+import { moduleLabel } from './links';
 import type { FileTab, WebSet } from './drop';
 import { identity } from './identity.svelte';
 import { MODULE_OF, opener, type OpenProgress } from './opener.svelte';
@@ -45,7 +46,7 @@ export class Upload {
     return [
       { text: this.listed ? `Files listed (${size(this.listed.files, this.listed.bytes)})` : 'Listing files…', done: !!this.listed },
       { text: 'Sent to Sessions', done: this.sent },
-      { text: `Taken by ${MODULE_OF[this.target]}${this.taken ? ` (${size(this.taken.files, this.taken.bytes)})` : ''}`, done: !!this.taken },
+      { text: `Taken by ${moduleLabel(MODULE_OF[this.target])}${this.taken ? ` (${size(this.taken.files, this.taken.bytes)})` : ''}`, done: !!this.taken },
       { text: this.outcome || 'Waiting for ingest in Sessions', done: !!this.session },
       { text: 'Ready to review', done: this.ready },
     ];

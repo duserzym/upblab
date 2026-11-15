@@ -1,7 +1,7 @@
 // @lab/bridge: the small API a module calls to talk to the UPb Lab shell.
 //
 //   import { open, token, notify, isHosted, onOpenFiles } from '@lab/bridge';
-//   await open('laicpmsdb://acquisition/<uuid>');
+//   await open('upbdb://acquisition/<uuid>');
 //   onOpenFiles(({ kind, name, files }) => openPackage(name, files));
 //
 // Three transports, picked once per page:
@@ -57,9 +57,9 @@ export interface Bridge {
   theme(): Theme | null;
   /** Called immediately if known, then for every change. Returns an unsubscribe. */
   onTheme(handler: ThemeHandler): () => void;
-  /** Ask the shell to route a URL (laicpmsdb://, grainatlas://, upbr://, https://). */
+  /** Ask the shell to route a URL (upbdb://, grainatlas://, upbr://, https://). */
   open(url: string): Promise<boolean>;
-  /** The signed-in laicpmsdb bearer token, or null (not hosted, or signed out). */
+  /** The signed-in UPbDB bearer token, or null (not hosted, or signed out). */
   token(): Promise<string | null>;
   /** Tell the shell something happened (fire and forget). */
   notify(event: BridgeEvent): Promise<void>;

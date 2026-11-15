@@ -8,7 +8,7 @@ const selected = (page: Page, name: string) => expect(page.getByRole('tab', { na
 async function web(page: Page) {
   await page.route('http://localhost:8000/**', r => r.fulfill({ json: {} }));
   await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [] } }));
-  await page.route('**/app/**', r => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>laicpmsdb</title>' }));
+  await page.route('**/app/**', r => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>UPbDB</title>' }));
   await page.addInitScript(() => localStorage.setItem('upbstudio.settings', JSON.stringify({ mode: 'server', lastTab: 'images' })));
   await page.goto('./?server=http://localhost:8000');
 }

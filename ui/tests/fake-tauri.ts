@@ -42,7 +42,7 @@ export function installFakeTauri(opts: FakeOptions) {
     error: null,
     logTail: null,
     bundle: null,
-    devDefault: '/Users/lab/Github/laicpmsdb',
+    devDefault: '/Users/lab/Github/upbdb',
     logDir: '/Users/lab/Library/Logs/edu.umn.upbstudio',
     dataDir: '/Users/lab/Library/Application Support/edu.umn.upbstudio',
   };

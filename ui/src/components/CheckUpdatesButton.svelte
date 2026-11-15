@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { moduleLabel } from '../lib/links';
   import { onMount, tick } from 'svelte';
   import { isDesktop, openExternal } from '../lib/platform';
   import { settings } from '../lib/settings.svelte';
@@ -97,7 +98,7 @@
   {/if}
   {#if updater.standards.warning}<p class="small warning">Standards warning: {updater.standards.message}</p>{/if}
   {#if modules.length}
-    <p class="small muted">Modules: {modules.map((module) => `${module.name} ${module.version}${module.source === 'local' ? ` (local${module.commit ? ` ${module.commit.slice(0, 7)}${module.dirty ? ', modified' : ''}` : ''})` : ''}`).join(', ')}</p>
+    <p class="small muted">Modules: {modules.map((module) => `${moduleLabel(module.name)} ${module.version}${module.source === 'local' ? ` (local${module.commit ? ` ${module.commit.slice(0, 7)}${module.dirty ? ', modified' : ''}` : ''})` : ''}`).join(', ')}</p>
     <p class="small muted">Modules update with UPb Lab.</p>
   {/if}
   <a class="small" href="#updates" onclick={showSettings}>Update settings…</a>

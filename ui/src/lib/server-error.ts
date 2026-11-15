@@ -1,5 +1,5 @@
 /**
- * One sentence for people from a laicpmsdb error reply (sync contract,
+ * One sentence for people from a UPbDB error reply (sync contract,
  * November 2026, section 1): the server's `detail` (or `message` when
  * `detail` is a list), else a sentence chosen by status. Raw bodies and ids
  * stay out of the interface; callers log them when needed.

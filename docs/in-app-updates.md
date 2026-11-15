@@ -118,7 +118,7 @@ them as workflow artifacts without publishing a release; it is the dry run.
   On the desktop the module webviews cover the content area, so opening the
   popover hides those views through the same overlay flag as the account dialog.
 - Settings > Updates also lists what this build contains: the grainatlas web
-  build pinned in `modules.lock.json` (release or local build), the laicpmsdb
+  build pinned in `modules.lock.json` (release or local build), the UPbDB
   service bundle, and the UPbRPy Studio found on this computer. The modules
   update with UPb Lab; UPbRPy Studio updates itself from its own Settings.
 - Version copies that must agree: `package.json`, `ui/package.json`,

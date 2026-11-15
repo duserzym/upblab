@@ -1,13 +1,13 @@
 # @lab/bridge
 
-The API a lab module (grainatlas, laicpmsdb) calls to talk to the UPb Lab
+The API a lab module (grainatlas, UPbDB) calls to talk to the UPb Lab
 shell. It has no dependencies and works the same whether the module runs in
 the desktop shell, in the web shell at `/desk/`, or on its own.
 
 ```ts
 import { open, token, notify, isHosted, onOpenFiles } from '@lab/bridge';
 
-await open('laicpmsdb://acquisition/2f1c…');  // false when not hosted
+await open('upbdb://acquisition/2f1c…');  // false when not hosted
 await open('upbr://session/2f1c…');            // shell adds server + handoff code, launches Studio
 const bearer = await token();                 // null when not hosted or signed out
 await notify({ type: 'grainatlas.spot.selected', project, spot });
@@ -21,22 +21,22 @@ onOpenFiles(({ kind, name, files }) => openSet(name, files)); // protocol v2, be
 | web shell, iframe | `postMessage` to `window.parent`, replies matched by id | the iframe is named `lab-shell:<module>` |
 | alone | none: `open` resolves `false`, `token` resolves `null`, `notify` does nothing, `onOpenFiles` never fires | neither of the above |
 
-`token()` is the shell's laicpmsdb sign-in (plan decision 5): the user signs
+`token()` is the shell's UPbDB sign-in (plan decision 5): the user signs
 in once in the shell's tab bar (password, or ORCID / Google through the system
 browser) and every module tab gets the same bearer token. On desktop the token
 lives in the OS keychain (macOS Keychain, Windows Credential Manager) and is
 given only to the bundled grainatlas build and to pages of the configured
-laicpmsdb server; in the web shell it lives in the tab's `sessionStorage`. When
+UPbDB server; in the web shell it lives in the tab's `sessionStorage`. When
 the user signs in or out in the shell, module tabs are reloaded, so read
 `token()` at start-up and do not cache it across reloads.
 
 | `notify()` type the shell acts on | Effect |
 | --- | --- |
-| `lab.auth.signed-out` (`SHELL_EVENTS.signedOut`), also `laicpmsdb.auth.signed-out` | the shell signs out (revokes the token, clears the keychain entry) and reloads every module tab without a token; send it when the user signs out inside the module or the API answers 401 to the shell's token |
+| `lab.auth.signed-out` (`SHELL_EVENTS.signedOut`), also `upbdb.auth.signed-out` | the shell signs out (revokes the token, clears the keychain entry) and reloads every module tab without a token; send it when the user signs out inside the module or the API answers 401 to the shell's token |
 | `lab.spot.selected` (`SHELL_EVENTS.spotSelected`), also `grainatlas.spot.selected` | stored as the latest selection for Review (see protocol v3 below) |
 | anything else | logged; the Home timeline uses them from roadmap phase 5 |
 
-Plain links work too: in the desktop shell a click on an `<a href="laicpmsdb://…">`
+Plain links work too: in the desktop shell a click on an `<a href="upbdb://…">`
 inside a module webview is intercepted and routed like `open()`.
 
 The shell side of the `postMessage` transport is `createFrameHost` from
@@ -60,7 +60,7 @@ import { onOpenFiles, type OpenedFiles } from '@lab/bridge';
 
 const stop = onOpenFiles(async (set: OpenedFiles) => {
   // set.kind  'package' | 'area' | 'images' | 'project'   (grainatlas)
-  //           'export' | 'zip' | 'csv'                     (laicpmsdb)
+  //           'export' | 'zip' | 'csv'                     (UPbDB)
   // set.name  folder name, zip name, or the files' common stem
   // set.path  desktop only: the host path (folder, zip, or the loose files' folder)
   // set.files [{ path: '001_HJ-GC1/001_HJ-GC1_0000.jpg', file: File }, …]
@@ -151,9 +151,9 @@ await notify({
 });
 ```
 
-`project` is the grainatlas project id (`atlas_project_id` in laicpmsdb),
+`project` is the grainatlas project id (`atlas_project_id` in UPbDB),
 `spot` is its spot id (`atlas_spot_id`), and `grain` is a grainatlas grain id
-or the grain label stored by laicpmsdb (`<area_id>/<grain_number>`). Each id
+or the grain label stored by UPbDB (`<area_id>/<grain_number>`). Each id
 matches `^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`; a grain label permits one `/`
 between two such parts. `flash` requests a visual flash; `via` names the
 sender, for example `'review'`. Both commands optionally carry `server`, an
@@ -248,7 +248,7 @@ const hostedDrafts = atlasDrafts(event);
 const syncNotice = atlasSynced(event);
 ```
 
-`project` is the project UUID and `mount` is the laicpmsdb mount id. Both use
+`project` is the project UUID and `mount` is the UPbDB mount id. Both use
 the existing `isId` rule described in v3, rather than a stricter UUID parser.
 Counts, revisions and atlas versions are non-negative integers. `name` and timestamp
 fields are strings; the parsers do not interpret dates. Changes have
@@ -269,7 +269,7 @@ to `atlas_version`, the mount's current published bundle (integer or null).
 | --- | --- |
 | `lab.atlas.status` (`ATLAS_EVENTS.status`) | `{ type, project, mount: string \| null, name, mode: 'view' \| 'edit', state, revision: number \| null, atlasVersion: number \| null, changes: AtlasChanges \| null, syncedAt: string \| null }`. Send after open and whenever status changes. `revision` must be null when `mount` is null. `state` is `'checking'`, `'unregistered'`, `'in-sync'`, `'local-changes'`, `'server-newer'`, `'both-changed'` or `'offline'`. `'checking'` means the server lookup is in flight immediately after open. |
 | `lab.atlas.drafts` (`ATLAS_EVENTS.drafts`) | `{ type, drafts: [{ project, name, mount: string \| null, baseRevision: number \| null, changes: AtlasChanges, updatedAt: string }] }`, at most 500 entries. Send the full list of every tracked hosted draft with unsynced changes at start-up and whenever it changes, including an empty list when cleared. Standalone app drafts use separate storage and are not reported. |
-| `lab.atlas.synced` (`ATLAS_EVENTS.synced`) | `{ type, project, mount, revision: number, atlasVersion: number \| null, changed: AtlasChanges, at: string }`. Send after any successful sync or update-from-database. `mount` and `revision` are required and non-null. `changed` counts the elements this sync wrote (from laicpmsdb's `SyncOut.applied`): spots created + updated + deleted; grains created + adopted + updated + retired; labels created + updated + retired. A one-grain split reads `{ spots: 1, grains: 3, labels: 0, pixels: false }`. When the same action also publishes new images, a second notice follows with zero counts, `pixels: true` and the new `atlasVersion`; notices are snapshots, newest wins. The shell does not use `changed`: it refreshes on `mount` + `revision`, and on `atlasVersion` for images. |
+| `lab.atlas.synced` (`ATLAS_EVENTS.synced`) | `{ type, project, mount, revision: number, atlasVersion: number \| null, changed: AtlasChanges, at: string }`. Send after any successful sync or update-from-database. `mount` and `revision` are required and non-null. `changed` counts the elements this sync wrote (from UPbDB's `SyncOut.applied`): spots created + updated + deleted; grains created + adopted + updated + retired; labels created + updated + retired. A one-grain split reads `{ spots: 1, grains: 3, labels: 0, pixels: false }`. When the same action also publishes new images, a second notice follows with zero counts, `pixels: true` and the new `atlasVersion`; notices are snapshots, newest wins. The shell does not use `changed`: it refreshes on `mount` + `revision`, and on `atlasVersion` for images. |
 
 | Shell → module command | Payload and when to send |
 | --- | --- |
@@ -310,7 +310,7 @@ An offline lookup is still `ok: true`, with `state: 'offline'` in the status
 event. On a conflict (HTTP 409 / “Both changed”), the module opens its own
 Review differences, remains in edit, and returns `ok: false, code: 'conflict'`.
 
-laicpmsdb refuses a sync that retires more than `max(3, 10%)` of a mount's
+UPbDB refuses a sync that retires more than `max(3, 10%)` of a mount's
 grains or deletes more than `max(3, 10%)` of its spots unless `confirm_bulk`
 follows a user confirmation naming the counts. Grains are only retired;
 spots are only deleted. For shell-started syncs (`leave-edit` with `sync`,
@@ -461,7 +461,7 @@ viewer never writes storage, so the shell remembers the inset for the user:
   See [the theme contract](../docs/bridge-theme.md) for both transports and
   compatibility with older builds.
 - Leave `Ctrl/⌘ 1–4`, `Ctrl/⌘ ,` and `Ctrl/⌘ R` to the shell.
-- Links to other modules: `open('laicpmsdb://…')` or a plain
+- Links to other modules: `open('upbdb://…')` or a plain
   `<a href="grainatlas://…">`. Never `location.href = '<other module URL>'`.
 
 ### grainatlas
@@ -469,7 +469,7 @@ viewer never writes storage, so the shell remembers the inset for the user:
 - Read `?server=<base>&project=<id>&spot=<id>` from `location.search` at
   start-up and open that project and spot: the shell routes
   `grainatlas://project/<id>[/spot/<id>]` to
-  `modules/grainatlas/index.html?server=<laicpmsdb base URL>&project=<id>[&spot=<id>]`.
+  `modules/grainatlas/index.html?server=<upbdb base URL>&project=<id>[&spot=<id>]`.
   Open the project from the recent list, else the published atlas from
   `<server>/atlas/projects/<id>/` with `token()` (docs/WORKFLOW.md section 6).
   Home's "Open images" on a mount's current atlas uses this link.
@@ -483,8 +483,8 @@ viewer never writes storage, so the shell remembers the inset for the user:
 - Publish the static web build as a release asset (`.tar.gz` or `.zip`,
   `index.html` at the top or in one top-level folder) and give its URL and
   SHA-256 to `modules.lock.json`.
-- Phase 2: on a spot click, `open('laicpmsdb://acquisition/<id>')` for the
-  acquisition whose label equals the spot name (looked up in laicpmsdb).
+- Phase 2: on a spot click, `open('upbdb://acquisition/<id>')` for the
+  acquisition whose label equals the spot name (looked up in UPbDB).
 - **`open-files` (to adopt).** When hosted, register `onOpenFiles` at
   start-up and pass the set to the same code as the Open screen:
   `openFiles(set.name, set.files)` (`{ path, file }` is grainatlas's
@@ -496,12 +496,12 @@ viewer never writes storage, so the shell remembers the inset for the user:
   host paths instead of HTML5 `drop` events, so `fromDrop()` does not fire
   there.
 
-### laicpmsdb
+### UPbDB
 
 - Keep the hash routes the resolver targets: `#/acquisitions/<id>`,
   `#/sessions/<id>`, `#/samples/<id>`, `#/mounts/<id>`, `#/search?label=`,
   and `#/ingest?path=<folder>` (the ingest dialog with the folder prefilled;
-  the shell resolves `laicpmsdb://mount/<id>` and `laicpmsdb://ingest?path=`
+  the shell resolves `upbdb://mount/<id>` and `upbdb://ingest?path=`
   to them).
 - **`open-files` (to adopt).** The shell sends a Qtegra export folder, zip or
   CSVs to `#/ingest?path=<host path>` (desktop) or `#/ingest` (web) and
@@ -528,8 +528,8 @@ viewer never writes storage, so the shell remembers the inset for the user:
   from the shell. A Sign out inside the page should `notify({ type:
   'lab.auth.signed-out' })` so the shell signs out too.
 - The shell's ORCID and Google sign-in opens
-  `<server>/v1/auth/<provider>/start?next=laicpmsdb://auth/callback`; laicpmsdb
-  (since ff8c070) redirects to `laicpmsdb://auth/callback?code=<one-time code>`,
+  `<server>/v1/auth/<provider>/start?next=upbdb://auth/callback`; UPbDB
+  (since ff8c070) redirects to `upbdb://auth/callback?code=<one-time code>`,
   or `?error=<slug>` when the sign-in failed. The shell exchanges the code at
   `POST /v1/auth/exchange`, shows the error in its sign-in dialog, and accepts
   a callback only within ten minutes of starting that sign-in.

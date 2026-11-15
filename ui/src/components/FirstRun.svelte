@@ -101,10 +101,10 @@
 
   const bundleNote = $derived(
     status?.bundle
-      ? `laicpmsdb ${status.bundle} and PostgreSQL are included in this app.`
+      ? `UPbDB ${status.bundle} and PostgreSQL are included in this app.`
       : localService.devPath
-        ? 'Development build: runs the laicpmsdb checkout below, with PostgreSQL included in this app.'
-        : 'This build does not include the laicpmsdb service yet; use a lab server.',
+        ? 'Development build: runs the UPbDB checkout below, with PostgreSQL included in this app.'
+        : 'This build does not include the UPbDB service yet; use a lab server.',
   );
 </script>
 
@@ -120,13 +120,13 @@
         <button class="glass panel choice" disabled={!ctx.localAvailable} onclick={() => send({ type: 'choose', mode: 'local' })}>
           <h2>This computer</h2>
           <p class="muted small">
-            UPb Lab runs its own laicpmsdb and PostgreSQL on this machine, starts them when you open Sessions or Review, and stops them when it quits. Works offline; nothing to install.
+            UPb Lab runs its own UPbDB and PostgreSQL on this machine, starts them when you open Sessions or Review, and stops them when it quits. Works offline; nothing to install.
           </p>
           <p class="faint small">{bundleNote}</p>
         </button>
         <button class="glass panel choice" onclick={() => send({ type: 'choose', mode: 'server' })}>
           <h2>Lab server</h2>
-          <p class="muted small">Use the laicpmsdb server your lab runs, by its address. Needs the lab network or VPN.</p>
+          <p class="muted small">Use the UPbDB server your lab runs, by its address. Needs the lab network or VPN.</p>
         </button>
       </div>
     {:else if state.step === 'local'}
@@ -146,14 +146,14 @@
         </label>
         {#if !ctx.bundled}
           <label class="field">
-            laicpmsdb checkout
+            UPbDB checkout
             <input type="text" value={state.form.devPath} oninput={(e) => edit('devPath', e.currentTarget.value)} spellcheck="false" />
             <span class="faint small">Development fallback until the service bundle ships: a checkout with <code>make venv</code> and <code>make ui</code> done.</span>
             {#if state.errors.devPath}<span class="error">{state.errors.devPath}</span>{/if}
           </label>
         {/if}
         <h3>Your account</h3>
-        <p class="faint small">The first account is lab staff and administrator of this laicpmsdb. The password stays on this computer.</p>
+        <p class="faint small">The first account is lab staff and administrator of this UPbDB. The password stays on this computer.</p>
         <div class="two">
           <label class="field">
             User name
@@ -196,7 +196,7 @@
       >
         <h2>Lab server</h2>
         <label class="field">
-          laicpmsdb server URL
+          UPbDB server URL
           <input type="url" value={state.form.serverUrl} oninput={(e) => edit('serverUrl', e.currentTarget.value)} spellcheck="false" />
           <span class="faint small">The Sessions tab opens <code>&lt;server&gt;/app/</code>; you sign in there.</span>
           {#if state.errors.serverUrl}<span class="error">{state.errors.serverUrl}</span>{/if}
@@ -209,10 +209,10 @@
       </form>
     {:else if state.step === 'starting' || state.step === 'account'}
       <div class="glass panel stack">
-        <div class="row"><span class="spinner" aria-hidden="true"></span><h2>Setting up laicpmsdb on this computer</h2></div>
+        <div class="row"><span class="spinner" aria-hidden="true"></span><h2>Setting up UPbDB on this computer</h2></div>
         <ol class="progress small">
           <li class:done={!!status?.postgres.running}>PostgreSQL {status?.postgres.port ? `on port ${status.postgres.port}` : ''}</li>
-          <li class:done={status?.phase === 'ready'}>laicpmsdb service {status?.service.port ? `on port ${status.service.port}` : ''}</li>
+          <li class:done={status?.phase === 'ready'}>UPbDB service {status?.service.port ? `on port ${status.service.port}` : ''}</li>
           <li>Your account{state.form.loadDemo ? ' and the demo data' : ''}</li>
         </ol>
         <p class="muted">{status?.step || 'Starting…'}</p>
@@ -220,7 +220,7 @@
       </div>
     {:else if state.step === 'failed'}
       <div class="glass panel stack">
-        <div class="row"><span class="dot" style="background: var(--danger)"></span><h2>{state.failure?.stage === 'account' ? 'Could not create the account' : 'Could not start laicpmsdb'}</h2></div>
+        <div class="row"><span class="dot" style="background: var(--danger)"></span><h2>{state.failure?.stage === 'account' ? 'Could not create the account' : 'Could not start UPbDB'}</h2></div>
         <p>{state.failure?.message}</p>
         {#if state.failure?.logTail}
           <pre class="log-tail">{state.failure.logTail}</pre>

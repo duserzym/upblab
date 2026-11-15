@@ -366,7 +366,7 @@ pub async fn files_scan(state: State<'_, Files>, paths: Vec<String>) -> Result<S
 
 /// Shell: offer files of a scan to a module tab, replacing any earlier offer.
 /// `nudge`: tell the module's webview now, if it exists; the shell passes
-/// false when it is about to load a new page there (laicpmsdb's ingest
+/// false when it is about to load a new page there (UPbDB's ingest
 /// route), which takes the files when its bridge starts.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
@@ -668,7 +668,7 @@ mod tests {
         fs::write(&zag, "z").unwrap();
         let args = vec![
             OsString::from("--flag"),
-            OsString::from("laicpmsdb://session/x"),
+            OsString::from("upbdb://session/x"),
             zag.clone().into_os_string(),
             OsString::from("/definitely/not/here"),
             dir.clone().into_os_string(),

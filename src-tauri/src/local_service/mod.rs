@@ -1,14 +1,14 @@
 //! "This computer" mode (ADR-0003): the shell runs PostgreSQL 17 and the
-//! laicpmsdb service on this machine, starts both when asked by the shell
+//! UPbDB service on this machine, starts both when asked by the shell
 //! page (on launch, or from the first-run wizard), reports progress as
 //! `local-service://status` events, and stops both on quit.
 //!
 //! Files (see docs/installing.md):
-//! - `<app local data>/laicpmsdb/pg/`          PostgreSQL data directory
-//! - `<app local data>/laicpmsdb/postgresql/`  unpacked bundled binaries
-//! - `<app local data>/laicpmsdb/shell.pid`    which UPb Lab owns them
-//! - `<app local data>/laicpmsdb/service.pid`  the running service, for clean-up after a crash
-//! - `<app log dir>/postgres.log`, `laicpmsdb.log`
+//! - `<app local data>/upbdb/pg/`          PostgreSQL data directory
+//! - `<app local data>/upbdb/postgresql/`  unpacked bundled binaries
+//! - `<app local data>/upbdb/shell.pid`    which UPb Lab owns them
+//! - `<app local data>/upbdb/service.pid`  the running service, for clean-up after a crash
+//! - `<app log dir>/postgres.log`, `upbdb.log`
 //! - store `local-service.json`                 generated passwords and secret key
 
 pub mod guard;
@@ -80,7 +80,7 @@ pub struct Status {
     pub log_tail: Option<String>,
     /// Version of the service bundle in this build, if any.
     pub bundle: Option<String>,
-    /// Development builds: the laicpmsdb checkout pinned as `local` in modules.lock.json.
+    /// Development builds: the UPbDB checkout pinned as `local` in modules.lock.json.
     pub dev_default: Option<String>,
     pub log_dir: String,
     pub data_dir: String,
@@ -130,7 +130,7 @@ fn paths<R: Runtime>(app: &AppHandle<R>) -> Result<Paths, String> {
     // Local, not roaming, app data on Windows (%LOCALAPPDATA%): a database
     // and 100 MB of binaries must not travel with a roaming profile. On
     // macOS both are ~/Library/Application Support/<identifier>.
-    let base = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("laicpmsdb");
+    let base = app.path().app_local_data_dir().map_err(|e| e.to_string())?.join("upbdb");
     let logs = app.path().app_log_dir().map_err(|e| e.to_string())?;
     Ok(Paths {
         data: base.join("pg"),
@@ -138,7 +138,7 @@ fn paths<R: Runtime>(app: &AppHandle<R>) -> Result<Paths, String> {
         owner: base.join("shell.pid"),
         service_pid: base.join("service.pid"),
         pg_log: logs.join("postgres.log"),
-        svc_log: logs.join("laicpmsdb.log"),
+        svc_log: logs.join("upbdb.log"),
         logs,
         base,
     })
@@ -194,14 +194,14 @@ fn secrets<R: Runtime>(app: &AppHandle<R>) -> Result<Secrets, String> {
     Ok(s)
 }
 
-/// The development checkout pinned as `local` of the `laicpmsdb-service`
+/// The development checkout pinned as `local` of the `upbdb-service`
 /// entry in modules.lock.json, for development builds only.
 fn dev_default() -> Option<String> {
     if !cfg!(debug_assertions) {
         return None;
     }
     let lock: serde_json::Value = serde_json::from_str(include_str!("../../../modules.lock.json")).ok()?;
-    let local = lock.get("modules")?.as_array()?.iter().find(|m| m.get("name").and_then(|n| n.as_str()) == Some("laicpmsdb-service"))?.get("local")?.as_str()?;
+    let local = lock.get("modules")?.as_array()?.iter().find(|m| m.get("name").and_then(|n| n.as_str()) == Some("upbdb-service"))?.get("local")?.as_str()?;
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).parent()?;
     let p = repo.join(local);
     let p = std::fs::canonicalize(&p).unwrap_or(p);
@@ -229,10 +229,10 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) {
         s.data_dir = p.data.to_string_lossy().replace('\\', "/");
     }
     match &bundle {
-        Some(b) => log::info!("laicpmsdb service bundle {} at {}", b.version().unwrap_or("?"), b.path().display()),
+        Some(b) => log::info!("UPbDB service bundle {} at {}", b.version().unwrap_or("?"), b.path().display()),
         None => log::info!(
-            "laicpmsdb service bundle: not in this build (modules.lock.json has no release URL for it yet). \
-             'This computer' mode needs a laicpmsdb checkout set in Settings{}; otherwise only 'Lab server' mode is available.",
+            "UPbDB service bundle: not in this build (modules.lock.json has no release URL for it yet). \
+             'This computer' mode needs a UPbDB checkout set in Settings{}; otherwise only 'Lab server' mode is available.",
             s.dev_default.as_ref().map(|d| format!(" (development default {d})")).unwrap_or_default()
         ),
     }
@@ -284,14 +284,14 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
     let owner = std::fs::read_to_string(&p.owner).ok();
     if let OwnerState::Held { pid } = assess_owner(owner.as_deref(), std::process::id(), &OsProbe) {
         return Err(pg_err(format!(
-            "Another UPb Lab (process {pid}) is running this computer's laicpmsdb. Quit it first, then retry."
+            "Another UPb Lab (process {pid}) is running this computer's UPbDB. Quit it first, then retry."
         )));
     }
     std::fs::write(&p.owner, std::process::id().to_string()).map_err(|e| pg_err(e.to_string()))?;
 
     // A service left by a shell that was killed together with its watchdog.
     if let Some(pid) = assess_service(std::fs::read_to_string(&p.service_pid).ok().as_deref(), &OsProbe) {
-        log::warn!("[local-service] stopping laicpmsdb pid {pid} left running by a previous UPb Lab");
+        log::warn!("[local-service] stopping UPbDB pid {pid} left running by a previous UPb Lab");
         process::kill_tree(pid, SERVICE_GRACE);
     }
     let _ = std::fs::remove_file(&p.service_pid);
@@ -300,7 +300,7 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
     let resource = app.path().resource_dir().ok();
     let dev = non_empty(cfg.dev_path.clone()).map(|d| service::expand_home(&d, home().as_deref()));
     let source = service::locate(resource.as_deref(), dev.as_deref()).map_err(svc_err)?;
-    let data_root = service::expand_home(non_empty(Some(cfg.data_root.clone())).as_deref().unwrap_or("~/laicpmsdb"), home().as_deref());
+    let data_root = service::expand_home(non_empty(Some(cfg.data_root.clone())).as_deref().unwrap_or("~/upbdb"), home().as_deref());
     std::fs::create_dir_all(&data_root).map_err(|e| svc_err(format!("could not create the data root {}: {e}", data_root.display())))?;
     if matches!(source, service::Source::Dev { .. }) {
         for d in service::DATA_ROOT_DIRS {
@@ -354,18 +354,18 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
         data_root: &data_root,
         secret_key: &secrets.secret_key,
     });
-    let port = ports::pick(ports::SERVICE_PREFERRED, ports::SERVICE_LAST).ok_or_else(|| svc_err("no free port for laicpmsdb".into()))?;
+    let port = ports::pick(ports::SERVICE_PREFERRED, ports::SERVICE_LAST).ok_or_else(|| svc_err("no free port for UPbDB".into()))?;
     let (pre, serve) = service::serve(&source, &data_root, port);
     for inv in &pre {
-        step(app, "Updating the laicpmsdb database (migrations)…");
+        step(app, "Updating the UPbDB database (migrations)…");
         if !run_to_end(&state, inv, &env, &p.svc_log).map_err(svc_err)? {
-            return Err(svc_err("laicpmsdb migrations failed; see laicpmsdb.log".into()));
+            return Err(svc_err("UPbDB migrations failed; see upbdb.log".into()));
         }
     }
-    step(app, &format!("Starting laicpmsdb on port {port}…"));
+    step(app, &format!("Starting UPbDB on port {port}…"));
     let mut cmd = service_command(&serve, &env);
     process::log_to(&mut cmd, &p.svc_log).map_err(|e| svc_err(e.to_string()))?;
-    let svc = process::spawn(&mut cmd).map_err(|e| svc_err(format!("could not start laicpmsdb: {e}")))?;
+    let svc = process::spawn(&mut cmd).map_err(|e| svc_err(format!("could not start UPbDB: {e}")))?;
     let svc_pid = svc.id();
     let _ = std::fs::write(&p.service_pid, svc_pid.to_string());
     if let Some(g) = state.guard.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
@@ -380,7 +380,7 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
     // Health (contract section 4).
     let (path, strict) = source.health();
     let url = format!("http://127.0.0.1:{port}");
-    step(app, &format!("Waiting for laicpmsdb to answer at {url}{path}…"));
+    step(app, &format!("Waiting for UPbDB to answer at {url}{path}…"));
     let started = Instant::now();
     let version = loop {
         let exited = state
@@ -391,7 +391,7 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
             .and_then(|r| r.svc.as_mut())
             .and_then(|c| c.try_wait().ok().flatten());
         if let Some(status) = exited {
-            return Err(svc_err(format!("laicpmsdb exited during start-up ({status}); see laicpmsdb.log")));
+            return Err(svc_err(format!("UPbDB exited during start-up ({status}); see upbdb.log")));
         }
         if cancelled() {
             return Err(svc_err("cancelled".into()));
@@ -402,11 +402,11 @@ fn start_blocking<R: Runtime>(app: &AppHandle<R>, cfg: StartConfig) -> Result<()
             }
         }
         if started.elapsed() > HEALTH_TIMEOUT {
-            return Err(svc_err(format!("laicpmsdb did not answer {url}{path} within {} s", HEALTH_TIMEOUT.as_secs())));
+            return Err(svc_err(format!("UPbDB did not answer {url}{path} within {} s", HEALTH_TIMEOUT.as_secs())));
         }
         std::thread::sleep(Duration::from_millis(500));
     };
-    log::info!("[local-service] laicpmsdb ready at {url} after {:.1} s", started.elapsed().as_secs_f32());
+    log::info!("[local-service] UPbDB ready at {url} after {:.1} s", started.elapsed().as_secs_f32());
     update(app, |s| {
         s.phase = Phase::Ready;
         s.step = "Running on this computer".into();
@@ -431,7 +431,7 @@ fn stop_blocking<R: Runtime>(app: &AppHandle<R>) {
     let Some(mut r) = state.run.lock().unwrap_or_else(|e| e.into_inner()).take() else { return };
     let p = paths(app).ok();
     if let Some(mut svc) = r.svc.take() {
-        step(app, "Stopping laicpmsdb…");
+        step(app, "Stopping UPbDB…");
         process::terminate(&mut svc, SERVICE_GRACE);
         if let Some(g) = state.guard.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
             g.forget_service();
@@ -533,7 +533,7 @@ pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
     if !running && state.op.try_lock().is_ok() {
         return;
     }
-    log::info!("[local-service] quitting: stopping laicpmsdb and PostgreSQL");
+    log::info!("[local-service] quitting: stopping UPbDB and PostgreSQL");
     let _op = tauri::async_runtime::block_on(state.op.lock());
     stop_blocking(app);
 }
@@ -596,8 +596,8 @@ pub async fn local_service_bootstrap<R: Runtime>(
         let p = paths(&worker)?;
         let (source, env, data_root) = {
             let run = state.run.lock().unwrap_or_else(|e| e.into_inner());
-            let r = run.as_ref().filter(|r| r.svc.is_some()).ok_or("laicpmsdb is not running on this computer")?;
-            (r.source.clone().ok_or("laicpmsdb is not running")?, r.env.clone(), r.data_root.clone())
+            let r = run.as_ref().filter(|r| r.svc.is_some()).ok_or("UPbDB is not running on this computer")?;
+            (r.source.clone().ok_or("UPbDB is not running")?, r.env.clone(), r.data_root.clone())
         };
         state.cancel.store(false, Ordering::SeqCst);
         step(&worker, &format!("Creating the account {username}…"));

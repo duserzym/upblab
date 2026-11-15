@@ -1,13 +1,13 @@
-//! The laicpmsdb service: where it is and how to run it
+//! The UPbDB service: where it is and how to run it
 //! (docs/service-bundle-contract.md sections 1 to 3 and 7).
 
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
-    /// `<resources>/laicpmsdb-service/` from the release asset.
+    /// `<resources>/upbdb-service/` from the release asset.
     Bundle { root: PathBuf, python: PathBuf, version: String },
-    /// A laicpmsdb checkout with its `.venv` (development fallback).
+    /// A UPbDB checkout with its `.venv` (development fallback).
     Dev { checkout: PathBuf, python: PathBuf, manage: PathBuf },
 }
 
@@ -57,7 +57,7 @@ pub fn venv_python(checkout: &Path) -> PathBuf {
 
 /// The bundle in the resources folder, if this build carries one.
 pub fn bundled(resource_dir: Option<&Path>) -> Option<Source> {
-    let root = resource_dir?.join("laicpmsdb-service");
+    let root = resource_dir?.join("upbdb-service");
     let version = std::fs::read_to_string(root.join("VERSION")).ok()?.trim().to_string();
     let python = bundle_python(&root);
     (python.is_file() && !version.is_empty()).then_some(Source::Bundle { root, python, version })
@@ -68,7 +68,7 @@ pub fn dev_checkout(path: &Path) -> Result<Source, String> {
     let python = venv_python(path);
     let manage = path.join("service").join("manage.py");
     if !manage.is_file() {
-        return Err(format!("{} is not a laicpmsdb checkout (no service/manage.py)", path.display()));
+        return Err(format!("{} is not a UPbDB checkout (no service/manage.py)", path.display()));
     }
     if !python.is_file() {
         return Err(format!("{} has no virtualenv: run `make venv` there first", path.display()));
@@ -83,8 +83,8 @@ pub fn locate(resource_dir: Option<&Path>, dev_path: Option<&Path>) -> Result<So
     }
     match dev_path {
         Some(p) => dev_checkout(p),
-        None => Err("This build of UPb Lab does not include the laicpmsdb service yet, and no laicpmsdb \
-                     checkout is set in Settings. Use a Lab server, or set Settings → laicpmsdb checkout."
+        None => Err("This build of UPb Lab does not include the UPbDB service yet, and no UPbDB \
+                     checkout is set in Settings. Use a Lab server, or set Settings → UPbDB checkout."
             .into()),
     }
 }
@@ -99,7 +99,7 @@ pub struct Invocation {
 }
 
 fn contract(python: &Path, data_root: &Path, args: &[&str]) -> Invocation {
-    let mut a = vec!["-m".to_string(), "laicpmsdb_service".to_string()];
+    let mut a = vec!["-m".to_string(), "upbdb_service".to_string()];
     a.extend(args.iter().map(|s| s.to_string()));
     Invocation { program: python.to_path_buf(), args: a, cwd: data_root.to_path_buf(), env: vec![] }
 }
@@ -175,12 +175,12 @@ pub fn environment(e: &Environment) -> Vec<(String, String)> {
     let data_root = e.data_root.to_string_lossy().replace('\\', "/");
     vec![
         ("DATABASE_URL".into(), e.database_url.into()),
-        ("LAICPMSDB_DATA_ROOT".into(), data_root),
+        ("UPBDB_DATA_ROOT".into(), data_root),
         ("DJANGO_SECRET_KEY".into(), e.secret_key.into()),
         ("DJANGO_DEBUG".into(), "0".into()),
         ("DJANGO_ALLOWED_HOSTS".into(), "127.0.0.1,localhost".into()),
-        ("LAICPMSDB_CORS_ORIGINS".into(), "tauri://localhost,http://tauri.localhost".into()),
-        ("LAICPMSDB_REGISTRATION".into(), "closed".into()),
+        ("UPBDB_CORS_ORIGINS".into(), "tauri://localhost,http://tauri.localhost".into()),
+        ("UPBDB_REGISTRATION".into(), "closed".into()),
         ("PYTHONDONTWRITEBYTECODE".into(), "1".into()),
         ("PYTHONUNBUFFERED".into(), "1".into()),
         ("PYTHONUTF8".into(), "1".into()),
@@ -192,10 +192,10 @@ pub fn environment(e: &Environment) -> Vec<(String, String)> {
 pub const SCRUB: &[&str] = &["PYTHONHOME", "PYTHONPATH", "VIRTUAL_ENV", "DJANGO_SETTINGS_MODULE", "PGPASSWORD", "PGHOST", "PGPORT"];
 
 pub fn database_url(password: &str, port: u16) -> String {
-    format!("postgres://laicpmsdb:{password}@127.0.0.1:{port}/laicpmsdb")
+    format!("postgres://upbdb:{password}@127.0.0.1:{port}/upbdb")
 }
 
-/// The NAS layout under the data root (laicpmsdb `make data-root`).
+/// The NAS layout under the data root (UPbDB `make data-root`).
 pub const DATA_ROOT_DIRS: [&str; 8] = ["raw", "attachments", "derived", "inbox", "quarantine", "backups", "exports", "releases"];
 
 /// Expand a leading `~` and use the platform's separators.
@@ -223,7 +223,7 @@ mod tests {
     fn bundle_needs_version_and_interpreter() {
         let res = tmp("bundle");
         assert!(bundled(Some(&res)).is_none());
-        let root = res.join("laicpmsdb-service");
+        let root = res.join("upbdb-service");
         let py = bundle_python(&root);
         std::fs::create_dir_all(py.parent().unwrap()).unwrap();
         std::fs::write(&py, "").unwrap();
@@ -240,7 +240,7 @@ mod tests {
     #[test]
     fn checkout_needs_manage_py_and_venv() {
         let co = tmp("checkout");
-        assert!(dev_checkout(&co).unwrap_err().contains("not a laicpmsdb checkout"));
+        assert!(dev_checkout(&co).unwrap_err().contains("not a UPbDB checkout"));
         std::fs::create_dir_all(co.join("service")).unwrap();
         std::fs::write(co.join("service/manage.py"), "").unwrap();
         assert!(dev_checkout(&co).unwrap_err().contains("make venv"));
@@ -265,12 +265,12 @@ mod tests {
     fn contract_commands() {
         let (pre, serve_) = serve(&bundle(), Path::new("/data"), 8001);
         assert!(pre.is_empty(), "serve migrates by itself");
-        assert_eq!(serve_.args, ["-m", "laicpmsdb_service", "serve", "--host", "127.0.0.1", "--port", "8001"]);
+        assert_eq!(serve_.args, ["-m", "upbdb_service", "serve", "--host", "127.0.0.1", "--port", "8001"]);
         assert_eq!(serve_.cwd, PathBuf::from("/data"));
         let b = bootstrap(&bundle(), Path::new("/data"), "ada", "ada@example.org", Path::new("/tmp/pw")).unwrap();
-        assert_eq!(b.args, ["-m", "laicpmsdb_service", "bootstrap", "--username", "ada", "--password-file", "/tmp/pw", "--email", "ada@example.org"]);
+        assert_eq!(b.args, ["-m", "upbdb_service", "bootstrap", "--username", "ada", "--password-file", "/tmp/pw", "--email", "ada@example.org"]);
         assert!(b.env.is_empty());
-        assert_eq!(load_demo(&bundle(), Path::new("/data")).args, ["-m", "laicpmsdb_service", "load-demo"]);
+        assert_eq!(load_demo(&bundle(), Path::new("/data")).args, ["-m", "upbdb_service", "load-demo"]);
     }
 
     #[test]
@@ -301,22 +301,22 @@ mod tests {
     fn environment_follows_the_contract() {
         let env = environment(&Environment {
             database_url: &database_url("pw", 55432),
-            data_root: Path::new("C:\\Users\\Zoë\\laicpmsdb"),
+            data_root: Path::new("C:\\Users\\Zoë\\upbdb"),
             secret_key: "k",
         });
         let get = |k: &str| env.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
-        assert_eq!(get("DATABASE_URL"), Some("postgres://laicpmsdb:pw@127.0.0.1:55432/laicpmsdb"));
-        assert_eq!(get("LAICPMSDB_DATA_ROOT"), Some("C:/Users/Zoë/laicpmsdb"));
+        assert_eq!(get("DATABASE_URL"), Some("postgres://upbdb:pw@127.0.0.1:55432/upbdb"));
+        assert_eq!(get("UPBDB_DATA_ROOT"), Some("C:/Users/Zoë/upbdb"));
         assert_eq!(get("DJANGO_DEBUG"), Some("0"));
         assert_eq!(get("DJANGO_ALLOWED_HOSTS"), Some("127.0.0.1,localhost"));
-        assert_eq!(get("LAICPMSDB_CORS_ORIGINS"), Some("tauri://localhost,http://tauri.localhost"));
-        assert!(get("LAICPMSDB_REGISTRATION").is_some());
+        assert_eq!(get("UPBDB_CORS_ORIGINS"), Some("tauri://localhost,http://tauri.localhost"));
+        assert!(get("UPBDB_REGISTRATION").is_some());
     }
 
     #[test]
     fn home_expansion() {
         let home = Path::new("/Users/z");
-        assert_eq!(expand_home("~/laicpmsdb", Some(home)), PathBuf::from("/Users/z").join("laicpmsdb"));
+        assert_eq!(expand_home("~/upbdb", Some(home)), PathBuf::from("/Users/z").join("upbdb"));
         assert_eq!(expand_home("~", Some(home)), PathBuf::from("/Users/z"));
         assert_eq!(expand_home("/srv/data", Some(home)), PathBuf::from("/srv/data"));
         assert_eq!(expand_home("~/a/b", None), PathBuf::from("~/a/b"));

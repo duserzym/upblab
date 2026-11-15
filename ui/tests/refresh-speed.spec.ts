@@ -30,7 +30,7 @@ test('atlas sync keeps the Review tree visible while replacing results without r
     const view = document.querySelector('[data-testid="review-view"]')!;
     new MutationObserver(() => {
       observation.blank ||= !view.querySelector('[role="tree"]');
-      observation.loading ||= view.textContent?.includes('Loading results from laicpmsdb') ?? false;
+      observation.loading ||= view.textContent?.includes('Loading results from UPbDB') ?? false;
     }).observe(view, { subtree: true, childList: true, characterData: true });
     const invoke = w.__TAURI_INTERNALS__.invoke;
     w.__TAURI_INTERNALS__.invoke = async (name, args) => {
@@ -47,7 +47,7 @@ test('atlas sync keeps the Review tree visible while replacing results without r
     .__emit('lab-bridge://notify', { source: 'grainatlas', event }), atlasSyncedFixture);
   await page.waitForFunction(() => (window as unknown as { __refreshObservation: { requested: boolean } }).__refreshObservation.requested);
   await expect(tree).toBeVisible();
-  await expect(page.getByText('Loading results from laicpmsdb…', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Loading results from UPbDB…', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('treeitem', { name: 'Zircon_2', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.evaluate(() => (window as unknown as { __releaseResults: () => void }).__releaseResults());
   await expect(page.getByRole('treeitem', { name: 'Zircon_2 synced', exact: true })).toHaveAttribute('aria-selected', 'true');

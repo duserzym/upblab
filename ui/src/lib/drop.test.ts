@@ -20,7 +20,7 @@ const tm4000 = [
   e(0, 'notes.pdf'),
 ];
 
-// laicpmsdb tests/fixtures/qtegra/Apatite_demo.
+// UPbDB tests/fixtures/qtegra/Apatite_demo.
 const qtegra = ['1', '10', '13', '141', '15'].map((n) => e(0, `Apatite_demo_${n}.csv`, 100));
 
 describe('classify', () => {
@@ -123,7 +123,7 @@ describe('paths', () => {
   it('file URLs from Finder and Explorer', () => {
     expect(fileUrlToPath('file:///Users/lab/Mount%20XS/')).toBe('/Users/lab/Mount XS');
     expect(fileUrlToPath('file:///C:/scans/pkg')).toBe('C:\\scans\\pkg');
-    expect(fileUrlToPath('laicpmsdb://session/x')).toBeNull();
+    expect(fileUrlToPath('upbdb://session/x')).toBeNull();
     expect(fileUrlToPath('not a url')).toBeNull();
   });
 

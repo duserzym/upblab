@@ -127,17 +127,17 @@ test('tree hash ignores file order and platform separators', () => {
   assert.notEqual(treeHash(copy), treeHash(f.build));
 });
 
-// The laicpmsdb service bundle (docs/service-bundle-contract.md section 5).
+// The UPbDB service bundle (docs/service-bundle-contract.md section 5).
 function serviceFixture({ version = '0.4.0', python = 'python/bin/python3' } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fetch-service-test-'));
-  const bundle = path.join(dir, 'build', 'laicpmsdb-service');
+  const bundle = path.join(dir, 'build', 'upbdb-service');
   fs.mkdirSync(path.join(bundle, path.dirname(python)), { recursive: true });
   fs.writeFileSync(path.join(bundle, python), '#!/bin/sh\n');
   if (version !== null) fs.writeFileSync(path.join(bundle, 'VERSION'), `${version}\n`);
-  const archive = path.join(dir, `laicpmsdb-service-${version}-macos-arm64.tar.gz`);
-  const r = spawnSync(tarCommand(), ['-czf', archive, '-C', path.join(dir, 'build'), 'laicpmsdb-service']);
+  const archive = path.join(dir, `upbdb-service-${version}-macos-arm64.tar.gz`);
+  const r = spawnSync(tarCommand(), ['-czf', archive, '-C', path.join(dir, 'build'), 'upbdb-service']);
   assert.equal(r.status, 0, r.stderr?.toString());
-  const out = path.join(dir, 'resources', 'laicpmsdb-service');
+  const out = path.join(dir, 'resources', 'upbdb-service');
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, 'README.md'), 'kept');
   return { dir, archive, out };
@@ -145,12 +145,12 @@ function serviceFixture({ version = '0.4.0', python = 'python/bin/python3' } = {
 
 function serviceEntry(f, pin) {
   return {
-    name: 'laicpmsdb-service',
+    name: 'upbdb-service',
     kind: 'service',
     version: '0.4.0',
     platforms: { 'macos-arm64': pin, 'windows-x64': { url: null, sha256: null } },
-    local: '../laicpmsdb',
-    out: 'resources/laicpmsdb-service',
+    local: '../upbdb',
+    out: 'resources/upbdb-service',
   };
 }
 
@@ -164,7 +164,7 @@ test('unpacks the service bundle for the platform, keeping the README', async ()
   const pin = { url: pathToFileURL(f.archive).href, sha256: sha256(fs.readFileSync(f.archive)) };
   const lock = writeLock(f.dir, [serviceEntry(f, pin)]);
   const r = await fetchModules({ lock, out: path.join(f.dir, 'web'), platform: 'macos-arm64', ...quiet });
-  assert.deepEqual(r.services.map((s) => [s.name, s.version, s.platform]), [['laicpmsdb-service', '0.4.0', 'macos-arm64']]);
+  assert.deepEqual(r.services.map((s) => [s.name, s.version, s.platform]), [['upbdb-service', '0.4.0', 'macos-arm64']]);
   assert.equal(fs.readFileSync(path.join(f.out, 'VERSION'), 'utf8').trim(), '0.4.0');
   assert.ok(fs.existsSync(path.join(f.out, 'python', 'bin', 'python3')));
   assert.equal(fs.readFileSync(path.join(f.out, 'README.md'), 'utf8'), 'kept');
@@ -178,7 +178,7 @@ test('without a release for the platform the bundle folder is emptied (Lab serve
   fs.writeFileSync(path.join(f.out, 'VERSION'), 'stale');
   const lock = writeLock(f.dir, [serviceEntry(f, { url: null, sha256: null })]);
   const r = await fetchModules({ lock, out: path.join(f.dir, 'web'), platform: 'windows-x64', ...quiet });
-  assert.deepEqual(r.skipped, ['laicpmsdb-service']);
+  assert.deepEqual(r.skipped, ['upbdb-service']);
   assert.deepEqual(fs.readdirSync(f.out), ['README.md']);
   await assert.rejects(fetchModules({ lock, out: path.join(f.dir, 'web'), platform: 'windows-x64', strict: true, ...quiet }), /no release for windows-x64/);
 });

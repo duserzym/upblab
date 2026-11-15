@@ -1,5 +1,5 @@
 // The two deliveries of the shell page (plan decision 3): inside Tauri on the
-// desktop, and as a plain page served by laicpmsdb at /desk/. Everything that
+// desktop, and as a plain page served by UPbDB at /desk/. Everything that
 // differs between them goes through this file.
 
 import type { BridgeCommand } from '@lab/bridge';
@@ -166,13 +166,13 @@ export const localServiceApi = {
 
 // ------------------------------------------------ identity (plan decision 5)
 
-/** Which laicpmsdb the shell signs in to, and the keychain entry for its token. */
+/** Which UPbDB the shell signs in to, and the keychain entry for its token. */
 export interface AuthTarget {
   server: string;
   key: string;
 }
 
-/** laicpmsdb's AccountOut, the fields the shell uses. */
+/** UPbDB's AccountOut, the fields the shell uses. */
 export interface Account {
   username: string;
   display_name?: string;

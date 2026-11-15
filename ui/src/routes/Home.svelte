@@ -109,7 +109,7 @@
   const pills = $derived.by((): Pill[] => {
     const sessionsPill: Pill = shell.local
       ? {
-          tab: 'sessions', name: 'Sessions', module: 'laicpmsdb', ok: localOk,
+          tab: 'sessions', name: 'Sessions', module: 'UPbDB', ok: localOk,
           state: local?.phase === 'ready' ? 'This computer' : `This computer · ${localLine}`,
           detail: [
             `PostgreSQL ${local?.postgres.running ? `running on 127.0.0.1:${local.postgres.port}` : 'stopped'}${local?.postgres.source ? ` (${local.postgres.source})` : ''}`,
@@ -117,7 +117,7 @@
           ].join(' · '),
         }
       : {
-          tab: 'sessions', name: 'Sessions', module: 'laicpmsdb', ok: server,
+          tab: 'sessions', name: 'Sessions', module: 'UPbDB', ok: server,
           state: server === false ? `${host(settings.serverUrl)} unreachable` : host(settings.serverUrl) || 'no server',
           detail: `${settings.serverUrl} · ${server === null ? 'checking…' : server ? 'server reachable' : 'server unreachable'}`,
         };
@@ -190,14 +190,14 @@
       </Toolbar>
       <div class="section-body" hidden={collapsed('sessions')}>
         {#if overview.state === 'idle' || (overview.state === 'loading' && overview.sessions.length === 0)}
-          <p class="faint small">{identity.target ? 'Loading sessions…' : shell.local ? 'Open Sessions or Review to start the local database.' : 'No laicpmsdb server configured.'}</p>
+          <p class="faint small">{identity.target ? 'Loading sessions…' : shell.local ? 'Open Sessions or Review to start the local database.' : 'No UPbDB server configured.'}</p>
         {:else if overview.state === 'signed-out'}
           <div class="row">
             <p class="muted small grow">Sign in to see your sessions, their reductions and the images of your mounts.</p>
             <button class="btn primary" onclick={() => (identity.dialog = true)}>Sign in</button>
           </div>
         {:else if overview.state === 'unreachable'}
-          <div class="row"><span class="dot" style="background: var(--danger)"></span><span class="small">laicpmsdb is not answering at <code>{identity.target?.server}</code>.</span></div>
+          <div class="row"><span class="dot" style="background: var(--danger)"></span><span class="small">UPbDB is not answering at <code>{identity.target?.server}</code>.</span></div>
           <p class="faint small mono">{overview.error}</p>
         {:else if overview.state === 'error'}
           <p class="error small">Could not read sessions: {overview.error}</p>
@@ -266,7 +266,7 @@
         <input
           type="text"
           class="grow mono"
-          placeholder="laicpmsdb://acquisition/<id>, grainatlas://project/<id>/spot/<id>, upbr://session/<id>"
+          placeholder="upbdb://acquisition/<id>, grainatlas://project/<id>/spot/<id>, upbr://session/<id>"
           bind:value={linkInput}
           aria-label="Open a link"
         />

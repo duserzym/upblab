@@ -5,19 +5,19 @@ three schemes with the operating system and routes them to a tab or an app:
 
 | Link | Opens |
 | --- | --- |
-| `laicpmsdb://acquisition/<id>` | Sessions tab, `<server>/app/#/acquisitions/<id>` |
-| `laicpmsdb://session/<id>` | Sessions tab, `<server>/app/#/sessions/<id>` |
-| `laicpmsdb://sample/<id>` | Sessions tab, `<server>/app/#/samples/<id>` |
-| `laicpmsdb://mount/<id>` | Sessions tab, `<server>/app/#/mounts/<id>` (the mount page with its atlas view) |
-| `laicpmsdb://ingest?path=<folder>` | Sessions tab, `<server>/app/#/ingest?path=<folder>` (the ingest dialog, folder prefilled; desktop) |
-| `laicpmsdb://search?label=<label>` | Sessions tab, `<server>/app/#/search?label=<label>` |
-| `laicpmsdb://auth/callback?code=<code>`, `?error=<slug>` | completes the shell's ORCID or Google sign-in, or shows why it failed (only one the shell started in the last ten minutes, only from the OS) |
+| `upbdb://acquisition/<id>` | Sessions tab, `<server>/app/#/acquisitions/<id>` |
+| `upbdb://session/<id>` | Sessions tab, `<server>/app/#/sessions/<id>` |
+| `upbdb://sample/<id>` | Sessions tab, `<server>/app/#/samples/<id>` |
+| `upbdb://mount/<id>` | Sessions tab, `<server>/app/#/mounts/<id>` (the mount page with its atlas view) |
+| `upbdb://ingest?path=<folder>` | Sessions tab, `<server>/app/#/ingest?path=<folder>` (the ingest dialog, folder prefilled; desktop) |
+| `upbdb://search?label=<label>` | Sessions tab, `<server>/app/#/search?label=<label>` |
+| `upbdb://auth/callback?code=<code>`, `?error=<slug>` | completes the shell's ORCID or Google sign-in, or shows why it failed (only one the shell started in the last ten minutes, only from the OS) |
 | `grainatlas://project/<id>` | standalone grainatlas on that project (desktop); the hosted build `<server>/atlas/?project=<id>` in a new browser tab (web) |
 | `grainatlas://project/<id>/spot/<id>` | the same, with that spot selected and centred |
 | `upbr://session/<id>?server=&code=` | launches UPbRPy Studio in database mode (`--open "<link>"`); without `code`, the shell mints one with its sign-in (`POST /v1/auth/handoff`) and adds its `server` (docs/WORKFLOW.md section 4); the Reduce tab shows the result, or install instructions when Studio is missing |
 | `upbr://run/<id>?server=` | the same, for the project of a reduction run |
 | `upbr://session/<id>?…&acquisition=<id>&via=upblab`, `upbr://run/<id>?…` | the same, opening at one analysis with its raw sweep (Openers section below) |
-| `laicpmsdb://run/<id>` | Review, scoped to the run's session and showing that run (sent by Studio after a submission) |
+| `upbdb://run/<id>` | Review, scoped to the run's session and showing that run (sent by Studio after a submission) |
 | `https://…`, `http://…` | the system browser |
 
 Query links pass on only their one known parameter, re-encoded. One-time
@@ -34,16 +34,16 @@ The resolver is `ui/src/lib/links.ts`; its tests are the specification.
   and NSIS installers. A second launch on Windows hands its URL to the running
   instance (single-instance plugin) and exits.
 - **A module.** `await open(url)` from `@lab/bridge`, or a plain
-  `<a href="laicpmsdb://…">`: in the desktop shell the host cancels the
+  `<a href="upbdb://…">`: in the desktop shell the host cancels the
   navigation and forwards the URL.
 - **You.** The link box on the Home tab, handy for testing.
 - **Opened files.** A Qtegra export dropped on the window, opened from the
   Finder or Explorer, or picked with Home's Open buttons becomes
-  `laicpmsdb://ingest?path=<folder>` (desktop). Image folders, `.grainatlas`
+  `upbdb://ingest?path=<folder>` (desktop). Image folders, `.grainatlas`
   folders and `.gaproj` files are handed to standalone grainatlas
   (`open -b org.grainatlas.desktop <paths>` on macOS, the paths as arguments
   on Windows); on the web the page asks you to open grainatlas in a new
-  browser tab and drop them there. Session files reach laicpmsdb through
+  browser tab and drop them there. Session files reach UPbDB through
   `@lab/bridge` `open-files` (bridge/README.md); `ui/src/lib/drop.ts`
   decides where.
 - **The web delivery.** `/desk/open?url=<encoded link>`.
@@ -51,14 +51,14 @@ The resolver is `ui/src/lib/links.ts`; its tests are the specification.
 ## Web delivery
 
 Except on the shell development ports described below, the shell served by
-laicpmsdb at `/desk/` always uses the page's own origin
+UPbDB at `/desk/` always uses the page's own origin
 (`location.origin`) for its database server. Stored server URLs and the
 desktop default are ignored, including before settings load. Web Settings
 shows this server read-only. This keeps tests and scratch servers from ever
 reaching the working service at `localhost:8000`.
 
 On the shell's own development ports (`localhost` or `127.0.0.1`, port 1420
-or 1431), the page origin is the shell, not laicpmsdb. Pass `?server=<url>`
+or 1431), the page origin is the shell, not UPbDB. Pass `?server=<url>`
 explicitly to select a server, or leave it out to show the normal no-server
 states. The override must be an HTTP or HTTPS URL; an invalid override also
 leaves no server configured. This applies to every path on those ports,
@@ -72,14 +72,14 @@ macOS (a built app; Launch Services learns the schemes once the `.app` has
 been opened or copied to `/Applications`):
 
 ```bash
-open 'laicpmsdb://session/2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91'
+open 'upbdb://session/2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91'
 ```
 
 Windows (after installing the `.msi` or `.exe`, or while `make dev` runs,
 which registers the schemes for the current user):
 
 ```bash
-start laicpmsdb://session/2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91
+start upbdb://session/2f1c9a4e-6b1d-4c3e-9f7a-0d8e5b6c7a91
 ```
 
 On macOS `make dev` runs an unbundled binary, so the OS cannot deliver links to
@@ -218,7 +218,7 @@ One link is added so Studio can bring Review forward after a submission:
 
 | Link | Opens |
 | --- | --- |
-| `laicpmsdb://run/<run uuid>` | Review, scoped to the run's session (`GET /v1/runs/<id>`), showing that run, keeping the selected spot when it is in the session |
+| `upbdb://run/<run uuid>` | Review, scoped to the run's session (`GET /v1/runs/<id>`), showing that run, keeping the selected spot when it is in the session |
 
 Studio opens it through the operating system after **Submit to database**
 succeeds, only for a project opened by a link carrying `via=upblab`.
@@ -263,5 +263,5 @@ hidden, run again on focus): one request per open mount or session. That
 means each app UPb Lab opened in the last two hours, plus Review's current
 scope (a mount's atlas project, or a session's runs and the atlas projects of
 its rows, at most 8). An item whose request fails waits 10 minutes before the
-next try. Studio also keeps opening `laicpmsdb://run/<id>` after a submit,
+next try. Studio also keeps opening `upbdb://run/<id>` after a submit,
 which brings Review to that run on purpose.

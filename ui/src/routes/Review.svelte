@@ -291,9 +291,9 @@
     {/if}
   </div>
   {#if review.state==='signed-out'}
-    <div class="panel stack"><p class="muted">{review.error||'Sign in to read stored results from laicpmsdb.'}</p><button class="btn" onclick={()=>identity.dialog=true}>Sign in</button></div>
-  {:else if review.state==='idle'}<p class="panel muted">No laicpmsdb server configured. Set a server in Settings to read results.</p>
-  {:else if review.state==='loading'}<p class="panel muted" role="status">Loading results from laicpmsdb…</p>
+    <div class="panel stack"><p class="muted">{review.error||'Sign in to read stored results from UPbDB.'}</p><button class="btn" onclick={()=>identity.dialog=true}>Sign in</button></div>
+  {:else if review.state==='idle'}<p class="panel muted">No UPbDB server configured. Set a server in Settings to read results.</p>
+  {:else if review.state==='loading'}<p class="panel muted" role="status">Loading results from UPbDB…</p>
   {:else if review.state==='error'}<div class="panel stack"><p class="error">Could not read results: {review.error}</p><button class="btn" onclick={()=>void review.load()}>Retry</button></div>
   {:else}
     {#if review.error}<p class="error small notice" role="status">{review.error}</p>{/if}

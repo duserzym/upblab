@@ -38,7 +38,7 @@ describe('summariseRuns', () => {
 });
 
 describe('parseAtlas', () => {
-  it('reads laicpmsdb\'s reply: current atlas, or none when current is null', () => {
+  it('reads upbdb\'s reply: current atlas, or none when current is null', () => {
     const reply = {
       mount_id: 'm',
       current: { id: 'a2', project_id: 'p', version: 2, name: 'YZ-APT-01 CL', is_current: true, uploaded_at: '2026-11-03T20:00:00Z' },

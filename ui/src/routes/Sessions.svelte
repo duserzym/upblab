@@ -10,8 +10,8 @@
   let {
     active,
     module = 'sessions',
-    title = 'laicpmsdb',
-    unreachable = 'The Sessions tab shows the laicpmsdb web app from',
+    title = 'UPbDB',
+    unreachable = 'The Sessions tab shows the UPbDB web app from',
   }: {
     active: boolean;
     module?: 'sessions' | 'people';
@@ -33,7 +33,7 @@
     checkedAt = new Date();
   }
 
-  // "This computer": the host's status events say when laicpmsdb is up.
+  // "This computer": the host's status events say when UPbDB is up.
   const local = $derived(shell.local);
   const localReady = $derived(local && localService.status?.phase === 'ready' && !!localService.url);
 
@@ -67,7 +67,7 @@
     {/if}
   {:else if !shell.serverUrl}
     <div class="center">
-      <p class="glass panel muted">No laicpmsdb server configured.</p>
+      <p class="glass panel muted">No UPbDB server configured.</p>
     </div>
   {:else if status === 'reachable'}
     <ModuleSurface {module} {title} home={appUrl} target={shell.targets[module]} {active} />
@@ -75,16 +75,16 @@
     <div class="center">
       <div class="glass panel card stack">
         {#if status === 'checking'}
-          <h2>Connecting to laicpmsdb…</h2>
+          <h2>Connecting to UPbDB…</h2>
           <p class="muted mono">{appUrl}</p>
         {:else}
-          <div class="row"><span class="dot" style="background: var(--danger)"></span><h2>laicpmsdb server unreachable</h2></div>
+          <div class="row"><span class="dot" style="background: var(--danger)"></span><h2>UPbDB server unreachable</h2></div>
           <p class="muted">
             {unreachable} <code>{appUrl}</code>, but nothing answered there.
           </p>
           {#if error}<p class="faint small mono">{error}</p>{/if}
           <ul class="muted small">
-            <li>Running laicpmsdb locally? Start it with <code>make dev</code> in the laicpmsdb repository.</li>
+            <li>Running UPbDB locally? Start it with <code>make dev</code> in the UPbDB repository.</li>
             <li>Using the lab server? Check the server URL in Settings and your network or VPN.</li>
           </ul>
           <div class="row">

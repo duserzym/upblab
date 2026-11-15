@@ -111,12 +111,12 @@ class Shell {
     return this.modules.find((m) => m.name === 'grainatlas');
   }
 
-  /** Desktop in "This computer" mode: laicpmsdb runs on this machine. */
+  /** Desktop in "This computer" mode: UPbDB runs on this machine. */
   get local(): boolean {
     return isDesktop && settings.mode === 'local';
   }
 
-  /** Where laicpmsdb is: the local instance (once healthy) or the configured server. */
+  /** Where UPbDB is: the local instance (once healthy) or the configured server. */
   get serverUrl(): string {
     return this.local ? (localService.url ?? LOCAL_PENDING) : settings.serverUrl;
   }
@@ -126,7 +126,7 @@ class Shell {
     return { server: this.serverUrl, atlas: atlasDir, theme: settings.effectiveTheme };
   }
 
-  /** Which laicpmsdb to sign in to; null while the local instance is not up yet. */
+  /** Which UPbDB to sign in to; null while the local instance is not up yet. */
   get identityTarget(): AuthTarget | null {
     if (this.local) return localService.url ? { server: localService.url, key: LOCAL_KEY } : null;
     const server = this.serverUrl;

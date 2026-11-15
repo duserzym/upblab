@@ -3,19 +3,19 @@
 // user clicks one in an email or a notebook (deep-link plugin), and modules
 // post them through @lab/bridge.
 //
-//   laicpmsdb://acquisition/<id>          -> Sessions, /app/acquisitions/<id>
-//   laicpmsdb://session/<id>              -> Sessions, /app/sessions/<id>
-//   laicpmsdb://sample/<id>               -> Sessions, /app/samples/<id>
-//   laicpmsdb://mount/<id>                -> Sessions, /app/mounts/<id> (the mount page with its atlas)
-//   laicpmsdb://ingest?path=<folder>      -> Sessions, /app/ingest?path=<folder> (desktop: the ingest dialog)
-//   laicpmsdb://search?label=<label>      -> Sessions, /app/search?label=<label>
-//   laicpmsdb://data-model[/<table>[/<column>]] -> Sessions, /app/data-model[/…] (laicpmsdb's Data Model tab)
-//   laicpmsdb://method-code/<CODE>        -> Sessions, /app/method-codes/<CODE> (laicpmsdb's Method Codes tab)
+//   upbdb://acquisition/<id>          -> Sessions, /app/acquisitions/<id>
+//   upbdb://session/<id>              -> Sessions, /app/sessions/<id>
+//   upbdb://sample/<id>               -> Sessions, /app/samples/<id>
+//   upbdb://mount/<id>                -> Sessions, /app/mounts/<id> (the mount page with its atlas)
+//   upbdb://ingest?path=<folder>      -> Sessions, /app/ingest?path=<folder> (desktop: the ingest dialog)
+//   upbdb://search?label=<label>      -> Sessions, /app/search?label=<label>
+//   upbdb://data-model[/<table>[/<column>]] -> Sessions, /app/data-model[/…] (UPbDB's Data Model tab)
+//   upbdb://method-code/<CODE>        -> Sessions, /app/method-codes/<CODE> (UPbDB's Method Codes tab)
 //   grainatlas://project/<id>             -> standalone or hosted grainatlas
 //   grainatlas://project/<id>/spot/<id>   -> standalone or hosted grainatlas, with spot
 //   upbr://session/<id>?server=&code=     -> launch UPbRPy Studio in database mode (docs/WORKFLOW.md 4)
 //   upbr://run/<id>?server=               -> launch Studio on the project of that reduction run
-//   laicpmsdb://auth/callback?code=…      -> finish the shell's ORCID or Google sign-in
+//   upbdb://auth/callback?code=…      -> finish the shell's ORCID or Google sign-in
 //   https://… and http://…                -> system browser
 //
 // Anything else is refused; the caller logs the refusal.
@@ -23,7 +23,9 @@
 export type TabId = 'home' | 'sessions' | 'review' | 'reduce' | 'people';
 export type ModuleTab = 'images' | 'sessions' | 'people';
 
-export const SCHEMES = ['laicpmsdb', 'grainatlas', 'upbr'] as const;
+export const SCHEMES = ['upbdb', 'grainatlas', 'upbr'] as const;
+
+export const moduleLabel = (name: string): string => name === 'upbdb' ? 'UPbDB' : name;
 export type Scheme = (typeof SCHEMES)[number];
 
 export type Resolution =
@@ -45,7 +47,7 @@ function refuse(url: string, reason: string): Resolution {
 
 /** Split `scheme://a/b/c` into ['a','b','c'], tolerating the trailing slash Windows adds. */
 function segments(u: URL): string[] {
-  // Non-special schemes parse `laicpmsdb://acquisition/x` as host `acquisition`, path `/x`.
+  // Non-special schemes parse `upbdb://acquisition/x` as host `acquisition`, path `/x`.
   const raw = [u.host, ...u.pathname.split('/')].filter(Boolean);
   return raw.map((s) => decodeURIComponent(s));
 }
@@ -79,22 +81,22 @@ export function resolve(input: string): Resolution {
   const [kind, id, sub, subId] = parts;
 
   switch (scheme as Scheme) {
-    case 'laicpmsdb': {
+    case 'upbdb': {
       if (kind === 'auth' && id === 'callback' && parts.length === 2) {
-        // laicpmsdb returns to `<next>#/auth/callback?code=…`; accept the code there or in the query.
+        // UPbDB returns to `<next>#/auth/callback?code=…`; accept the code there or in the query.
         const hashQuery = u.hash.includes('?') ? u.hash.slice(u.hash.indexOf('?') + 1) : '';
         const params = (name: string) => u.searchParams.get(name) ?? new URLSearchParams(hashQuery).get(name);
         const code = params('code');
         const error = params('error');
         if (!code && error) {
-          // laicpmsdb://auth/callback?error=<slug>: the browser sign-in failed.
+          // upbdb://auth/callback?error=<slug>: the browser sign-in failed.
           return /^[A-Za-z0-9._~-]{1,128}$/.test(error) ? { kind: 'auth-error', error, url } : refuse(url, 'sign-in callback with an invalid error');
         }
         if (!code || !/^[A-Za-z0-9._~-]{1,512}$/.test(code)) return refuse(url, 'sign-in callback without a valid code');
         return { kind: 'auth', code, url };
       }
       // Data model and method code pages: table and column names, and codes, have
-      // their own strict shapes (laicpmsdb docs/data_model_and_method_codes.md).
+      // their own strict shapes (UPbDB docs/data_model_and_method_codes.md).
       if (kind === 'data-model' && parts.length <= 3) {
         const names = parts.slice(1);
         if (names.some((p) => !/^[a-z_][a-z0-9_]{0,62}$/.test(p))) return refuse(url, 'invalid table or column name');
@@ -124,7 +126,7 @@ export function resolve(input: string): Resolution {
         if (!value || value.length > 2048 || /[\u0000-\u001f]/.test(value)) return refuse(url, `${kind} link without a valid ${name}`);
         return { kind: 'tab', tab: 'sessions', route: `/app/${kind}?${name}=${encodeURIComponent(value)}`, url };
       }
-      return refuse(url, `unknown laicpmsdb link "${parts.join('/')}"`);
+      return refuse(url, `unknown UPbDB link "${parts.join('/')}"`);
     }
     case 'grainatlas': {
       if (kind === 'project' && parts.length === 2) {
@@ -154,7 +156,7 @@ export function resolve(input: string): Resolution {
 
 /** Where module builds live for the current delivery. */
 export interface ModuleBases {
-  /** laicpmsdb server origin (and optional prefix), e.g. `http://localhost:8000`. */
+  /** UPbDB server origin (and optional prefix), e.g. `http://localhost:8000`. */
   server: string;
   /** Directory URL of the grainatlas build: `…/modules/grainatlas/` on desktop, `/atlas/` on the web. */
   atlas: string;
@@ -186,11 +188,11 @@ export function moduleHome(tab: ModuleTab, bases: ModuleBases): string {
 
 /**
  * Turn a logical route from `resolve` into the concrete URL to load.
- * laicpmsdb's UI uses hash routing (its ADR-0004), so `/app/acquisitions/x`
+ * UPbDB's UI uses hash routing (its ADR-0004), so `/app/acquisitions/x`
  * becomes `<server>/app/#/acquisitions/x`. grainatlas reads its query string.
  */
 export function moduleUrl(tab: ModuleTab, route: string, bases: ModuleBases): string {
-  // Without a laicpmsdb server there is no laicpmsdb page: never fall back to
+  // Without a UPbDB server there is no UPbDB page: never fall back to
   // a bare /app/ on the shell's own origin (in development that is the shell).
   if (tab !== 'images' && !bases.server.trim()) return '';
   return withTheme(routeUrl(tab, route, bases), bases.theme);

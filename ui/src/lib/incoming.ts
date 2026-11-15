@@ -53,7 +53,7 @@ export const FILE_EVENTS = {
 
 /** A module event: logged; a sign-out signs the shell out (clears the token for every module). */
 export function onModuleEvent(event: BridgeEvent, source: string) {
-  source = source === 'images' ? 'grainatlas' : source === 'sessions' || source === 'people' ? 'laicpmsdb' : source;
+  source = source === 'images' ? 'grainatlas' : source === 'sessions' || source === 'people' ? 'upbdb' : source;
   void logInfo(`[bridge] ${source}: ${JSON.stringify(event)}`);
   if (SIGN_OUT_EVENTS.includes(event.type) && identity.signedIn) void identity.logout(`${source} signed out`);
   if (source === 'grainatlas') {

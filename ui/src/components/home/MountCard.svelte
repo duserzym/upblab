@@ -12,7 +12,7 @@
   const status = $derived(atlasStatus(row));
   const label = $derived(row.mount.label);
   const atlasName = $derived(atlas?.name && atlas.name !== label ? `Atlas: ${atlas.name}` : '');
-  const target = $derived(atlas ? `grainatlas://project/${atlas.projectId}` : `laicpmsdb://mount/${row.mount.id}`);
+  const target = $derived(atlas ? `grainatlas://project/${atlas.projectId}` : `upbdb://mount/${row.mount.id}`);
   const action = $derived(atlas ? `Open images for ${label}` : `Open mount details for ${label}`);
 </script>
 <article class="glass panel mount-card" data-testid="mount-card">

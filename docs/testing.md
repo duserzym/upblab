@@ -30,7 +30,7 @@ Everything: bridge build and tests, the 582 UI unit tests and svelte-check,
 the script tests, the Rust tests and all Playwright specs in Chromium and
 WebKit. Run it before building or installing, and after any change to the
 bridge contract, module hosting, the viewer presentation (it must not write),
-storage or settings carry-over, or anything that can write to laicpmsdb.
+storage or settings carry-over, or anything that can write to UPbDB.
 Those tests are never left out of the full check.
 
 | Step | Before | After |

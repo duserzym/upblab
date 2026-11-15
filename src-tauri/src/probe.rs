@@ -1,4 +1,4 @@
-//! Is the laicpmsdb server accepting connections? A TCP connect to the URL's
+//! Is the UPbDB server accepting connections? A TCP connect to the URL's
 //! host and port, tried on every resolved address (`localhost` resolves to
 //! both ::1 and 127.0.0.1, and Django's dev server binds only one of them).
 //! Done in Rust so mixed content and CORS rules of the shell page do not apply.

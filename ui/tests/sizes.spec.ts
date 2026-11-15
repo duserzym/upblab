@@ -16,7 +16,7 @@ const MIN = [1024, 640] as const;
 const BAR = 48;
 
 const PKG = '/Users/lab/Github/grainatlas/tests/fixtures/tm4000/Mount_XS_150X';
-const QTEGRA = '/Users/lab/Github/laicpmsdb/tests/fixtures/qtegra/Apatite_demo';
+const QTEGRA = '/Users/lab/Github/upbdb/tests/fixtures/qtegra/Apatite_demo';
 const scans = {
   [PKG]: {
     scan: 's1',
@@ -56,7 +56,7 @@ const manifest = {
 async function serveModules(page: Page) {
   await page.route('**/modules/manifest.json', (r) => r.fulfill({ json: manifest }));
   await page.route('**/modules/grainatlas/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>grainatlas</title><p>grainatlas</p>' }));
-  await page.route('**/app/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>laicpmsdb</title><p>laicpmsdb</p>' }));
+  await page.route('**/app/**', (r) => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>UPbDB</title><p>UPbDB</p>' }));
 }
 
 async function desktop(page: Page, store: Record<string, string>) {
@@ -90,7 +90,7 @@ for (const [w, h] of SIZES) {
       await expect(page.getByRole('heading', { name: 'Welcome to UPb Lab' })).toBeVisible();
       expect(await problems(page, 'wizard, choose')).toEqual([]);
       await page.getByRole('button', { name: /^Lab server/ }).click();
-      await expect(page.getByLabel('laicpmsdb server URL')).toBeVisible();
+      await expect(page.getByLabel('UPbDB server URL')).toBeVisible();
       expect(await problems(page, 'wizard, lab server')).toEqual([]);
       await page.getByRole('button', { name: 'Back' }).click();
       await page.getByRole('button', { name: /^This computer/ }).click();
@@ -177,13 +177,13 @@ for (const [w, h] of SIZES) {
         mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'home',
       })));
       await page.goto('./');
-      await expect(page.locator('.view:visible').getByText('No laicpmsdb server configured.', { exact: true })).toBeVisible();
+      await expect(page.locator('.view:visible').getByText('No UPbDB server configured.', { exact: true })).toBeVisible();
       for (const tab of ['Sessions', 'Review']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
-        await expect(page.locator('.view:visible')).toContainText('No laicpmsdb server configured.');
+        await expect(page.locator('.view:visible')).toContainText('No UPbDB server configured.');
         expect(await problems(page, `web ${tab} without a server`)).toEqual([]);
       }
-      await expect(page.locator('iframe[title="laicpmsdb"]')).toHaveCount(0);
+      await expect(page.locator('iframe[title="UPbDB"]')).toHaveCount(0);
       expect(serverRequests).toEqual([]);
     });
   });

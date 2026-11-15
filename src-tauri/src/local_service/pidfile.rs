@@ -9,7 +9,7 @@
 //!   UPb Lab holding it (a release app and a development build share the
 //!   app-data folder) must not have its PostgreSQL stopped by a second one.
 //!
-//! - `service.pid`, the laicpmsdb service (leader of its own process group
+//! - `service.pid`, the UPbDB service (leader of its own process group
 //!   on macOS). Normally the watchdog or job object stops the service with
 //!   the shell; if both were killed, the next start stops the leftover.
 //!
@@ -145,7 +145,7 @@ mod tests {
         Fake(entries.iter().copied().collect())
     }
 
-    const DIR: &str = "/Users/x/Library/Application Support/edu.umn.upbstudio/laicpmsdb/pg";
+    const DIR: &str = "/Users/x/Library/Application Support/edu.umn.upbstudio/upbdb/pg";
 
     fn pidfile(pid: u32, dir: &str) -> String {
         format!("{pid}\n{dir}\n1762200000\n55432\n\n127.0.0.1\n  1234567  65536\nready   \n")
@@ -189,13 +189,13 @@ mod tests {
 
     #[test]
     fn windows_paths_compare_by_slashes_and_case() {
-        let text = pidfile(9, "C:/Users/Zoë/AppData/Local/edu.umn.upbstudio/laicpmsdb/pg");
-        let dir = PathBuf::from("c:\\Users\\Zoë\\AppData\\Local\\edu.umn.upbstudio\\laicpmsdb\\pg\\");
+        let text = pidfile(9, "C:/Users/Zoë/AppData/Local/edu.umn.upbstudio/upbdb/pg");
+        let dir = PathBuf::from("c:\\Users\\Zoë\\AppData\\Local\\edu.umn.upbstudio\\upbdb\\pg\\");
         let p = probe(&[(9, "postgres.exe")]);
         let expected = if cfg!(windows) { PostmasterState::Orphan { pid: 9 } } else { PostmasterState::Stale };
         assert_eq!(assess_postmaster(Some(&text), &dir, &p), expected);
         // Same case, different separators: equal everywhere.
-        let dir = PathBuf::from("C:\\Users\\Zoë\\AppData\\Local\\edu.umn.upbstudio\\laicpmsdb\\pg");
+        let dir = PathBuf::from("C:\\Users\\Zoë\\AppData\\Local\\edu.umn.upbstudio\\upbdb\\pg");
         assert_eq!(assess_postmaster(Some(&text), &dir, &p), PostmasterState::Orphan { pid: 9 });
     }
 
@@ -206,7 +206,7 @@ mod tests {
         let p = probe(&[(4242, "Safari")]);
         assert_eq!(assess_postmaster(Some(&text), Path::new(DIR), &p), PostmasterState::Stale);
         // Another cluster's postmaster (e.g. the developer's on 5432) got it.
-        let other = pidfile(4242, "/Users/x/laicpmsdb/pg");
+        let other = pidfile(4242, "/Users/x/upbdb/pg");
         let p = probe(&[(4242, "postgres")]);
         assert_eq!(assess_postmaster(Some(&other), Path::new(DIR), &p), PostmasterState::Stale);
         // Name unknown (no permission): leave it.
@@ -248,7 +248,7 @@ mod tests {
             assess_service(Some("42"), &probe(&[(42, "/opt/homebrew/cellar/python@3.14/3.14.6/frameworks/python.framework/versions/3.14/resources/python.app/contents/macos/python")])),
             Some(42)
         );
-        assert_eq!(assess_service(Some("42\n"), &probe(&[(42, "c:\\app\\laicpmsdb-service\\python\\python.exe")])), Some(42));
+        assert_eq!(assess_service(Some("42\n"), &probe(&[(42, "c:\\app\\upbdb-service\\python\\python.exe")])), Some(42));
         assert_eq!(assess_service(Some("1"), &probe(&[(1, "python")])), None, "never init");
     }
 }

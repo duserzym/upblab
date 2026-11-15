@@ -9,13 +9,14 @@
 //   web      the page has the File objects; the module asks for them over
 //            postMessage and gets them by structured clone (lib/incoming.ts)
 
+import { moduleLabel } from './links';
 import type { OpenFilesTransfer } from '@lab/bridge';
 import { classify, expandOpened, formatBytes, type FileTab, type Routed, type WebSet } from './drop';
 import { desktopFiles, openGrainAtlasPaths, isDesktop, logInfo, logWarn } from './platform';
 import { shell } from './shell.svelte';
 
-export const MODULE_OF: Record<FileTab, string> = { images: 'grainatlas', sessions: 'laicpmsdb' };
-const TAB_OF: Record<string, FileTab> = { grainatlas: 'images', laicpmsdb: 'sessions', images: 'images', sessions: 'sessions' };
+export const MODULE_OF: Record<FileTab, string> = { images: 'grainatlas', sessions: 'upbdb' };
+const TAB_OF: Record<string, FileTab> = { grainatlas: 'images', upbdb: 'sessions', images: 'images', sessions: 'sessions' };
 
 /** How long a module has to take its files before Home says it does not read open-files yet. */
 export const TAKE_TIMEOUT_MS = 10_000;
@@ -93,21 +94,21 @@ class Opener {
     void logWarn(`[open] ${what} from ${from}: ${msg}`);
   }
 
-  /** Show the tab; Sessions opens its ingest route (desktop with the path, `laicpmsdb://ingest?path=`). */
+  /** Show the tab; Sessions opens its ingest route (desktop with the path, `upbdb://ingest?path=`). */
   private route(r: Extract<Routed, { target: FileTab }>, from: string) {
-    if (isDesktop && r.path) void shell.handleLink(`laicpmsdb://ingest?path=${encodeURIComponent(r.path)}`, from);
+    if (isDesktop && r.path) void shell.handleLink(`upbdb://ingest?path=${encodeURIComponent(r.path)}`, from);
     else shell.go('sessions', '/app/ingest');
   }
 
   private offered(id: string, r: Extract<Routed, { target: FileTab }>, what: string, from: string) {
     const module = MODULE_OF[r.target];
-    const outcome = `${r.target === 'images' ? 'Images' : 'Sessions'}: ${describe(r)} handed to ${module}`;
+    const outcome = `${r.target === 'images' ? 'Images' : 'Sessions'}: ${describe(r)} handed to ${moduleLabel(module)}`;
     this.status = { what, outcome, state: 'offered' };
     shell.note(what, from, outcome);
     void logInfo(`[open] ${what} from ${from}: ${r.kind} ${JSON.stringify(r.name)}, ${r.picks.length} files -> ${module} (open-files ${id})`);
     const timer = setTimeout(() => {
       if (!this.waiting.delete(id)) return;
-      const late = `${module} has not taken the files: it does not read open-files (@lab/bridge v2) yet; open them with its own Open button`;
+      const late = `${moduleLabel(module)} has not taken the files: it does not read open-files (@lab/bridge v2) yet; open them with its own Open button`;
       if (this.status?.what === what) this.status = { what, outcome: late, state: 'offered' };
       this.report({ type: 'error', from, reason: late });
       shell.note(what, from, late);
@@ -213,7 +214,7 @@ class Opener {
       clearTimeout(w.timer);
       this.waiting.delete(id);
     }
-    const outcome = `${module} took ${files} file${files === 1 ? '' : 's'} (${formatBytes(bytes)})`;
+    const outcome = `${moduleLabel(module)} took ${files} file${files === 1 ? '' : 's'} (${formatBytes(bytes)})`;
     if (w && this.status?.what === w.what) this.status = { what: w.what, outcome, state: 'taken' };
     shell.note(w?.what ?? `open-files ${id}`, module, outcome);
     void logInfo(`[open] open-files ${id}: ${outcome}`);
@@ -223,7 +224,7 @@ class Opener {
   seen(module: string, event: Record<string, unknown>) {
     const files = Number(event.files) || 0;
     this.taken(String(event.id ?? ''), module, files, Number(event.bytes) || 0);
-    const outcome = `${module} webview received ${files} file${files === 1 ? '' : 's'} (${formatBytes(Number(event.bytes) || 0)}, first ${String(event.first ?? '')}) through open-files; ${module} itself does not read them yet`;
+    const outcome = `${moduleLabel(module)} webview received ${files} file${files === 1 ? '' : 's'} (${formatBytes(Number(event.bytes) || 0)}, first ${String(event.first ?? '')}) through open-files; ${moduleLabel(module)} itself does not read them yet`;
     shell.note(`open-files ${String(event.id ?? '')}`, module, outcome);
     void logInfo(`[open] ${outcome}`);
   }

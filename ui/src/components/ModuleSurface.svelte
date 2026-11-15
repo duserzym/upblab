@@ -159,7 +159,7 @@
   <iframe
     class="surface"
     bind:this={iframe}
-    name={frameName(module === 'people' ? 'laicpmsdb' : module)}
+    name={frameName(module === 'people' ? 'upbdb' : module)}
     {src}
     {title}
     style:visibility={shell.overlay ? 'hidden' : undefined}

@@ -1,4 +1,4 @@
-// Home's view of laicpmsdb (roadmap phase 4, docs/WORKFLOW.md stage 9):
+// Home's view of UPbDB (roadmap phase 4, docs/WORKFLOW.md stage 9):
 // sessions with their reduction runs (count, preferred run) and the
 // current atlas of each mount. Read as the shell's signed-in account.
 //
@@ -100,7 +100,7 @@ export function summariseRuns(runs: RunOut[]): Pick<SessionRow, 'runs' | 'prefer
 }
 
 /**
- * The current atlas from GET /v1/mounts/{id}/atlas (laicpmsdb docs/workflow_api.md):
+ * The current atlas from GET /v1/mounts/{id}/atlas (UPbDB docs/workflow_api.md):
  * `{mount_id, current: {project_id, version, name, uploaded_at, …} | null, versions, …}`.
  * A bare atlas object is read too. null when none is published.
  */

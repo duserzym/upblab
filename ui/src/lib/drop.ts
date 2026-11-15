@@ -51,7 +51,7 @@ export type Routed =
       name: string;
       picks: DropPick[];
       bytes: number;
-      /** Desktop: the host path for `laicpmsdb://ingest?path=` (the folder, zip, or the loose files' folder). */
+      /** Desktop: the host path for `upbdb://ingest?path=` (the folder, zip, or the loose files' folder). */
       path?: string;
     }
   | { target: null; reason: string };

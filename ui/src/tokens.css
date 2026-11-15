@@ -1,7 +1,7 @@
-/* Copied from laicpmsdb ui/src/app.css at d6f3758 (the lab glass tokens and primitives).
+/* Copied from UPbDB ui/src/app.css at d6f3758 (the lab glass tokens and primitives).
    Keep in sync by copying again; shell-only styles live in app.css. */
 
-/* laicpmsdb glass design tokens (plan section 6.3).
+/* UPbDB glass design tokens (plan section 6.3).
    Light set on :root; dark set via prefers-color-scheme unless the user forced
    light, and via [data-theme="dark"]. Glass is for chrome; plots are opaque. */
 

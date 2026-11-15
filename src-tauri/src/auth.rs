@@ -1,4 +1,4 @@
-//! One identity (plan decision 5): the shell signs in to laicpmsdb once and
+//! One identity (plan decision 5): the shell signs in to UPbDB once and
 //! hands the bearer token to module webviews through `bridge_token`.
 //!
 //! - Tokens live in the OS keychain (macOS Keychain, Windows Credential
@@ -6,7 +6,7 @@
 //!   never in settings.json. An in-memory copy serves `bridge_token`.
 //! - The shell page never sees the token. It asks for the account, for API
 //!   reads (`api_get`, used by Home) and for a Studio handoff code; all HTTP to
-//!   laicpmsdb is done here, so CORS and mixed-content rules of the shell page
+//!   UPbDB is done here, so CORS and mixed-content rules of the shell page
 //!   do not apply (same reasoning as `probe`).
 //! - The "target" names the server (`server`, its base URL) and the keychain
 //!   entry (`key`): the server URL for a lab server, `this-computer` for the
@@ -26,7 +26,7 @@ pub const KEYCHAIN_SERVICE: &str = "edu.umn.upbstudio";
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Target {
-    /// laicpmsdb base URL, e.g. `http://127.0.0.1:8000` (no trailing slash).
+    /// UPbDB base URL, e.g. `http://127.0.0.1:8000` (no trailing slash).
     pub server: String,
     /// Keychain account name for this server's token.
     pub key: String,
@@ -130,7 +130,7 @@ impl Default for Identity {
 #[serde(rename_all = "camelCase")]
 pub struct AuthState {
     signed_in: bool,
-    /// laicpmsdb's `AccountOut` (username, display_name, is_lab_staff, …).
+    /// UPbDB's `AccountOut` (username, display_name, is_lab_staff, …).
     account: Option<Value>,
     /// Signed in with a stored token, but the server could not be asked who we are.
     offline: bool,
@@ -151,7 +151,7 @@ pub struct ApiReply {
     body: Value,
 }
 
-/// laicpmsdb errors are `{"detail": "...", "code": "..."}` (sync contract,
+/// UPbDB errors are `{"detail": "...", "code": "..."}` (sync contract,
 /// November 2026): show `detail`, or `message` when `detail` is a list, else a
 /// sentence for the status. Mirrors `ui/src/lib/server-error.ts`.
 fn detail(body: &Value, status: u16) -> String {
@@ -409,7 +409,7 @@ mod tests {
         Identity::with_vault(Box::new(MemoryVault::default()))
     }
 
-    /// A one-route-per-request fake laicpmsdb: answers `n` requests from `routes`.
+    /// A one-route-per-request fake UPbDB: answers `n` requests from `routes`.
     fn fake_server(n: usize, routes: fn(&str, &str, &str) -> (u16, String)) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -602,15 +602,15 @@ mod tests {
         assert!(!may_receive_token(&"https://example.com/".parse().unwrap(), server));
     }
 
-    /// Against a real laicpmsdb with the demo data, and the real OS keychain:
+    /// Against a real UPbDB with the demo data, and the real OS keychain:
     /// `UPBSTUDIO_LIVE_SERVER=http://127.0.0.1:8017 cargo test live_ -- --ignored`
-    /// (user analyst / laicpmsdb-demo unless UPBSTUDIO_LIVE_USER / _PASSWORD say otherwise).
+    /// (user analyst / upbdb-demo unless UPBSTUDIO_LIVE_USER / _PASSWORD say otherwise).
     #[test]
     #[ignore]
     fn live_sign_in_handoff_and_keychain() {
         let Ok(server) = std::env::var("UPBSTUDIO_LIVE_SERVER") else { return };
         let user = std::env::var("UPBSTUDIO_LIVE_USER").unwrap_or_else(|_| "analyst".into());
-        let pw = std::env::var("UPBSTUDIO_LIVE_PASSWORD").unwrap_or_else(|_| "laicpmsdb-demo".into());
+        let pw = std::env::var("UPBSTUDIO_LIVE_PASSWORD").unwrap_or_else(|_| "upbdb-demo".into());
         let id = Identity::with_vault(Box::new(KeychainVault));
         let t = Target { server: server.clone(), key: format!("{server} (upbstudio live test)") };
         let rt = rt();
