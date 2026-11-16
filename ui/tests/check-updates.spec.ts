@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { installFakeTauri } from './fake-tauri';
+
+// The app shows the version from ui/package.json.
+const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
 
 async function preview(page: Page, scenario: string, manifest = true) {
   await page.addInitScript(() => {
@@ -38,7 +42,7 @@ test('idle button has a version tooltip, no badge and an exact accessible name',
   await preview(page, 'idle');
   const button = page.getByTestId('check-updates');
   await expect(button).toHaveAccessibleName('Check for updates');
-  await expect(button).toHaveAttribute('title', /Check for updates · UPb Lab v0\.1\.0/);
+  await expect(button).toHaveAttribute('title', new RegExp(`Check for updates · UPb Lab v${version.replaceAll('.', '\\.')}`));
   await expect(button).not.toHaveAttribute('data-badge');
   await expect(button.locator('.dot')).toHaveCount(0);
   await screenshot(page, info, 'idle');
@@ -55,7 +59,7 @@ for (const [width, height] of [[1512, 982], [1024, 640]]) {
     await insideViewport(page, button);
     await button.click();
     await expect(popup).toContainText('Update available: v0.2.0');
-    await expect(popup).toContainText('UPb Lab v0.1.0');
+    await expect(popup).toContainText(`UPb Lab v${version}`);
     await expect(popup.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
     await expect(popup).toContainText('Modules: grainatlas 0.1.0 (local abc1234), UPbDB 0.3.0');
     await expect(popup).toContainText('Modules update with UPb Lab.');
@@ -80,7 +84,7 @@ for (const [width, height] of [[1512, 982], [1024, 640]]) {
 }
 
 for (const [scenario, text] of [
-  ['none', 'Up to date (v0.1.0)'],
+  ['none', `Up to date (v${version})`],
   ['error', 'Updates are not configured for this build yet.'],
   ['checking', 'Checking for updates…'],
   ['downloading', 'Downloading v0.2.0… 43%'],
@@ -128,7 +132,7 @@ test('missing module manifest omits the module list', async ({ page }) => {
   await preview(page, 'none', false);
   await page.getByTestId('check-updates').click();
   const popup = page.getByTestId('check-updates-popover');
-  await expect(popup).toContainText('Up to date (v0.1.0)');
+  await expect(popup).toContainText(`Up to date (v${version})`);
   await expect(popup).not.toContainText('Modules:');
 });
 
