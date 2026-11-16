@@ -13,6 +13,7 @@
   import { equalLayout, presetLayout, presets, readLayout } from '../lib/review-layout';
   import { settings } from '../lib/settings.svelte';
   import { color } from '../components/review/plot-data';
+  import { reviewInsetGroups } from '../lib/review-inset-groups';
   import { groupUnregistered, rangeSelection } from '../lib/review-selection';
   import { allShown, filterRows, groupState, noneShown, rangeToggle, recallShown, reconcile, rememberShown, setGroup, soloSample, toggleSample } from '../lib/sample-filter';
   import { sendCommand } from '../lib/incoming';
@@ -65,6 +66,7 @@
   let samplesShown = $state<string[]>([]);
   let sampleAnchor = $state<string | null>(null), grainAnchor = $state<string | null>(null);
   let groupUnknown = $state(true);
+  let layerSampleOrder = $state<string[]>([]);
   let concordiaMode = $state<ConcordiaMode>('wetherill');
   let hiddenSpots = $state.raw(new Set<string>());
   let atlasFocus = $state<ReviewSpot | null>(null);
@@ -114,9 +116,10 @@
     sampleAnchor = grainAnchor = null;
     review.hoveredKey = null;
   }
-  function showAll() { setShown(allShown(sampleOrder)); clearSelection(); }
-  function showNone() { setShown(noneShown()); clearSelection(); }
+  function showAll() { review.groupView = true; setShown(allShown(sampleOrder)); clearSelection(); }
+  function showNone() { review.groupView = true; setShown(noneShown()); clearSelection(); }
   function showGroup(reference: boolean) {
+    review.groupView = true;
     setShown(setGroup(samplesShown, samples, reference, groupState(samplesShown, samples, reference) !== 'all'));
     clearSelection();
   }
@@ -129,9 +132,11 @@
     const mapped = split ? rows.find(row => row.atlasSpotId) : null;
     const next = mapped ?? rows[0];
     if (next) review.select(next, false);
+    review.groupView = true;
     if (mapped) atlasFocus = mapped;
   }
   function showSample(key: string, event: MouseEvent) {
+    review.groupView = true;
     if (event.altKey) { solo(key); return; }
     setShown(event.shiftKey ? rangeToggle(samplesShown, sampleOrder, sampleAnchor, key) : toggleSample(samplesShown, sampleOrder, key));
     if (!event.shiftKey) sampleAnchor = key;
@@ -144,7 +149,13 @@
       solo(key);
     }
   }
+  function layerGroup(key: string | undefined, event?: MouseEvent) {
+    if (key && event?.altKey) solo(key);
+    else review.groupView = true;
+  }
   function showGrain(key: string, rows: ReviewSpot[], event: MouseEvent, order: string[]) {
+    // A grain pick stays at spot level, including modifier/range picks.
+    review.groupView = false;
     const byKey = new Map(groups.flatMap(sample => sample.grains.map(grain => [grainKey(sample.key, grain.key), grain.spots] as const)));
     const visibleGrains = order.filter(id => byKey.get(id)?.some(spot => !hiddenSpots.has(spot.key)));
     const selected = rangeSelection(visibleGrains, order, key, grainAnchor, event) ?? order;
@@ -192,23 +203,31 @@
     }
     return Object.fromEntries([...projects].sort(([a], [b]) => a.localeCompare(b)).map(([id, spots]) => [id, Object.fromEntries([...spots].sort(([a], [b]) => a.localeCompare(b)))]));
   });
+  const insetGroups = $derived(reviewInsetGroups(shown, review.groupView, layerSampleOrder, color));
   let lastVisibility = '';
+  let displayedGroups = false;
   let displayedContext = '';
   $effect(() => {
     const inReview = active && split && review.state === 'ready';
     const projects = inReview ? visibility : {};
     const colors = inReview ? visibleColors : {};
+    const groups = inReview ? insetGroups : undefined;
+    const groupView = inReview && review.groupView;
     const focus = atlasFocus;
     const context = runContext;
-    const signature = JSON.stringify({ projects, colors });
+    const signature = JSON.stringify({ projects, colors, groups });
     untrack(() => {
       const opening = inReview && displayedContext !== context;
       displayedContext = inReview ? context : '';
       if (!opening && !focus && (signature === lastVisibility || (!lastVisibility && !inReview))) return;
-      const target = inReview ? (focus ?? (opening ? shown.find(row => row.atlasProjectId && row.atlasSpotId) : null)) : null;
+      // Keep a single pick in this command too: desktop command delivery coalesces
+      // pending commands, so removing groups must not swallow the spot focus.
+      const singlePick = inReview && displayedGroups && !groupView;
+      displayedGroups = groupView;
+      const target = inReview ? (focus ?? (singlePick ? review.selected : opening ? shown.find(row => row.atlasProjectId && row.atlasSpotId) : null)) : null;
       atlasFocus = null;
       lastVisibility = signature;
-      const message: ReviewSpotsCommand = { type: 'review-spots', projects, colors };
+      const message: ReviewSpotsCommand = { type: 'review-spots', projects, colors, ...(groups === undefined ? {} : { groups }) };
       if (target?.atlasProjectId && target.atlasSpotId) {
         message.focus = { project: target.atlasProjectId, spot: target.atlasSpotId, server: shell.serverUrl, via: 'review', flash: false };
       }
@@ -330,10 +349,10 @@
     {#snippet spots()}
       <aside class="tree stack" aria-label="Samples and grains">
         <input type="search" aria-label="Filter spots" placeholder="Filter spots…" bind:value={filter} />
-        <label class="group-option"><input type="checkbox" bind:checked={groupUnknown} /> Group unregistered by spot name</label>
+        <label class="group-option"><input type="checkbox" bind:checked={groupUnknown} onchange={() => review.groupView = true} /> Group unregistered by spot name</label>
         {#key scopeValue}
           <ReviewLayers scope={scopeValue} {groups} allGroups={scopeGroups} hidden={hiddenSpots} searching={!!filter.trim()} {active}
-            onvisibility={setVisibility} ongrain={showGrain} onall={showAll} onclear={clearSelection} />
+            onorder={keys => layerSampleOrder = keys} ongroup={layerGroup} onvisibility={setVisibility} ongrain={showGrain} onall={showAll} onclear={clearSelection} />
         {/key}
         {#if !plotted.length}<p class="small faint">{samplesShown.length===0?'No samples shown':'No spots match this view.'}</p>{/if}
       </aside>

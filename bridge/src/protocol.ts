@@ -18,9 +18,10 @@
 //      inset size and state (`inset`), and the viewer reports changes with
 //      lab.viewer.inset so the shell can store them. The viewer itself never
 //      writes storage. Without the field the inset lasts one session.
+//   5.2 review-spots may carry `groups` for sample-coloured mount inset outlines.
 
 export const PROTOCOL_VERSION = 5;
-export const PROTOCOL_MINOR = 1;
+export const PROTOCOL_MINOR = 2;
 
 export type Theme = 'light' | 'dark';
 export function isTheme(value: unknown): value is Theme {
@@ -127,12 +128,26 @@ export interface FocusGrainCommand {
   via?: string;
 }
 
+/** v5.2: one Review sample group for the viewer's mount inset. */
+export interface ReviewSpotGroup {
+  /** Display name, e.g. the sample name (at most 200 characters). */
+  name: string;
+  /** #rrggbb, the group's Review colour. */
+  color: string;
+  /** Atlas spot ids of the group's shown spots in this project. */
+  spots: string[];
+}
+
 export interface ReviewSpotsCommand {
   type: 'review-spots';
   /** Each listed atlas shows only these spots. Unlisted atlases keep their full overlays. */
   projects: Record<string, string[]>;
   /** Optional sample colours for visible overlays: project -> atlas spot id -> #rrggbb. */
   colors?: Record<string, Record<string, string>>;
+  /** v5.2, optional: while Review shows sample groups and no single spot is chosen,
+   *  the groups per project, in Review's order. The viewer's mount inset outlines
+   *  where each group's spots sit. Absent: the inset shows the selected spot as before. */
+  groups?: Record<string, ReviewSpotGroup[]>;
   focus?: Omit<FocusSpotCommand, 'type'>;
 }
 
@@ -360,6 +375,15 @@ export function isBridgeCommand(x: unknown): x is BridgeCommand {
         isId(project) && !!spots && typeof spots === 'object' && !Array.isArray(spots) &&
         Object.keys(spots).length <= 10000 && Object.entries(spots).every(([spot, color]) =>
           isId(spot) && typeof color === 'string' && color.length === 7 && /^#[0-9a-fA-F]{6}$/.test(color)))) return false;
+    }
+    if (c.groups !== undefined) {
+      if (!isRecord(c.groups)) return false;
+      const groups = Object.entries(c.groups);
+      if (groups.length > 64 || !groups.every(([project, entries]) =>
+        isId(project) && Array.isArray(entries) && entries.length <= 256 && entries.every(group =>
+          isRecord(group) && typeof group.name === 'string' && group.name.length >= 1 && group.name.length <= 200 &&
+          typeof group.color === 'string' && group.color.length === 7 && /^#[0-9a-fA-F]{6}$/.test(group.color) &&
+          Array.isArray(group.spots) && group.spots.length <= 10000 && group.spots.every(isId)))) return false;
     }
     return c.focus === undefined || (!!c.focus && typeof c.focus === 'object' &&
       isBridgeCommand({ ...c.focus, type: 'focus-spot' }));

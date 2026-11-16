@@ -313,6 +313,43 @@ fn valid_command(command: &Value) -> bool {
                             })
                     })
             })
+        }) && command.get("groups").is_none_or(|groups| {
+            groups.as_object().is_some_and(|projects| {
+                projects.len() <= 64
+                    && projects.iter().all(|(project, groups)| {
+                        valid_id(Some(&Value::String(project.clone())))
+                            && groups.as_array().is_some_and(|groups| {
+                                groups.len() <= 256
+                                    && groups.iter().all(|group| {
+                                        group.as_object().is_some_and(|group| {
+                                            group.get("name").and_then(Value::as_str).is_some_and(
+                                                |name| {
+                                                    (1..=200).contains(&name.encode_utf16().count())
+                                                },
+                                            ) && group
+                                                .get("color")
+                                                .and_then(Value::as_str)
+                                                .is_some_and(|color| {
+                                                    color.len() == 7
+                                                        && color.starts_with('#')
+                                                        && color.as_bytes()[1..]
+                                                            .iter()
+                                                            .all(u8::is_ascii_hexdigit)
+                                                })
+                                                && group
+                                                    .get("spots")
+                                                    .and_then(Value::as_array)
+                                                    .is_some_and(|spots| {
+                                                        spots.len() <= 10000
+                                                            && spots
+                                                                .iter()
+                                                                .all(|spot| valid_id(Some(spot)))
+                                                    })
+                                        })
+                                    })
+                            })
+                    })
+            })
         }) && command.get("focus").is_none_or(|focus| {
             focus.as_object().is_some_and(|focus| {
                 let mut focus = focus.clone();
@@ -581,6 +618,103 @@ mod tests {
         command["colors"] = json!({"p": spots});
         assert!(valid_command(&command));
         command["colors"]["p"]["extra"] = json!("#123456");
+        assert!(!valid_command(&command));
+    }
+
+    #[test]
+    fn review_spots_validate_optional_groups_and_limits() {
+        let mut command = json!({"type": "review-spots", "projects": {"p": ["s"]},
+            "colors": {"p": {"s": "#123456"}}, "focus": {"project": "p", "spot": "s"}});
+        assert!(valid_command(&command));
+        let group = json!({"name": "Sample A", "color": "#aB12fF", "spots": ["s"]});
+        command["groups"] = json!({"p": [group.clone()]});
+        command["future"] = json!(true);
+        assert!(valid_command(&command));
+        for groups in [
+            Value::Null,
+            json!([]),
+            json!("groups"),
+            json!({"bad/id": []}),
+            json!({"p": {}}),
+            json!({"p": null}),
+            json!({"p": [null]}),
+            json!({"p": [[]]}),
+        ] {
+            command["groups"] = groups;
+            assert!(!valid_command(&command));
+        }
+        for (field, values) in [
+            (
+                "name",
+                vec![json!(""), json!("x".repeat(201)), json!(1), Value::Null],
+            ),
+            (
+                "color",
+                vec![
+                    json!("red"),
+                    json!("123456"),
+                    json!("#123"),
+                    json!("#1234567"),
+                    json!("#gg1234"),
+                    json!("#123456\n"),
+                    json!(1),
+                    Value::Null,
+                ],
+            ),
+            (
+                "spots",
+                vec![
+                    json!({}),
+                    json!("s"),
+                    json!(["bad/id"]),
+                    json!([1]),
+                    json!([null]),
+                    Value::Null,
+                ],
+            ),
+        ] {
+            for value in values {
+                let mut invalid = group.clone();
+                invalid[field] = value;
+                command["groups"] = json!({"p": [invalid]});
+                assert!(!valid_command(&command));
+            }
+            let mut missing = group.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            command["groups"] = json!({"p": [missing]});
+            assert!(!valid_command(&command));
+        }
+        command["groups"] = json!({});
+        assert!(valid_command(&command));
+        command["groups"] = json!({"p": []});
+        assert!(valid_command(&command));
+        command["groups"] =
+            json!({"p": [{"name": "x".repeat(200), "color": "#123456", "spots": []}]});
+        assert!(valid_command(&command));
+        let mut projects = serde_json::Map::new();
+        for i in 0..64 {
+            projects.insert(format!("p{i}"), json!([group.clone()]));
+        }
+        command["groups"] = Value::Object(projects.clone());
+        assert!(valid_command(&command));
+        projects.insert("extra".into(), json!([]));
+        command["groups"] = Value::Object(projects);
+        assert!(!valid_command(&command));
+        command["groups"] = json!({"p": vec![group.clone(); 256]});
+        assert!(valid_command(&command));
+        command["groups"]["p"]
+            .as_array_mut()
+            .unwrap()
+            .push(group.clone());
+        assert!(!valid_command(&command));
+        let spots: Vec<_> = (0..10000).map(|i| format!("s{i}")).collect();
+        command["groups"] =
+            json!({"p": [{"name": "Sample A", "color": "#123456", "spots": spots}]});
+        assert!(valid_command(&command));
+        command["groups"]["p"][0]["spots"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("extra"));
         assert!(!valid_command(&command));
     }
 

@@ -42,6 +42,35 @@ it('validates optional review overlay colours while accepting older commands and
   expect(isBridgeCommand({ ...command, colors: { p: { ...spots, extra: '#123456' } } })).toBe(false);
 });
 
+it('validates v5.2 inset groups and keeps commands without groups unchanged', () => {
+  const command = { type: 'review-spots', projects: { p: ['s'] }, colors: { p: { s: '#123456' } },
+    focus: { project: 'p', spot: 's', via: 'review', flash: false } };
+  // This is still the complete v5.1 command shape; groups is purely optional.
+  expect(isBridgeCommand(command)).toBe(true);
+  const group = { name: 'Sample A', color: '#aB12fF', spots: ['s'] };
+  expect(isBridgeCommand({ ...command, groups: { p: [group] }, future: true })).toBe(true);
+  expect(isBridgeCommand({ ...command, groups: {} })).toBe(true);
+  expect(isBridgeCommand({ ...command, groups: { p: [] } })).toBe(true);
+  for (const groups of [null, [], 'groups', { 'bad/id': [] }, { p: {} }, { p: null }, { p: [null] }, { p: [[]] }])
+    expect(isBridgeCommand({ ...command, groups })).toBe(false);
+  for (const name of ['', 'x'.repeat(201), 1, null, undefined])
+    expect(isBridgeCommand({ ...command, groups: { p: [{ ...group, name }] } })).toBe(false);
+  for (const color of ['red', '123456', '#123', '#1234567', '#gg1234', '#123456\n', 1, null, undefined])
+    expect(isBridgeCommand({ ...command, groups: { p: [{ ...group, color }] } })).toBe(false);
+  for (const spots of [null, {}, 's', ['bad/id'], [1], [null], undefined])
+    expect(isBridgeCommand({ ...command, groups: { p: [{ ...group, spots }] } })).toBe(false);
+  expect(isBridgeCommand({ ...command, groups: { p: [{ ...group, name: 'x'.repeat(200), spots: [] }] } })).toBe(true);
+  const projects = Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`p${i}`, [group]]));
+  expect(isBridgeCommand({ ...command, groups: projects })).toBe(true);
+  expect(isBridgeCommand({ ...command, groups: { ...projects, extra: [] } })).toBe(false);
+  const groups = Array.from({ length: 256 }, () => group);
+  expect(isBridgeCommand({ ...command, groups: { p: groups } })).toBe(true);
+  expect(isBridgeCommand({ ...command, groups: { p: [...groups, group] } })).toBe(false);
+  const spots = Array.from({ length: 10000 }, (_, i) => `s${i}`);
+  expect(isBridgeCommand({ ...command, groups: { p: [{ ...group, spots }] } })).toBe(true);
+  expect(isBridgeCommand({ ...command, groups: { p: [{ ...group, spots: [...spots, 'extra'] }] } })).toBe(false);
+});
+
 describe('detectTransport', () => {
   it('is none without a window', () => {
     expect(detectTransport(undefined)).toBe('none');

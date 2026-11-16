@@ -4,11 +4,13 @@
   import { dateLabel, type ReviewSpot, type SpotGroup } from '../../lib/review-data';
   import { layerVisibility, moveLayer, orderedLayers, resultLayers, type Layer, type LayerOrder } from '../../lib/review-layers';
 
-  let { scope, groups, allGroups, hidden, searching, active, onvisibility, ongrain, onall, onclear }: {
+  let { scope, groups, allGroups, hidden, searching, active, onvisibility, ongrain, onall, onclear, ongroup, onorder }: {
     scope: string; groups: SpotGroup[]; allGroups: SpotGroup[]; hidden: Set<string>; searching: boolean; active: boolean;
     onvisibility: (keys: string[], show: boolean) => void;
     ongrain: (key: string, rows: ReviewSpot[], event: MouseEvent, order: string[]) => void;
     onall: () => void; onclear: () => void;
+    ongroup: (key: string | undefined, event?: MouseEvent) => void;
+    onorder: (keys: string[]) => void;
   } = $props();
 
   let tree = $state<HTMLDivElement>();
@@ -30,6 +32,11 @@
   const grainOrder = $derived(layers.flatMap(branch => 'children' in branch ? branch.children : [])
     .flatMap(sample => 'children' in sample ? sample.children : [])
     .flatMap(grain => 'children' in grain && grain.grain ? [grain.key] : []));
+
+  $effect(() => {
+    const keys = layers.flatMap(branch => 'children' in branch ? branch.children.map(sample => sample.key) : []);
+    untrack(() => onorder(keys));
+  });
 
   function isOpen(layer: Layer, level: number) {
     return searching || (expanded[layer.key] ?? (level === 0 || level > 1 || groups.length <= 3));
@@ -104,7 +111,9 @@
     if (target) move(parent, key, target, after);
   }
 
-  function toggle(rows: ReviewSpot[]) {
+  function toggle(layer: Layer, level: number) {
+    if (level <= 1) ongroup(level === 1 ? layer.key : undefined);
+    const rows = layer.rows;
     onvisibility(rows.map(spot => spot.key), layerVisibility(rows, hidden) !== true);
   }
 
@@ -149,13 +158,13 @@
         class:drop-after={drop?.key === layer.key && drop.after} class:dimmed={checked === false}
         role="none" ondragover={e => over(e, parent, layer.key)} ondrop={e => finish(e, parent, layer.key)}
         ondragleave={e => { if (drop?.key === layer.key && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) drop = undefined; }}
-        oncontextmenu={e => { e.preventDefault(); toggle(full.rows); }}>
+        oncontextmenu={e => { e.preventDefault(); toggle(full, level); }}>
         {#if !spot}
           <button class="icon disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${layer.name}`} aria-expanded={open}
             onclick={() => expanded[layer.key] = !open}><span aria-hidden="true">{open ? '▾' : '▸'}</span></button>
         {/if}
         <button type="button" class="icon visibility" role="checkbox" aria-checked={checked} aria-label={`Show ${layer.name} in Review`}
-          title="Toggle visibility (right-click or H)" onclick={() => toggle(full.rows)}>
+          title="Toggle visibility (right-click or H)" onclick={() => toggle(full, level)}>
           <span aria-hidden="true">{checked === 'mixed' ? '−' : checked ? '✓' : ''}</span>
         </button>
         {#if spot}
@@ -167,7 +176,7 @@
           <button class="name" title="Click to isolate · Ctrl/Cmd-click to toggle · Shift-click for a range"
             onclick={e => ongrain(layer.key, full.rows, e, grainOrder)} ondblclick={() => void review.focusGrain(full.rows)}>{layer.name}</button>
         {:else}
-          <button class="name" title={layer.name} onclick={() => expanded[layer.key] = !open}>{layer.name}</button>
+          <button class="name" title={layer.name} onclick={e => { ongroup(level === 1 ? layer.key : undefined, e); expanded[layer.key] = !open; }}>{layer.name}</button>
           <small class="count">{layer.rows.length}</small>
         {/if}
         {#if (siblings(all, parent)?.length ?? 0) > 1}

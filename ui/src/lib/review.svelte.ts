@@ -27,6 +27,8 @@ export class Review {
   runs = $state<RunOut[]>([]);
   run = $state<RunBrief | null>(null);
   runInfo = $state<Record<string, RunBrief>>({});
+  // A details-panel selection may coexist with sample-group presentation (solo).
+  groupView = $state(true);
   selectedKey = $state<string | null>(null);
   hoveredKey = $state<string | null>(null);
   externalSpot = $state<ReviewSpot | null>(null);
@@ -68,6 +70,7 @@ export class Review {
     return r.body;
   }
   async open(scope: ScopeInput) {
+    this.groupView = true;
     this.selectionGeneration++;
     this.scope = scope.kind === 'session' ? { ...scope, run: scope.run ?? 'preferred' } : scope;
     if (settings.loaded)
@@ -232,6 +235,7 @@ export class Review {
     }
   }
   select(spot: ReviewSpot, focus = true) {
+    this.groupView = false;
     this.selectionGeneration++;
     this.selectedKey = spot.key;
     this.externalSpot = this.rows.some(r => r.key === spot.key) ? null : spot;
@@ -246,10 +250,12 @@ export class Review {
     catch (err) { this.error = `Could not focus the Review viewer: ${String(err)}`; }
   }
   async focus(spot: ReviewSpot, _show = false) {
+    this.groupView = false;
     if (!spot.atlasProjectId || !spot.atlasSpotId) return;
     await this.command(spot, { type: 'focus-spot', project: spot.atlasProjectId, spot: spot.atlasSpotId, flash: true, via: 'review', server: shell.serverUrl });
   }
   async focusGrain(spots: ReviewSpot[]) {
+    this.groupView = false;
     const spot = spots.find(s => s.atlasProjectId && s.atlasSpotId && s.grainLabel);
     if (!spot)
       return;

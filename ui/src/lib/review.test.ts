@@ -41,6 +41,29 @@ describe('Review selection and loading', () => {
     expect(review.scope).toEqual({ kind: 'session', id: session.id, run: 'preferred' });
     expect(review.rows).toHaveLength(12);
   });
+  it('opens in group view, preserves it for shell echoes, and leaves it for every explicit spot or grain focus', async () => {
+    await review.open({ kind: 'session', id: session.id });
+    expect(review.groupView).toBe(true);
+    await review.fromImages(event('atlas-2', 'shell'));
+    expect(review.groupView).toBe(true);
+    await review.fromImages(event('atlas-2'));
+    expect(review.groupView).toBe(false);
+    review.groupView = true;
+    review.select(review.rows[1]); // Re-picking the same spot also leaves group view.
+    expect(review.groupView).toBe(false);
+    review.groupView = true;
+    await review.focus(review.rows[1], true); // Enter / Show in Images.
+    expect(review.groupView).toBe(false);
+    review.groupView = true;
+    await review.focusGrain(review.rows);
+    expect(review.groupView).toBe(false);
+    await review.open({ kind: 'session', id: session.id });
+    expect(review.groupView).toBe(true);
+    review.select(review.rows[0], false);
+    await review.refresh();
+    expect(review.groupView).toBe(false);
+  });
+
   it('groups standard spots by the acquisition reference name while preserving raw labels', async () => {
     const previous = get.getMockImplementation()!;
     get.mockImplementation(async path => path === `/v1/sessions/${session.id}/acquisitions`
@@ -95,6 +118,7 @@ describe('Review selection and loading', () => {
     await review.fromImages(event('atlas-other'));
     expect(review.scope).toEqual({ kind: 'session', id: 'other', run: 'preferred' });
     expect(review.selectedKey).toBe('acq-other');
+    expect(review.groupView).toBe(false);
     expect(sendCommand).not.toHaveBeenCalled();
   });
   it('does not select a lookup result belonging to a different atlas project', async () => {

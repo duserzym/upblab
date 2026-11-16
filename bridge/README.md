@@ -41,10 +41,29 @@ inside a module webview is intercepted and routed like `open()`.
 
 The shell side of the `postMessage` transport is `createFrameHost` from
 `@lab/bridge/host`. The wire format is in `src/protocol.ts`
-(`PROTOCOL_VERSION` 5, `PROTOCOL_MINOR` 1; version 1 had `open`, `token` and
+(`PROTOCOL_VERSION` 5, `PROTOCOL_MINOR` 2; version 1 had `open`, `token` and
 `notify`, version 2 added `open-files`, version 3 added commands and spot
 selection, version 3.1 added theme, version 4 added atlas sync, version 5 the
-viewer presentation and spot actions, and version 5.1 the viewer's inset).
+viewer presentation and spot actions, version 5.1 the viewer's inset, and
+version 5.2 Review sample groups in that inset).
+
+## `review-spots`: Review overlays and mount inset
+
+The shell sends `review-spots` to the Images viewer. `projects` maps atlas
+project ids to the spot ids whose overlays are shown; unlisted projects keep
+their full overlays. Optional `colors` maps project ids to spot ids to `#rrggbb`
+Review colours. Optional `focus` has the fields of `focus-spot` except `type`.
+
+In v5.2, optional `groups` maps project ids to ordered arrays of
+`{ name, color, spots }`. While Review shows sample groups, the mount inset
+outlines their shown atlas spots in each group's Review colour. Without
+`groups`, the inset shows the selected spot as before. Older modules ignore
+this additive field, and commands without it remain valid.
+
+`projects`, `colors` and `groups` each allow at most 64 valid project ids.
+Each project in `groups` allows at most 256 groups; a group name has 1–200
+characters, its colour is `#rrggbb`, and its `spots` array contains at most
+10000 valid atlas spot ids. Invalid groups reject the whole command.
 
 ## `open-files`: files the user opened in the shell (protocol v2)
 

@@ -2,10 +2,54 @@ import { test, expect, type Page } from '@playwright/test';
 import { installFakeTauri } from './fake-tauri';
 import { problems } from './problems';
 import { reviewFixtures, session, runs } from './fixtures/review';
+import type { ReviewSpotsCommand } from '@lab/bridge';
 import { calls, openReview } from './review-helpers';
 const emit = (page: Page, spot: string, via = 'user') => page.evaluate(({ spot, via }) => (window as unknown as {
   __emit: (e: string, p: unknown) => void;
 }).__emit('lab-bridge://notify', { event: { type: 'lab.spot.selected', project: 'project-demo', spot, via }, source: 'grainatlas' }), { spot, via });
+test('Review sends shown sample groups to the SEM inset until a single spot is picked', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openReview(page);
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+  const lastReviewCommand = async () => (await calls(page)).filter(([command, args]) =>
+    command === 'module_command' && args?.module === 'images' &&
+    (args.command as { type?: string })?.type === 'review-spots').pop()?.[1]?.command as ReviewSpotsCommand | undefined;
+  const groups = [
+    { name: 'Sample A', color: expect.stringMatching(/^#[0-9a-f]{6}$/i), spots: ['atlas-1', 'atlas-2', 'atlas-3', 'atlas-4'] },
+    { name: 'Sample B', color: expect.stringMatching(/^#[0-9a-f]{6}$/i), spots: ['atlas-5', 'atlas-6', 'atlas-7', 'atlas-8'] },
+  ];
+  await expect.poll(async () => (await lastReviewCommand())?.groups).toEqual({ 'project-demo': groups });
+  // Re-pick the automatically selected details spot: mode changes even though its key does not.
+  await page.locator('[data-spot-key="acq-1"]').click();
+  await expect.poll(async () => {
+    const command = await lastReviewCommand();
+    return !!command && !Object.hasOwn(command, 'groups');
+  }).toBe(true);
+  await page.getByRole('button', { name: 'None', exact: true }).click();
+  await expect.poll(async () => (await lastReviewCommand())?.groups).toEqual({});
+  await page.getByRole('button', { name: 'All samples', exact: true }).click();
+  await expect.poll(async () => (await lastReviewCommand())?.groups).toEqual({ 'project-demo': groups });
+  const before = (await calls(page)).length;
+  await page.locator('[data-spot-key="acq-2"]').click();
+  await expect.poll(async () => {
+    const commands = (await calls(page)).slice(before).filter(([command, args]) =>
+      command === 'module_command' && args?.module === 'images' &&
+      (args.command as { type?: string })?.type === 'review-spots');
+    const command = commands.pop()?.[1]?.command as ReviewSpotsCommand | undefined;
+    return !!command && !Object.hasOwn(command, 'groups') && command.focus?.spot === 'atlas-2';
+  }).toBe(true);
+  // Solo fills details internally, but the inset must still receive the whole sample group.
+  await page.getByRole('button', { name: 'Sample Sample B', exact: true }).click({ modifiers: ['Alt'] });
+  await expect.poll(async () => (await lastReviewCommand())?.groups).toEqual({ 'project-demo': [groups[1]] });
+  // Tree keyboard navigation is also a single-spot pick.
+  await page.getByRole('tree', { name: 'Result spots', exact: true }).focus();
+  await page.keyboard.press('ArrowDown');
+  await expect.poll(async () => {
+    const command = await lastReviewCommand();
+    return !!command && !Object.hasOwn(command, 'groups');
+  }).toBe(true);
+});
+
 for (const [width, height] of [[1440, 900], [1280, 800]]) {
   test.describe(`${width} × ${height}`, () => {
     test.beforeEach(async ({ page }) => { await page.setViewportSize({ width, height }); await openReview(page); });
@@ -62,7 +106,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await surface.evaluate(el => el.setAttribute('data-instance', 'original'));
       await page.locator('[data-spot-key="acq-2"]').click();
       await expect.poll(async () => (await calls(page)).filter(([c, a]) => c === 'module_command' && a?.module === 'images').pop()?.[1]?.command)
-        .toMatchObject({ type: 'focus-spot', project: 'project-demo', spot: 'atlas-2', server: 'http://localhost:8000', via: 'review' });
+        .toMatchObject({ type: 'review-spots', focus: { project: 'project-demo', spot: 'atlas-2', server: 'http://localhost:8000', via: 'review' } });
       const left = (await page.getByRole('region', { name: 'Age & plots' }).boundingBox())!, right = (await surface.boundingBox())!;
       expect(left.x + left.width).toBeLessThanOrEqual(right.x + 1);
       expect(right.x + right.width).toBeLessThanOrEqual(width);
