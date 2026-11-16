@@ -15,7 +15,7 @@
 //   grainatlas://project/<id>/spot/<id>   -> standalone or hosted grainatlas, with spot
 //   upbr://session/<id>?server=&code=     -> launch UPbRPy Studio in database mode (docs/WORKFLOW.md 4)
 //   upbr://run/<id>?server=               -> launch Studio on the project of that reduction run
-//   upbdb://auth/callback?code=…      -> finish the shell's ORCID or Google sign-in
+//   upbdb://auth/callback?code=…&state=… -> finish the shell's browser sign-in
 //   https://… and http://…                -> system browser
 //
 // Anything else is refused; the caller logs the refusal.
@@ -33,8 +33,8 @@ export type Resolution =
   | { kind: 'studio'; tab: 'reduce'; object: 'session' | 'run'; id: string; url: string }
   | { kind: 'atlas'; project: string; spot?: string; url: string }
   | { kind: 'review-run'; id: string; url: string }
-  | { kind: 'auth'; code: string; url: string }
-  | { kind: 'auth-error'; error: string; url: string }
+  | { kind: 'auth'; code: string; url: string; state?: string }
+  | { kind: 'auth-error'; error: string; url: string; state?: string }
   | { kind: 'external'; url: string }
   | { kind: 'refused'; url: string; reason: string };
 
@@ -88,12 +88,16 @@ export function resolve(input: string): Resolution {
         const params = (name: string) => u.searchParams.get(name) ?? new URLSearchParams(hashQuery).get(name);
         const code = params('code');
         const error = params('error');
+        // `state` comes back from UPbDB's #/connect page (the Sign in… button).
+        const rawState = params('state');
+        if (rawState !== null && !/^[A-Za-z0-9_-]{16,128}$/.test(rawState)) return refuse(url, 'sign-in callback with an invalid state');
+        const state = rawState ?? undefined;
         if (!code && error) {
           // upbdb://auth/callback?error=<slug>: the browser sign-in failed.
-          return /^[A-Za-z0-9._~-]{1,128}$/.test(error) ? { kind: 'auth-error', error, url } : refuse(url, 'sign-in callback with an invalid error');
+          return /^[A-Za-z0-9._~-]{1,128}$/.test(error) ? { kind: 'auth-error', error, url, ...(state ? { state } : {}) } : refuse(url, 'sign-in callback with an invalid error');
         }
         if (!code || !/^[A-Za-z0-9._~-]{1,512}$/.test(code)) return refuse(url, 'sign-in callback without a valid code');
-        return { kind: 'auth', code, url };
+        return { kind: 'auth', code, url, ...(state ? { state } : {}) };
       }
       // Data model and method code pages: table and column names, and codes, have
       // their own strict shapes (UPbDB docs/data_model_and_method_codes.md).

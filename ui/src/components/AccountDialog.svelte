@@ -7,6 +7,7 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import { identity, type Provider, type Providers } from '../lib/identity.svelte';
+  import { isDesktop } from '../lib/platform';
   import { openOverlay, closeOverlay } from '../lib/overlays.svelte';
 
   let username = $state('');
@@ -49,6 +50,10 @@
     await identity.beginProvider(p);
   }
 
+  async function signInWithBrowser() {
+    await identity.beginBrowser();
+  }
+
   function onKey(e: KeyboardEvent) {
     if (identity.dialog && e.key === 'Escape') close();
   }
@@ -65,9 +70,19 @@
         <div class="stack tight">
           <div class="row"><span class="spinner" aria-hidden="true"></span><strong>Finish signing in in your browser</strong></div>
           <p class="faint small">
-            {identity.pending.provider === 'orcid' ? 'ORCID' : 'Google'} sends you back to UPb Lab when you are done.
+            {identity.pending.provider === 'browser' ? 'Sign in on the UPbDB page, then click Sign UPb Lab in; the browser hands you back to UPb Lab.' : `${identity.pending.provider === 'orcid' ? 'ORCID' : 'Google'} sends you back to UPb Lab when you are done.`}
           </p>
           <div class="row"><button class="btn" onclick={() => (identity.pending = null)}>Cancel</button></div>
+        </div>
+      {:else if isDesktop}
+        <div class="stack">
+          <p class="small">Sign in on UPbDB's page in your browser, with ORCID, Google, GitHub or a password, whatever this server offers. New here? Create your account with ORCID on that page.</p>
+          {#if identity.error}<p class="error small">{identity.error}</p>{/if}
+          <div class="row">
+            <button class="btn" type="button" onclick={close}>Cancel</button>
+            <span class="spacer"></span>
+            <button class="btn primary" type="button" onclick={signInWithBrowser} disabled={!server}>Sign in…</button>
+          </div>
         </div>
       {:else}
         <form class="stack" onsubmit={submit}>

@@ -2,11 +2,14 @@
 // gives the bearer token to the module tabs through @lab/bridge `token()`.
 //
 //   desktop  the token lives in the OS keychain and in Rust (src-tauri/src/auth.rs);
-//            this page only learns the account. Password sign-in posts to
-//            /v1/auth/login; ORCID and Google open the system browser at
-//            /v1/auth/<provider>/start?next=upbdb://auth/callback, and the
-//            OS hands the callback back to the shell, which exchanges the
-//            one-time code at /v1/auth/exchange.
+//            this page only learns the account. Sign in… opens UPbDB's own
+//            page in the system browser (<server>/app/#/connect?app=upblab&
+//            callback=upbdb://auth/callback&state=…), which offers every method
+//            the server has (ORCID, Google, GitHub, password, ORCID sign-up);
+//            the OS hands upbdb://auth/callback?code=…&state=… back to the
+//            shell, which checks state and exchanges the one-time code at
+//            /v1/auth/exchange. (Password and per-provider paths remain for
+//            the web shell and the first-run wizard.)
 //   web      (/desk/, same origin as UPbDB) the token is kept in this
 //            tab's sessionStorage and handed to module iframes by the frame host.
 //
@@ -36,7 +39,18 @@ export const SIGN_OUT_EVENTS: readonly string[] = [SHELL_EVENTS.signedOut, 'upbd
 /** How long a browser sign-in may take before its callback is refused. */
 const PENDING_MS = 10 * 60_000;
 
-export type Provider = 'orcid' | 'google';
+/** 'browser': UPbDB's own sign-in page (#/connect), which offers every method the server has. */
+export type Provider = 'orcid' | 'google' | 'browser';
+
+function providerName(p: Provider): string {
+  return p === 'orcid' ? 'ORCID' : p === 'google' ? 'Google' : 'UPbDB';
+}
+
+function randomState(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 export interface Providers {
   password_registration: boolean;
@@ -163,8 +177,10 @@ const desktopBackend: Backend = { ...desktopAuth, token: () => null };
 
 /** UPbDB's sign-in error slugs (accounts/api.py, oidc.py), in words. */
 export function providerError(slug: string, provider: Provider): string {
-  const name = provider === 'orcid' ? 'ORCID' : 'Google';
+  const name = providerName(provider);
   const known: Record<string, string> = {
+    cancelled: 'Sign-in was cancelled in the browser.',
+    orcid_required: 'No UPbDB account uses that sign-in yet. Create your account with ORCID on the sign-in page, then link Google or GitHub on your Account page.',
     provider_unavailable: `${name} sign-in is not set up on this server.`,
     provider_unreachable: `${name} could not be reached from the server; try again later.`,
     state_mismatch: 'The sign-in took too long or was started twice; please try again.',
@@ -194,7 +210,7 @@ class Identity {
   /** Last sign-in problem, for the dialog. */
   error = $state('');
   /** A browser sign-in the shell started, waiting for its callback. */
-  pending = $state<{ provider: Provider; at: number } | null>(null);
+  pending = $state<{ provider: Provider; at: number; state?: string } | null>(null);
   /** Bumped whenever the account changes; module tabs reload on it. */
   revision = $state(0);
   private backend: Backend = isDesktop ? desktopBackend : webBackend;
@@ -284,14 +300,31 @@ class Identity {
   }
 
   /**
+   * UPbDB's own sign-in page in the system browser (#/connect): ORCID, Google,
+   * GitHub, a password or ORCID sign-up, whatever the server offers. After the
+   * person confirms, the page sends the browser to upbdb://auth/callback with a
+   * single-use code and this sign-in's state.
+   */
+  async beginBrowser() {
+    if (!this.target) return;
+    this.error = '';
+    const state = randomState();
+    const base = this.target.server.replace(/\/+$/, '');
+    const url = `${base}/app/#/connect?app=upblab&callback=${encodeURIComponent(CALLBACK_URL)}&state=${state}`;
+    this.pending = { provider: 'browser', at: Date.now(), state };
+    await openExternal(url);
+  }
+
+  /**
    * The OS handed us upbdb://auth/callback?code=…. Only a sign-in this
    * shell started is completed, so a link from elsewhere cannot sign the
    * user in to someone else's account.
    */
-  async completeProvider(code: string, from: string): Promise<{ ok: boolean; outcome: string }> {
+  async completeProvider(code: string, from: string, state?: string): Promise<{ ok: boolean; outcome: string }> {
     const pending = this.pending;
     if (from !== 'os' && from !== 'you') return { ok: false, outcome: `sign-in callbacks are only accepted from the OS, not ${from}` };
     if (!pending || Date.now() - pending.at > PENDING_MS) return { ok: false, outcome: 'no browser sign-in was started here' };
+    if (pending.state && pending.state !== state) return { ok: false, outcome: 'sign-in callback for a different sign-in (state does not match)' };
     if (!this.target) return { ok: false, outcome: 'no server configured' };
     this.pending = null;
     try {
@@ -299,7 +332,7 @@ class Identity {
       this.changed(next);
       this.error = '';
       this.dialog = false;
-      return { ok: true, outcome: `signed in with ${pending.provider === 'orcid' ? 'ORCID' : 'Google'} as ${next.account?.username ?? '?'}` };
+      return { ok: true, outcome: `signed in${pending.provider === 'browser' ? ' in the browser' : ` with ${providerName(pending.provider)}`} as ${next.account?.username ?? '?'}` };
     } catch (err) {
       this.error = message(err);
       this.dialog = true;
@@ -308,14 +341,15 @@ class Identity {
   }
 
   /** upbdb://auth/callback?error=<slug>: show why, if this shell started that sign-in. */
-  failProvider(error: string, from: string): { ok: boolean; outcome: string } {
+  failProvider(error: string, from: string, state?: string): { ok: boolean; outcome: string } {
     const pending = this.pending;
     if (from !== 'os' && from !== 'you') return { ok: false, outcome: `sign-in callbacks are only accepted from the OS, not ${from}` };
     if (!pending || Date.now() - pending.at > PENDING_MS) return { ok: false, outcome: 'no browser sign-in was started here' };
+    if (pending.state && pending.state !== state) return { ok: false, outcome: 'sign-in callback for a different sign-in (state does not match)' };
     this.pending = null;
     this.error = providerError(error, pending.provider);
     this.dialog = true;
-    return { ok: false, outcome: `${pending.provider === 'orcid' ? 'ORCID' : 'Google'} sign-in failed: ${error}` };
+    return { ok: false, outcome: `${providerName(pending.provider)} sign-in failed: ${error}` };
   }
 
   async logout(reason = 'you') {

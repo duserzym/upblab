@@ -130,7 +130,9 @@ for (const [w, h] of SIZES) {
 
       await page.getByRole('button', { name: 'Sign in' }).first().click();
       await expect(page.getByRole('dialog')).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Sign in with ORCID' })).toBeVisible();
+      // Desktop: one button that opens UPbDB's own sign-in page in the browser.
+      await expect(page.getByRole('dialog').getByRole('button', { name: 'Sign in…' })).toBeVisible();
+      await expect(page.getByRole('dialog').getByText('Create your account with ORCID')).toBeVisible();
       expect(await problems(page, 'sign-in dialog')).toEqual([]);
       await page.keyboard.press('Escape');
     });

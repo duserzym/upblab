@@ -84,6 +84,8 @@ describe('resolve: plan section 4.4 table', () => {
     expect(resolve('upbdb://auth/callback?error=orcid_access_denied')).toMatchObject({ kind: 'auth-error', error: 'orcid_access_denied' });
     expect(resolve('upbdb://auth/callback?error=%3Cscript%3E')).toMatchObject({ kind: 'refused' });
     expect(resolve('upbdb://auth/callback?code=a%20b')).toMatchObject({ kind: 'refused' });
+    expect(resolve('upbdb://auth/callback?code=c1&state=abcdefghijklmnop_12345')).toMatchObject({ kind: 'auth', code: 'c1', state: 'abcdefghijklmnop_12345' });
+    expect(resolve('upbdb://auth/callback?code=c1&state=short')).toMatchObject({ kind: 'refused', reason: /invalid state/ });
   });
 
   it('https -> system browser', () => {

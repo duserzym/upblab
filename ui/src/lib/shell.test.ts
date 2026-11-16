@@ -237,6 +237,25 @@ describe('shell sign-in callback (upbdb://auth/callback)', () => {
     identity.dialog = false;
   });
 
+  it('browser sign-in (#/connect): only the matching state signs in', async () => {
+    const STATE = 'abcdefghijklmnop_12345';
+    identity.pending = { provider: 'browser', at: Date.now(), state: STATE };
+    expect(await shell.handleLink('upbdb://auth/callback?code=abc&state=other_state_value_1234', 'os')).toBe(false);
+    expect(await shell.handleLink('upbdb://auth/callback?code=abc', 'os')).toBe(false);
+    expect(platform.desktopAuth.exchange).not.toHaveBeenCalled();
+    expect(await shell.handleLink(`upbdb://auth/callback?code=abc&state=${STATE}`, 'os')).toBe(true);
+    expect(platform.desktopAuth.exchange).toHaveBeenCalledWith(identity.target, 'abc');
+  });
+
+  it('browser sign-in cancelled on the page', async () => {
+    const STATE = 'abcdefghijklmnop_12345';
+    identity.pending = { provider: 'browser', at: Date.now(), state: STATE };
+    expect(await shell.handleLink(`upbdb://auth/callback?error=cancelled&state=${STATE}`, 'os')).toBe(false);
+    expect(identity.pending).toBeNull();
+    expect(identity.error).toMatch(/cancelled in the browser/);
+    identity.dialog = false;
+  });
+
   it('redacts one-time codes', () => {
     expect(redact('upbr://session/x?server=http://h&code=s3cret')).toBe('upbr://session/x?server=http://h&code=…');
     expect(redact('upbdb://auth/callback#/auth/callback?code=s3cret')).toBe('upbdb://auth/callback#/auth/callback?code=…');

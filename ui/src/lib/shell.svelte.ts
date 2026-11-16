@@ -252,13 +252,13 @@ class Shell {
         await logWarn(`[links] refused ${JSON.stringify(redact(url))} from ${from}: ${r.reason}`);
         return false;
       case 'auth': {
-        const done = await identity.completeProvider(r.code, from);
+        const done = await identity.completeProvider(r.code, from, r.state);
         this.record(url, from, done.outcome, !done.ok);
         await (done.ok ? logInfo : logWarn)(`[links] ${redact(url)} from ${from}: ${done.outcome}`);
         return done.ok;
       }
       case 'auth-error': {
-        const done = identity.failProvider(r.error, from);
+        const done = identity.failProvider(r.error, from, r.state);
         this.record(url, from, done.outcome, true);
         await logWarn(`[links] ${redact(url)} from ${from}: ${done.outcome}`);
         return false;
