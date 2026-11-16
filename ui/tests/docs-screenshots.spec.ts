@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,9 @@ const upbdbDist = fileURLToPath(new URL('../../../upbdb/ui/dist/', import.meta.u
 const atlasEntry = fileURLToPath(new URL('../public/modules/grainatlas/index.html', import.meta.url));
 const output = fileURLToPath(new URL('../../docs/images/', import.meta.url));
 const capture = process.env.DOCS_DATA ? loadDocsData(process.env.DOCS_DATA) : null;
+// Names that must never show, kept beside the capture (outside the repository), one per line.
+const denyFile = process.env.DOCS_DATA ? resolve(process.env.DOCS_DATA, 'deny.txt') : '';
+const deny = denyFile && existsSync(denyFile) ? readFileSync(denyFile, 'utf8').split('\n').map(l => l.trim()).filter(Boolean) : [];
 const api = capture?.api ?? demoApi;
 const scope = capture?.scope ?? { session: session.id, project: 'project-demo',
   focusKey: 'acq-1', focusLabel: 'Zircon_1', sessions: 3, mounts: 1 };
@@ -153,6 +156,8 @@ async function painted(page: Page, demo: Awaited<ReturnType<typeof serveDemo>>) 
       ...[...document.querySelectorAll('input,textarea')].map(el => (el as HTMLInputElement).value),
       ...[...document.images].map(el => el.alt)].join('\n'));
     expect(visible).not.toMatch(/\/Users\/|\/home\/|[A-Z]:\\Users\\|\.ts\.net\b|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i);
+    const lower = visible.toLowerCase();
+    expect(deny.filter(name => new RegExp(`(^|[^a-z0-9])${name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`).test(lower)), 'Names listed in deny.txt').toEqual([]);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }

@@ -16,6 +16,11 @@ test('atlas sync keeps the Review tree visible while replacing results without r
   await expect(tree).toBeVisible();
   await page.locator('[data-spot-key="acq-2"]').click();
   await expect.poll(() => overlays(page)).not.toHaveLength(0);
+  // Picking a spot leaves group view: wait for the overlay that drops the groups (bridge v5.2).
+  await expect.poll(async () => {
+    const last = (await overlays(page)).at(-1) as [string, { command?: { groups?: unknown; focus?: { spot?: string } } }] | undefined;
+    return last ? [last[1].command?.groups === undefined, last[1].command?.focus?.spot] : null;
+  }).toEqual([true, 'atlas-2']);
   const beforeLists = (await inventoryReads(page)).length;
   const beforeOverlays = (await overlays(page)).length;
   const path = `/v1/sessions/${session.id}/results?run=preferred`;
