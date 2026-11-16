@@ -48,12 +48,18 @@ dev: ## Run the desktop shell with hot reload (Vite on :1420)
 ui-dev: ## Run only the shell page in a browser at http://localhost:1420 (web delivery)
 	$(PNPM) --filter upbstudio-ui dev
 
+# Sign macOS builds with the lab's code-signing certificate when this Mac has it
+# ("UPb Lab Code Signing" in the login keychain; ~/Github/lab-builds/SIGNING.md), so
+# keychain permissions survive rebuilds and updates. Elsewhere builds stay ad hoc.
+LAB_SIGNING_IDENTITY ?= $(shell security find-identity -p codesigning 2>/dev/null | grep -q '"UPb Lab Code Signing"' && echo 'UPb Lab Code Signing')
+SIGN_ENV = $(if $(LAB_SIGNING_IDENTITY),APPLE_SIGNING_IDENTITY="$(LAB_SIGNING_IDENTITY)")
+
 .PHONY: build
 # CI=true makes the bundler skip the Finder AppleScript that arranges the .dmg
 # window: it needs Automation permission for Finder and times out without it.
 # GitHub Actions sets CI too, so local and CI disk images are the same.
 build: ## Build the release app and installers (.app/.dmg on macOS, .msi/.exe on Windows)
-	CI=true $(if $(RELEASE_TARGET),CARGO_TARGET_DIR="$(RELEASE_TARGET)") $(TAURI) build
+	CI=true $(SIGN_ENV) $(if $(RELEASE_TARGET),CARGO_TARGET_DIR="$(RELEASE_TARGET)") $(TAURI) build
 	@echo "Installers: $(BUNDLE_DIR)/ (copy the .app out, then delete it there)"
 
 .PHONY: quick
