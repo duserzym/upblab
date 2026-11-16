@@ -28,7 +28,7 @@ async function insideViewport(page: Page, locator: Locator) {
 
 async function screenshot(page: Page, info: TestInfo, state: string) {
   if (process.env.SCREENSHOTS !== '1' || info.project.name !== 'chromium') return;
-  const directory = process.env.SHOT_DIR ?? '../docs/screenshots';
+  const directory = process.env.SHOT_DIR ?? 'test-results';
   await mkdir(directory, { recursive: true });
   await page.screenshot({ path: join(directory, `check-updates-${state}.png`) });
 }

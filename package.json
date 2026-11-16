@@ -10,6 +10,7 @@
   "scripts": {
     "build:bridge": "pnpm --filter @lab/bridge build",
     "test": "pnpm -r test && node --test \"scripts/*.test.mjs\"",
+    "docs-screenshots": "DOCS_SCREENSHOTS=1 pnpm --filter upbstudio-ui exec playwright test docs-screenshots --project=chromium --workers=1",
     "updater:setup": "node scripts/setup-updater.mjs",
     "fetch-modules": "node scripts/fetch-modules.mjs"
   }

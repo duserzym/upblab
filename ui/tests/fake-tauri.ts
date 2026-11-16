@@ -17,9 +17,13 @@ export interface FakeOptions {
   projectPackages?: Record<string, unknown>;
   /** `files_scan` answers, by the joined paths. */
   scans?: Record<string, unknown>;
+  /** Paint native child webviews with bridge-connected iframes (docs previews). */
+  renderModules?: boolean;
 }
 
 export function installFakeTauri(opts: FakeOptions) {
+  // addInitScript also runs in child frames. They must use their real bridge.
+  if (opts.renderModules && window.parent !== window) return;
   type Cb = (msg: unknown) => unknown;
   const w = window as unknown as Record<string, unknown>;
   const callbacks = new Map<number, Cb>();
@@ -55,6 +59,40 @@ export function installFakeTauri(opts: FakeOptions) {
     await Promise.all((listeners.get(event) ?? []).map(id => callbacks.get(id)?.({ event, id, payload })));
   };
   w.__emit = emit;
+  type ModuleFrame = { frame: HTMLIFrameElement; loaded: boolean };
+  const modules = new Map<string, ModuleFrame>();
+  // Rust keeps presentation separately from the newest focus/visibility command,
+  // including commands sent before the child webview exists.
+  const waitingCommands = new Map<string, { presentation?: unknown; command?: unknown }>();
+  const queueCommand = (module: string, command: Record<string, unknown>) => {
+    const pending = waitingCommands.get(module) ?? {};
+    if (command.type === 'set-presentation') pending.presentation = command;
+    else pending.command = command;
+    waitingCommands.set(module, pending);
+  };
+  const push = (entry: ModuleFrame, body: Record<string, unknown>) =>
+    entry.frame.contentWindow?.postMessage({ tag: 'lab-bridge', v: 5, ...body }, new URL(entry.frame.src).origin);
+  const move = (entry: ModuleFrame, bounds: Record<string, number>) => {
+    Object.assign(entry.frame.style, {
+      left: `${bounds.x}px`, top: `${bounds.y}px`,
+      width: `${bounds.width}px`, height: `${bounds.height}px`,
+    });
+  };
+  if (opts.renderModules) window.addEventListener('message', event => {
+    const match = [...modules].find(([, entry]) => entry.frame.contentWindow === event.source &&
+      new URL(entry.frame.src).origin === event.origin);
+    const request = event.data;
+    if (!match || request?.tag !== 'lab-bridge' || typeof request.id !== 'string' || !request.op) return;
+    const [module] = match;
+    const reply = (result: unknown) => (event.source as WindowProxy).postMessage(
+      { tag: 'lab-bridge', v: 5, id: request.id, ok: true, result }, event.origin);
+    switch (request.op) {
+      case 'token': reply(opts.signedIn ? 'DEMO-SCREENSHOTS-TOKEN' : null); break;
+      case 'open-files': reply(null); break;
+      case 'notify': void emit('lab-bridge://notify', { source: module, event: request.event }); break;
+      case 'open': void emit('lab-bridge://open', { source: module, url: request.url }); reply(true); break;
+    }
+  });
   const quitRequest = () => emit('shell://quit-request', { id: ++quitSequence });
   w.__quitRequest = quitRequest;
   w.__commandResult = (id: string, command: string, result: Record<string, unknown>, source = 'images') =>
@@ -125,11 +163,74 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'module_theme':
           if (args?.theme !== 'light' && args?.theme !== 'dark') throw new Error('invalid bridge theme');
           theme = args.theme;
+          for (const entry of modules.values()) if (entry.loaded) push(entry, { push: 'theme', theme });
           return null;
         case 'bridge_theme':
           return theme;
-        case 'module_command':
-          return false; // exercises loading the target without leaving Review
+        case 'module_open': {
+          if (!opts.renderModules) return null;
+          const module = args!.module as string;
+          let entry = modules.get(module);
+          if (!entry) {
+            const frame = document.createElement('iframe');
+            frame.name = `lab-shell:${module}`;
+            frame.title = `Demo ${module} module`;
+            frame.dataset.fakeModule = module;
+            Object.assign(frame.style, { position: 'absolute', border: '0', zIndex: '10' });
+            entry = { frame, loaded: false };
+            modules.set(module, entry);
+            const created = entry;
+            frame.addEventListener('load', () => {
+              created.loaded = true;
+              push(created, { push: 'theme', theme });
+              // Let the shell reapply presentation first. The bridge retains
+              // only the latest waiting command, so queued focus must go last.
+              void emit('lab-bridge://ready', { module });
+              const pending = waitingCommands.get(module);
+              waitingCommands.delete(module);
+              if (pending?.presentation) push(created, { push: 'command', command: pending.presentation });
+              if (pending?.command) push(created, { push: 'command', command: pending.command });
+            });
+          }
+          for (const [other, value] of modules) if (other !== module) value.frame.style.display = 'none';
+          move(entry, args!.bounds as Record<string, number>);
+          entry.frame.style.display = 'block';
+          if (args!.navigate !== false || !entry.frame.getAttribute('src')) {
+            entry.loaded = false;
+            entry.frame.src = args!.url as string;
+          }
+          if (!entry.frame.isConnected) document.body.append(entry.frame);
+          return null;
+        }
+        case 'module_bounds': {
+          if (!opts.renderModules) return null;
+          const entry = modules.get(args!.module as string);
+          if (entry) move(entry, args!.bounds as Record<string, number>);
+          return null;
+        }
+        case 'module_hide': {
+          if (!opts.renderModules) return null;
+          const entry = modules.get(args!.module as string);
+          if (entry) entry.frame.style.display = 'none';
+          return null;
+        }
+        case 'module_reload': {
+          if (!opts.renderModules) return null;
+          const entry = modules.get(args!.module as string);
+          if (entry) { entry.loaded = false; entry.frame.src = entry.frame.src; }
+          return null;
+        }
+        case 'module_command': {
+          if (!opts.renderModules) return false;
+          const module = args!.module as string;
+          const entry = modules.get(module);
+          if (!entry || !entry.loaded) {
+            queueCommand(module, args!.command as Record<string, unknown>);
+            return !!entry;
+          }
+          push(entry, { push: 'command', command: args!.command });
+          return true;
+        }
         case 'api_get':
           if (Object.prototype.hasOwnProperty.call(fixtures, args!.path as string)) return { status: 200, body: fixtures[args!.path as string] };
           return args!.path === '/v1/auth/providers' ? { status: 200, body: { orcid: true, google: true } } : { status: 401, body: {} };

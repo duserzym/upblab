@@ -51,6 +51,8 @@ preview server instead of the dev server was tried and was slower (78 s), and
 some tests rely on development-port behaviour, so the dev server stays.
 Playwright reuses a dev server already running on port 1431.
 
+`pnpm docs-screenshots` writes invented-data PNGs to `docs/images/` in Light and Dark at 1440 × 900 and 1280 × 800; Images uses Review’s maximised SEM panel, and Sessions uses `../upbdb/ui/dist` (skipped if that build is absent).
+
 What stays slow: the WebKit half of Playwright (about half the run) and the
 Review and atlas-sync specs, which drive many real screens.
 

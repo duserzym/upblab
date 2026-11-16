@@ -39,8 +39,8 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await insideViewport(page);
       if (process.env.SCREENSHOTS === '1') {
-        await mkdir('../docs/screenshots', { recursive: true });
-        await page.screenshot({ path: `../docs/screenshots/updates-ready-${theme}-${width}x${height}.png` });
+        await mkdir('test-results', { recursive: true });
+        await page.screenshot({ path: `test-results/updates-ready-${theme}-${width}x${height}.png` });
       }
       await popover.getByRole('link', { name: 'Update settings…' }).click();
       const panel = page.getByTestId('updates-panel');
@@ -51,7 +51,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(panel).toContainText('0.11.0-test (local build)');
       await expect(panel).toContainText('Review tab, faster module switching');
       await insideViewport(page);
-      if (process.env.SCREENSHOTS === '1') await page.screenshot({ path: `../docs/screenshots/updates-panel-${theme}-${width}x${height}.png` });
+      if (process.env.SCREENSHOTS === '1') await page.screenshot({ path: `test-results/updates-panel-${theme}-${width}x${height}.png` });
     });
     for (const [state, text] of [['available', 'Update available: v0.2.0'], ['none', 'Up to date (v0.1.0)']]) {
       test(`updates ${state} ${theme} ${width}x${height}`, async ({ page }) => {
