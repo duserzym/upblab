@@ -72,6 +72,30 @@ test('E and S open the selected spot; typing, modifiers and other tabs do not', 
   expect((await launches(page, 'studio_launch')).length).toBe(1);
 });
 
+for (const [run, expectedRun] of [['preferred', 'run-preferred'], ['run-newer', 'run-newer']]) {
+  test(`Review header and S open the displayed ${run} run without a selected spot`, async ({ page }) => {
+    // Review selects the first spot it shows, so give the session no spot rows.
+    const empty = { [`/v1/sessions/${session.id}/results?run=${run}`]: { ...table, rows: [] } };
+    await openReview(page, { studioFound: true, waitForSpots: false, fixtures: { ...fixtures, ...empty }, store: {
+      reviewScope: JSON.stringify({ kind: 'session', id: session.id, run }),
+    } });
+    await expect(details(page)).toContainText('Select a spot');
+    const edit = page.locator('[data-review-panel="plots"]').getByRole('button', { name: 'Edit in UPbRPy Studio', exact: true });
+    await expect(edit).toHaveAttribute('title', /run shown in Review/);
+    await edit.click();
+    await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(1);
+    await page.keyboard.press('s');
+    await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(2);
+    for (const [, args] of await launches(page, 'studio_launch')) {
+      const url = new URL(args!.url as string);
+      expect(url.host + url.pathname).toBe(`run/${expectedRun}`);
+      expect(url.searchParams.has('acquisition')).toBe(false);
+      expect(url.searchParams.get('via')).toBe('upblab');
+    }
+    await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
+  });
+}
+
 test('missing grainatlas gives inline installation guidance without an Images fallback', async ({ page }) => {
   await openReview(page, { fixtures, grainatlasLaunchErrors: ['GrainAtlas is not installed (looked in /Applications and ~/Applications)'] });
   await details(page).getByRole('button', { name: 'Edit in grainatlas', exact: true }).click();

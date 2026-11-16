@@ -50,22 +50,30 @@ export function listboxMove(lengths: number[], column: number, index: number, ke
 /**
  * What "Edit in UPbRPy Studio" opens from Review. A selected spot opens its own
  * analysis (its run, focused on the acquisition); with no selection the whole
- * session opens: the session being reviewed, or, for a mount, the one session all
- * shown spots come from. `null` when Studio has nothing single to open.
+ * run shown opens, or the session when no complete run is available. For a mount,
+ * opens the one session the shown spots come from, using their run when all agree.
+ * `null` when Studio has nothing single to open.
  */
 export function studioTarget(
   scope: { kind: 'session'; id: string; run: string } | { kind: 'mount'; id: string } | null,
   selected: { sessionId: string | null; runId: string | null; acquisitionId: string | null } | null,
-  shown: { sessionId: string | null }[],
+  shown: { sessionId: string | null; runId?: string | null }[],
+  runs: RunOut[],
 ): { target: { session: string | null; run: string | null; acquisition?: string | null } | null; reason: string } {
   if (selected && (selected.sessionId || selected.runId)) {
     return { target: { session: selected.sessionId, run: selected.runId, acquisition: selected.acquisitionId }, reason: 'Edit this spot\'s data reduction in UPbRPy Studio (S)' };
   }
   if (scope?.kind === 'session') {
-    return { target: { session: scope.id, run: scope.run === 'preferred' ? null : scope.run }, reason: 'Edit this session\'s data reduction in UPbRPy Studio (S)' };
+    // Review clears runs on scope changes; also reject any list from another session.
+    const run = resolvedRun(completeRuns(runs.filter(r => r.session_id === scope.id)), scope.run);
+    return { target: { session: scope.id, run: run?.id ?? null }, reason: run ? 'Edit the run shown in Review in UPbRPy Studio (S)' : 'Edit this session\'s data reduction in UPbRPy Studio (S)' };
   }
   const sessions = [...new Set(shown.map(s => s.sessionId).filter((s): s is string => !!s))];
-  if (sessions.length === 1) return { target: { session: sessions[0], run: null }, reason: 'Edit this session\'s data reduction in UPbRPy Studio (S)' };
+  if (sessions.length === 1) {
+    const runIds = new Set(shown.filter(s => s.sessionId === sessions[0]).map(s => s.runId));
+    const run = runIds.size === 1 ? [...runIds][0] || null : null;
+    return { target: { session: sessions[0], run }, reason: run ? 'Edit the run shown in Review in UPbRPy Studio (S)' : 'Edit this session\'s data reduction in UPbRPy Studio (S)' };
+  }
   return {
     target: null,
     reason: sessions.length ? `These spots come from ${plural(sessions.length, 'session')}: select a spot to open its session in UPbRPy Studio` : 'No measured spots to open in UPbRPy Studio',

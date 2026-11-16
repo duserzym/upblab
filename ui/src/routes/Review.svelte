@@ -41,8 +41,8 @@
   });
   const editTitle = $derived(!imageTarget.project ? 'No published atlas for this spot or mount (E)'
     : imageTarget.spot ? 'Edit this spot in grainatlas (E)' : 'Edit the whole mount in grainatlas (E)');
-  // Edit in UPbRPy Studio: the selected spot's analysis, else the whole session.
-  const studio = $derived.by(() => studioTarget(review.scope, selectedSpot, shown));
+  // Edit in UPbRPy Studio: the selected spot's analysis, else the run shown.
+  const studio = $derived.by(() => studioTarget(review.scope, selectedSpot, shown, review.runs));
   let layoutsOpen = $state(false);
   let layoutChoices = $state<HTMLDivElement>();
   function layoutEscape(event: KeyboardEvent) {

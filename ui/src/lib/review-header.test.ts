@@ -45,19 +45,51 @@ describe('Review header', () => {
 describe('studioTarget', () => {
   const session = { kind: 'session' as const, id: 's1', run: 'preferred' };
   const spot = { sessionId: 's1', runId: 'r1', acquisitionId: 'a1' };
+  const sessionRuns = runs.map(r => ({ ...r, session_id: session.id }));
   it('opens the selected spot\'s own analysis', () => {
-    expect(studioTarget(session, spot, []).target).toEqual({ session: 's1', run: 'r1', acquisition: 'a1' });
+    expect(studioTarget(session, spot, [], sessionRuns).target).toEqual({ session: 's1', run: 'r1', acquisition: 'a1' });
   });
-  it('opens the whole session when nothing is selected', () => {
-    expect(studioTarget(session, null, []).target).toEqual({ session: 's1', run: null });
-    expect(studioTarget({ ...session, run: 'r9' }, null, []).target).toEqual({ session: 's1', run: 'r9' });
+  it('opens the preferred run shown when nothing is selected, or keeps an explicit run', () => {
+    expect(studioTarget(session, null, [], sessionRuns).target).toEqual({ session: 's1', run: 'run-preferred' });
+    expect(studioTarget(session, null, [], sessionRuns).reason).toMatch(/run shown in Review/);
+    expect(studioTarget({ ...session, run: 'r9' }, null, [], [...sessionRuns, { ...sessionRuns[1], id: 'r9' }]).target).toEqual({ session: 's1', run: 'r9' });
+  });
+  it('uses the newest complete run when none is preferred', () => {
+    const noPreferred = sessionRuns.map(r => ({ ...r, is_preferred_for_session: false }));
+    const pending = { ...sessionRuns[1], id: 'pending', status: 'running', started_at: '2027-01-01', is_preferred_for_session: true };
+    expect(studioTarget(session, null, [], [...noPreferred, pending]).target).toEqual({ session: 's1', run: 'run-newer' });
+  });
+  it('falls back to the session for incomplete or unloaded runs', () => {
+    const incomplete = sessionRuns.map(r => ({ ...r, status: 'running' }));
+    expect(studioTarget(session, null, [], incomplete).target).toEqual({ session: 's1', run: null });
+    expect(studioTarget(session, null, [], []).target).toEqual({ session: 's1', run: null });
+    expect(studioTarget(session, null, [], incomplete).reason).toMatch(/session's data reduction/);
+  });
+  it('ignores runs from a previous session, including an explicit id', () => {
+    expect(studioTarget(session, null, [], runs).target).toEqual({ session: 's1', run: null });
+    expect(studioTarget({ ...session, run: runs[0].id }, null, [], runs).target).toEqual({ session: 's1', run: null });
+    expect(studioTarget(session, null, [], [...runs, { ...sessionRuns[1], status: 'complete' }]).target).toEqual({ session: 's1', run: 'run-newer' });
   });
   it('for a mount, opens the one session its spots come from, else asks for a selection', () => {
     const mount = { kind: 'mount' as const, id: 'm1' };
-    expect(studioTarget(mount, null, [{ sessionId: 's2' }, { sessionId: 's2' }, { sessionId: null }]).target).toEqual({ session: 's2', run: null });
-    const two = studioTarget(mount, null, [{ sessionId: 's2' }, { sessionId: 's3' }]);
+    expect(studioTarget(mount, null, [{ sessionId: 's2' }, { sessionId: 's2' }, { sessionId: null }], []).target).toEqual({ session: 's2', run: null });
+    const two = studioTarget(mount, null, [{ sessionId: 's2' }, { sessionId: 's3' }], []);
     expect(two.target).toBeNull();
     expect(two.reason).toMatch(/2 sessions: select a spot/);
-    expect(studioTarget(mount, null, []).reason).toMatch(/No measured spots/);
+    expect(studioTarget(mount, null, [], []).reason).toMatch(/No measured spots/);
+  });
+  it('for a mount, opens a run only when every shown row of the single session agrees', () => {
+    const mount = { kind: 'mount' as const, id: 'm1' };
+    const row = { sessionId: 's2', runId: 'r2' };
+    const agreed = studioTarget(mount, null, [row, { ...row }, { sessionId: null, runId: null }], []);
+    expect(agreed.target).toEqual({ session: 's2', run: 'r2' });
+    expect(agreed.reason).toMatch(/run shown in Review/);
+    for (const other of [{ ...row, runId: 'r3' }, { ...row, runId: null }, { sessionId: 's2' }]) {
+      const mixed = studioTarget(mount, null, [row, other], []);
+      expect(mixed.target).toEqual({ session: 's2', run: null });
+      expect(mixed.reason).toMatch(/session's data reduction/);
+    }
+    expect(studioTarget(mount, spot, [row], []).target).toEqual({ session: 's1', run: 'r1', acquisition: 'a1' });
+    expect(studioTarget(mount, null, [row, { ...row, sessionId: 's3' }], []).target).toBeNull();
   });
 });
