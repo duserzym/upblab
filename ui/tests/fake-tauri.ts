@@ -64,11 +64,17 @@ export function installFakeTauri(opts: FakeOptions) {
   // Rust keeps presentation separately from the newest focus/visibility command,
   // including commands sent before the child webview exists.
   const waitingCommands = new Map<string, { presentation?: unknown; command?: unknown }>();
+  const latestCommands = new Map<string, Record<string, unknown>>();
+  const latestPresentation = new Map<string, Record<string, unknown>>();
   const queueCommand = (module: string, command: Record<string, unknown>) => {
     const pending = waitingCommands.get(module) ?? {};
-    if (command.type === 'set-presentation') pending.presentation = command;
-    else pending.command = command;
+    if (command.type === 'set-presentation') { pending.presentation = command; latestPresentation.set(module, command); }
+    else { pending.command = command; latestCommands.set(module, command); }
     waitingCommands.set(module, pending);
+  };
+  // Rust's theme script marks each module page's <html>; same-origin frames get the same here.
+  const markTheme = (entry: ModuleFrame) => {
+    try { entry.frame.contentDocument?.documentElement.setAttribute('data-theme', theme); } catch { /* cross-origin */ }
   };
   const push = (entry: ModuleFrame, body: Record<string, unknown>) =>
     entry.frame.contentWindow?.postMessage({ tag: 'lab-bridge', v: 5, ...body }, new URL(entry.frame.src).origin);
@@ -163,7 +169,7 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'module_theme':
           if (args?.theme !== 'light' && args?.theme !== 'dark') throw new Error('invalid bridge theme');
           theme = args.theme;
-          for (const entry of modules.values()) if (entry.loaded) push(entry, { push: 'theme', theme });
+          for (const entry of modules.values()) if (entry.loaded) { markTheme(entry); push(entry, { push: 'theme', theme }); }
           return null;
         case 'bridge_theme':
           return theme;
@@ -182,6 +188,7 @@ export function installFakeTauri(opts: FakeOptions) {
             const created = entry;
             frame.addEventListener('load', () => {
               created.loaded = true;
+              markTheme(created);
               push(created, { push: 'theme', theme });
               // Let the shell reapply presentation first. The bridge retains
               // only the latest waiting command, so queued focus must go last.
@@ -190,6 +197,15 @@ export function installFakeTauri(opts: FakeOptions) {
               waitingCommands.delete(module);
               if (pending?.presentation) push(created, { push: 'command', command: pending.presentation });
               if (pending?.command) push(created, { push: 'command', command: pending.command });
+              // The bridge keeps one waiting command until the module registers its
+              // handler; replay presentation, then the newest command, a few times.
+              for (const delay of [400, 1200, 2500]) setTimeout(() => {
+                if (!created.loaded) return;
+                const presentation = latestPresentation.get(module);
+                if (presentation) push(created, { push: 'command', command: presentation });
+                const last = latestCommands.get(module);
+                if (last) push(created, { push: 'command', command: last });
+              }, delay);
             });
           }
           for (const [other, value] of modules) if (other !== module) value.frame.style.display = 'none';
@@ -229,6 +245,15 @@ export function installFakeTauri(opts: FakeOptions) {
             return !!entry;
           }
           push(entry, { push: 'command', command: args!.command });
+          // Like Rust, keep presentation apart from the newest focus/visibility
+          // command: the bridge holds one waiting command until the module
+          // registers, so re-send that command after a presentation change.
+          const command = args!.command as Record<string, unknown>;
+          if (command.type === 'set-presentation') {
+            latestPresentation.set(module, command);
+            const last = latestCommands.get(module);
+            if (last) push(entry, { push: 'command', command: last });
+          } else latestCommands.set(module, command);
           return true;
         }
         case 'api_get':

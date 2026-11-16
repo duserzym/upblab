@@ -224,7 +224,9 @@
       // pending commands, so removing groups must not swallow the spot focus.
       const singlePick = inReview && displayedGroups && !groupView;
       displayedGroups = groupView;
-      const target = inReview ? (focus ?? (singlePick ? review.selected : opening ? shown.find(row => row.atlasProjectId && row.atlasSpotId) : null)) : null;
+      // Opening the images shows the spot the user picked, else the first shown spot.
+      const picked = !review.groupView && review.selected?.atlasSpotId && shownKeys.has(review.selected.key) ? review.selected : null;
+      const target = inReview ? (focus ?? (singlePick ? review.selected : opening ? (picked ?? shown.find(row => row.atlasProjectId && row.atlasSpotId)) : null)) : null;
       atlasFocus = null;
       lastVisibility = signature;
       const message: ReviewSpotsCommand = { type: 'review-spots', projects, colors, ...(groups === undefined ? {} : { groups }) };

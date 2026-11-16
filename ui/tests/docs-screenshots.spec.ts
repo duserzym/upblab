@@ -7,14 +7,22 @@ import { expect, test, type BrowserContext, type Frame, type Page } from '@playw
 import { installFakeTauri } from './fake-tauri';
 import { demoAreas, demoAtlas, demoProject, demoSpots, drawDemoTiles } from './fixtures/demo-atlas';
 import { demoApi } from './fixtures/demo-upbdb';
+import { loadDocsData } from './fixtures/docs-data';
 import { session } from './fixtures/review';
 
 const server = 'http://localhost:8000';
 const upbdbDist = fileURLToPath(new URL('../../../upbdb/ui/dist/', import.meta.url));
 const atlasEntry = fileURLToPath(new URL('../public/modules/grainatlas/index.html', import.meta.url));
 const output = fileURLToPath(new URL('../../docs/images/', import.meta.url));
+const capture = process.env.DOCS_DATA ? loadDocsData(process.env.DOCS_DATA) : null;
+const api = capture?.api ?? demoApi;
+const scope = capture?.scope ?? { session: session.id, project: 'project-demo',
+  focusKey: 'acq-1', focusLabel: 'Zircon_1', sessions: 3, mounts: 1 };
+const contentTypes: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+  '.json': 'application/json', '.geojson': 'application/geo+json', '.svg': 'image/svg+xml',
+  '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.webp': 'image/webp' };
 const screens = ['home', 'sessions', 'images', 'review-concordia', 'review-geochemistry',
-  'review-depth', 'review-images', 'reduce', 'settings'] as const;
+  'review-depth', 'review-images', 'review-groups', 'reduce', 'settings'] as const;
 type Screen = typeof screens[number];
 let bundle: Map<string, Buffer>;
 
@@ -23,6 +31,7 @@ test.skip(({ browserName }) => browserName !== 'chromium', 'Documentation images
 test.beforeAll(async ({ browser }, info) => {
   if (info.project.name !== 'chromium') return;
   await mkdir(output, { recursive: true });
+  if (capture) return;
   // Use an isolated blank page. Pixels are generated in canvas at test time,
   // returned as bytes and served by routes; no binary fixture is committed.
   const generator = await browser.newPage();
@@ -67,24 +76,32 @@ async function serveDemo(context: BrowserContext) {
     if (url.origin === server) {
       if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
       if (request.method() === 'GET') {
-        if (url.pathname.startsWith('/atlas/projects/project-demo/')) {
-          const path = url.pathname.slice('/atlas/projects/project-demo/'.length), body = bundle.get(path);
-          if (body) return route.fulfill({ body, headers, contentType: path.endsWith('.webp') ? 'image/webp' : 'application/json' });
+        const atlasPrefix = `/atlas/projects/${scope.project}/`;
+        if (url.pathname.startsWith(atlasPrefix)) {
+          const relative = decodeURIComponent(url.pathname.slice(atlasPrefix.length));
+          if (capture) {
+            const path = resolve(capture.atlasRoot, relative);
+            if (!relative.split(/[\\/]/).includes('..') && path.startsWith(capture.atlasRoot + sep) && existsSync(path)) {
+              return route.fulfill({ body: await readFile(path), headers,
+                contentType: contentTypes[extname(path)] ?? 'application/octet-stream' });
+            }
+          } else {
+            const body = bundle.get(relative);
+            if (body) return route.fulfill({ body, headers, contentType: relative.endsWith('.webp') ? 'image/webp' : 'application/json' });
+          }
         }
         if (url.pathname.startsWith('/v1/')) {
-          // Review fixtures include run-specific answers; timeline filters use
-          // the same small invented inventory regardless of query order.
+          // Run-specific answers take precedence; timeline filters fall back to
+          // the captured or invented inventory regardless of query order.
           const key = url.pathname + url.search;
-          const body = demoApi[key] ?? demoApi[url.pathname];
+          const body = Object.hasOwn(api, key) ? api[key] : api[url.pathname];
           if (body !== undefined) return route.fulfill({ json: body, headers });
         }
         if (url.pathname.startsWith('/app/')) {
           const relative = decodeURIComponent(url.pathname.slice('/app/'.length)) || 'index.html';
           const path = resolve(upbdbDist, relative);
           if (path.startsWith(upbdbDist.replace(/\/$/, '') + sep) && existsSync(path)) {
-            const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
-              '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.webp': 'image/webp' };
-            return route.fulfill({ body: await readFile(path), contentType: types[extname(path)] ?? 'application/octet-stream', headers });
+            return route.fulfill({ body: await readFile(path), contentType: contentTypes[extname(path)] ?? 'application/octet-stream', headers });
           }
         }
       }
@@ -140,22 +157,46 @@ async function painted(page: Page, demo: Awaited<ReturnType<typeof serveDemo>>) 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 
-async function readyAtlas(page: Page, demo: Awaited<ReturnType<typeof serveDemo>>, theme: string) {
+async function readyAtlas(page: Page, demo: Awaited<ReturnType<typeof serveDemo>>, theme: string, singleSpot = true) {
   const frame = await frameFor(page, 'images');
   await expect(frame.getByRole('application', { name: 'Mosaic canvas', exact: true })).toBeVisible();
   await expect(frame.locator('html')).toHaveAttribute('data-theme', theme);
   await expect(frame.getByTestId('viewer-controls')).toBeVisible();
-  await expect(frame.locator('[data-testid="spot"].sel').filter({ hasText: 'Zircon_1' })).toBeVisible();
+  if (singleSpot) await expect(frame.locator('[data-testid="spot"].sel').filter({ hasText: scope.focusLabel })).toBeVisible();
+  await expect(frame.getByTestId('mount-inset-body')).toBeVisible();
   await expect.poll(demo.tileReads).toBeGreaterThan(0);
   await painted(page, demo);
   // The viewer uses canvas for pixels and SVG for spot/grain overlays.
   await expect(frame.locator('[aria-label="Mosaic canvas"] svg').first()).toBeVisible();
-  await expect.poll(() => frame.locator('[aria-label="Mosaic canvas"] canvas').evaluate((el: HTMLCanvasElement) => {
+  await expect.poll(() => frame.locator('[aria-label="Mosaic canvas"] canvas').evaluate((el: HTMLCanvasElement, realImage: boolean) => {
     const data = el.getContext('2d')!.getImageData(0, 0, el.width, el.height).data;
+    if (data.length < 8) return false;
+    // Any real SEM image is acceptable; a blank or uniform canvas is not.
+    if (realImage) {
+      for (let i = 4; i < data.length; i += 4) {
+        if (data[i] !== data[0] || data[i + 1] !== data[1] || data[i + 2] !== data[2]) return true;
+      }
+      return false;
+    }
     let bright = 0;
     for (let i = 0; i < data.length; i += 16) if (data[i] > 100 && Math.abs(data[i] - data[i + 1]) < 3) bright++;
-    return bright;
-  }), { message: 'Synthetic grains have painted into the mosaic' }).toBeGreaterThan(100);
+    return bright > 100;
+  }, !!capture), { message: capture ? 'Real SEM pixels have painted into the mosaic' : 'Synthetic grains have painted into the mosaic' }).toBe(true);
+}
+
+async function readyGroups(frame: Frame) {
+  // Probe the loaded module code so an older build can still supply screenshots,
+  // while a build that supports groups must actually render its sample regions.
+  const supportsGroups = await frame.evaluate(async () => {
+    const scripts = new Set([...document.scripts].map(script => script.src).filter(Boolean));
+    for (const entry of performance.getEntriesByType('resource')) {
+      if (new URL(entry.name).pathname.endsWith('.js')) scripts.add(entry.name);
+    }
+    const sources = await Promise.all([...scripts].map(async src => (await fetch(src)).text()));
+    return sources.some(source => source.includes('mount-inset-group'));
+  });
+  if (supportsGroups) await expect(frame.getByTestId('mount-inset-group').first()).toBeVisible();
+  else console.info('review-groups: GrainAtlas build predates mount inset groups; skipping the sample-region wait.');
 }
 
 for (const theme of ['light', 'dark'] as const) for (const [width, height] of [[1440, 900], [1280, 800]]) {
@@ -164,17 +205,17 @@ for (const theme of ['light', 'dark'] as const) for (const [width, height] of [[
     for (const screen of screens) test(`${screen}`, async ({ page, context }) => {
       test.skip(screen === 'sessions' && !existsSync(resolve(upbdbDist, 'index.html')),
         'Sessions screenshot skipped: build the read-only ../upbdb/ui/dist UI first.');
-      test.skip((screen === 'images' || screen === 'review-images') && !existsSync(atlasEntry),
+      test.skip((screen === 'images' || screen === 'review-images' || screen === 'review-groups') && !existsSync(atlasEntry),
         'Atlas screenshot skipped: fetch/build ui/public/modules/grainatlas first.');
       test.setTimeout(60_000);
       const demo = await serveDemo(context);
       await page.clock.setFixedTime(new Date('2026-11-15T12:00:00Z'));
       await page.addInitScript(installFakeTauri, {
-        store: { mode: 'server', serverUrl: server, lastTab: screen.startsWith('review-') || screen === 'images' ? 'review' : screen === 'settings' ? 'home' : screen,
+        store: { mode: 'server', serverUrl: server, lastTab: screen.startsWith('review-') || screen === 'images' ? 'review' : screen === 'settings' || screen === 'reduce' ? 'home' : screen,
           theme, themeChosen: true, updateAuto: false, reviewSplit: false,
-          reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }),
-          reviewInset: { width: 180, collapsed: false } },
-        fixtures: demoApi, signedIn: true, studioFound: true, renderModules: true,
+          reviewScope: JSON.stringify({ kind: 'session', id: scope.session, run: 'preferred' }),
+          reviewInset: { width: screen === "review-groups" ? 300 : 200, collapsed: false } },
+        fixtures: api, signedIn: true, studioFound: true, renderModules: true,
       });
       await page.goto('./');
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
@@ -186,10 +227,42 @@ for (const theme of ['light', 'dark'] as const) for (const [width, height] of [[
   });
 }
 
+/** Many samples collapse the tree: open the focus spot's sample first. */
+async function showFocus(page: Page) {
+  const spot = page.locator(`[data-spot-key="${scope.focusKey}"]`);
+  if (!await spot.isVisible()) {
+    const sample = scope.focusLabel.replace(/_\d+$/, '');
+    await page.getByRole('button', { name: `Expand ${sample}`, exact: true }).click();
+  }
+  await expect(spot).toBeVisible();
+  await spot.scrollIntoViewIfNeeded();
+  return spot;
+}
+
 async function prepareScreen(page: Page, screen: Screen, demo: Awaited<ReturnType<typeof serveDemo>>, theme: string) {
   if (screen.startsWith('review-')) {
-    await expect(page.locator('[data-spot-key="acq-1"]')).toBeVisible();
-    await page.locator('[data-spot-key="acq-1"]').click();
+    if (screen === 'review-groups') {
+      await page.getByRole('checkbox', { name: 'Group unregistered by spot name', exact: true }).check();
+      await page.getByRole('button', { name: 'All', exact: true }).click();
+      const samples = page.getByRole('treeitem', { name: 'Samples', exact: true });
+      await samples.locator(':scope > .layer-row > button.name').click();
+      await samples.locator(':scope > .layer-row > button.disclosure').click();
+      await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+      await readyAtlas(page, demo, theme, false);
+      // Give the images room and enlarge the mount map, as a user would to read the regions.
+      await page.getByRole('button', { name: 'Maximise SEM images', exact: true }).click();
+      const frame = await frameFor(page, 'images');
+      await readyGroups(frame);
+      const enlarge = frame.getByTestId('mount-inset-enlarge');
+      if (await enlarge.isEnabled() && await enlarge.getAttribute('aria-label') === 'Larger mount map') await enlarge.click();
+      await readyAtlas(page, demo, theme, false);
+    } else {
+      await (await showFocus(page)).click();
+    }
+    if (screen === 'review-concordia') {
+      // Two discordant outliers stretch the axes; frame the main cluster as a user would.
+      await page.getByRole('button', { name: 'Fit cluster', exact: true }).click();
+    }
     if (screen === 'review-geochemistry') {
       await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
       await page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true }).click();
@@ -208,38 +281,43 @@ async function prepareScreen(page: Page, screen: Screen, demo: Awaited<ReturnTyp
         .getByRole('button', { name: 'Edit in grainatlas', exact: true })).toBeVisible();
     }
     // Shell plots are uPlot canvases, not SVG. Wait for their real renderers.
-    await expect(page.getByTestId('review-view').locator('.uplot canvas').first()).toBeVisible();
-    if (screen !== 'review-depth') await expect(page.getByTestId('review-view').locator('[data-point-key="acq-1"]').first()).toBeAttached();
+    if (screen !== 'review-groups') await expect(page.getByTestId('review-view').locator('.uplot canvas').first()).toBeVisible();
+    if (screen !== 'review-depth' && screen !== 'review-groups') await expect(page.getByTestId('review-view').locator(`[data-point-key="${scope.focusKey}"]`).first()).toBeAttached();
     return;
   }
   if (screen === 'images') {
     // The current shell hosts GrainAtlas in Review rather than an Images tab.
     // Its real maximise control gives the documentation an images-focused view.
-    await expect(page.locator('[data-spot-key="acq-1"]')).toBeVisible();
-    await page.locator('[data-spot-key="acq-1"]').click();
+    await (await showFocus(page)).click();
     await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
     await page.getByRole('button', { name: 'Maximise SEM images', exact: true }).click();
     await readyAtlas(page, demo, theme);
-    const frame = await frameFor(page, 'images');
-    await frame.getByTestId('viewer-controls').getByRole('button', { name: 'Fit', exact: true }).click();
-    await readyAtlas(page, demo, theme);
+    if (!capture) {
+      const frame = await frameFor(page, 'images');
+      await frame.getByTestId('viewer-controls').getByRole('button', { name: 'Fit', exact: true }).click();
+      await readyAtlas(page, demo, theme);
+    }
   } else if (screen === 'sessions') {
     const frame = await frameFor(page, 'sessions');
     await expect(frame.getByLabel('Session dashboard')).toBeVisible();
-    await expect(frame.getByTestId('session-card')).toHaveCount(3);
+    await expect(frame.getByTestId('session-card')).toHaveCount(scope.sessions);
     await expect(frame.getByRole('application', { name: /^Sessions and spots over time/ })).toBeVisible();
     await expect(frame.locator('html')).toHaveAttribute('data-theme', theme);
-    await expect(frame.getByRole('link', { name: /Demo analyst/ })).toBeVisible();
+    const account = api['/v1/accounts/me'] as { display_name: string };
+    await expect(frame.getByRole('link', { name: account.display_name })).toBeVisible();
   } else if (screen === 'settings') {
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Lab server', exact: true })).toHaveAttribute('aria-checked', 'true');
   } else if (screen === 'reduce') {
-    await expect(page.getByTestId('reduce-sessions').locator('article')).toHaveCount(3);
+    // Opened from Home, as a user does: Reduce loads its list when its tab is shown.
+    await expect(page.getByTestId('session-card')).toHaveCount(scope.sessions);
+    await page.getByRole('tab', { name: 'Reduce', exact: true }).click();
+    await expect(page.getByTestId('reduce-sessions').locator('article')).toHaveCount(scope.sessions);
     await expect(page.getByText('UPbRPy Studio is not installed')).toHaveCount(0);
   } else {
-    await expect(page.getByTestId('session-card')).toHaveCount(3);
-    await expect(page.getByTestId('mount-card')).toHaveCount(1);
+    await expect(page.getByTestId('session-card')).toHaveCount(scope.sessions);
+    await expect(page.getByTestId('mount-card')).toHaveCount(scope.mounts);
     await expect(page.getByTestId('mount-card').locator('img').first()).toBeVisible();
     await expect(page.getByText(/loading reductions|checking…/)).toHaveCount(0);
   }
