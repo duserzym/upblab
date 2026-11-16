@@ -239,7 +239,7 @@ for (const [width, height] of [...SIZES, MIN]) {
       reviewDockSolo: JSON.stringify({ axis: 'x', ratio: 0.3, first: 'spots', second: { axis: 'x', ratio: 0.6, first: 'plots', second: 'details' } }),
     } });
     const panel = page.getByTestId('review-details');
-    for (const name of ['Edit in grainatlas', 'Open in Studio']) {
+    for (const name of ['Edit in grainatlas', 'Edit in UPbRPy Studio']) {
       await panel.getByRole('button', { name, exact: true }).scrollIntoViewIfNeeded();
       await expect(panel.getByRole('button', { name, exact: true })).toBeVisible();
     }

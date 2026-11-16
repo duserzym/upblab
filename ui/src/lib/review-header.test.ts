@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completeRuns, formatRunTime, listboxMove, resolvedRun, runBadge, scopeRows, sessionStatus } from './review-header';
+import { completeRuns, formatRunTime, listboxMove, resolvedRun, runBadge, scopeRows, sessionStatus, studioTarget } from './review-header';
 import { mount, runs, session } from '../../tests/fixtures/review';
 describe('Review header', () => {
   it('formats local timestamps and handles missing times', () => {
@@ -39,5 +39,25 @@ describe('Review header', () => {
     expect(listboxMove([4, 2], 0, 2, 'Home').index).toBe(0);
     expect(listboxMove([4, 2], 0, 0, 'End').index).toBe(3);
     expect(listboxMove([0, 0], 0, 0, 'ArrowDown')).toEqual({ column: 0, index: 0 });
+  });
+});
+
+describe('studioTarget', () => {
+  const session = { kind: 'session' as const, id: 's1', run: 'preferred' };
+  const spot = { sessionId: 's1', runId: 'r1', acquisitionId: 'a1' };
+  it('opens the selected spot\'s own analysis', () => {
+    expect(studioTarget(session, spot, []).target).toEqual({ session: 's1', run: 'r1', acquisition: 'a1' });
+  });
+  it('opens the whole session when nothing is selected', () => {
+    expect(studioTarget(session, null, []).target).toEqual({ session: 's1', run: null });
+    expect(studioTarget({ ...session, run: 'r9' }, null, []).target).toEqual({ session: 's1', run: 'r9' });
+  });
+  it('for a mount, opens the one session its spots come from, else asks for a selection', () => {
+    const mount = { kind: 'mount' as const, id: 'm1' };
+    expect(studioTarget(mount, null, [{ sessionId: 's2' }, { sessionId: 's2' }, { sessionId: null }]).target).toEqual({ session: 's2', run: null });
+    const two = studioTarget(mount, null, [{ sessionId: 's2' }, { sessionId: 's3' }]);
+    expect(two.target).toBeNull();
+    expect(two.reason).toMatch(/2 sessions: select a spot/);
+    expect(studioTarget(mount, null, []).reason).toMatch(/No measured spots/);
   });
 });

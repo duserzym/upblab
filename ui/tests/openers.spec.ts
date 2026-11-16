@@ -21,7 +21,7 @@ test('details open both apps at the selected analysis and leave Review active', 
   await details(page).getByRole('button', { name: 'Edit in grainatlas', exact: true }).click();
   await expect.poll(async () => (await launches(page, 'grainatlas_launch')).at(-1)?.[1]).toMatchObject({ project: 'project-demo', spot: 'atlas-2', code: 'ONE-TIME-FIXTURE' });
   await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
-  await details(page).getByRole('button', { name: 'Open in Studio', exact: true }).click();
+  await details(page).getByRole('button', { name: 'Edit in UPbRPy Studio', exact: true }).click();
   await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(1);
   const url = new URL((await launches(page, 'studio_launch'))[0][1]!.url as string);
   expect(url.host + url.pathname).toBe('run/run-preferred');
@@ -83,7 +83,7 @@ test('missing grainatlas gives inline installation guidance without an Images fa
 
 test('missing Studio stays inline in Review', async ({ page }) => {
   await openReview(page, { fixtures });
-  await details(page).getByRole('button', { name: 'Open in Studio', exact: true }).click();
+  await details(page).getByRole('button', { name: 'Edit in UPbRPy Studio', exact: true }).click();
   await expect(details(page).getByRole('status')).toContainText('Studio is not installed');
   await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
 });
@@ -152,7 +152,7 @@ test('watched revision refreshes Review without a v4 notice and preserves select
 
 test('a watched session submission refreshes its Home row and Review selection', async ({ page }) => {
   await openReview(page, { fixtures, studioFound: true }); await select(page);
-  await details(page).getByRole('button', { name: 'Open in Studio', exact: true }).click();
+  await details(page).getByRole('button', { name: 'Edit in UPbRPy Studio', exact: true }).click();
   await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(1);
   await expect.poll(async () => (await calls(page)).filter(([c, a]) => c === 'api_get' && a?.path === `/v1/sessions/${session.id}/reductions`).length).toBeGreaterThan(1);
   await page.evaluate(({ session, runs, table }) => {
@@ -201,7 +201,7 @@ test('geochemistry point menus offer the same in-context actions', async ({ page
 
 test('failed Studio launch gives inline guidance in Review', async ({ page }) => {
   await openReview(page, { fixtures, studioFound: true, studioLaunchErrors: ['Could not open Studio: fixture launch failure'] });
-  await details(page).getByRole('button', { name: 'Open in Studio', exact: true }).click();
+  await details(page).getByRole('button', { name: 'Edit in UPbRPy Studio', exact: true }).click();
   await expect(details(page).getByRole('status')).toContainText('fixture launch failure');
   await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
 });
@@ -251,7 +251,7 @@ test('the collapsed details strip keeps the selected name and date and opens bot
   await edit.click();
   await expect.poll(async () => (await launches(page, 'grainatlas_launch')).at(-1)?.[1])
     .toMatchObject({ project: 'project-demo', spot: 'atlas-2' });
-  await strip.getByRole('button', { name: 'Open in Studio', exact: true }).click();
+  await strip.getByRole('button', { name: 'Edit in UPbRPy Studio', exact: true }).click();
   await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(1);
   const url = new URL((await launches(page, 'studio_launch'))[0][1]!.url as string);
   expect(url.host + url.pathname).toBe('run/run-preferred');
@@ -345,7 +345,7 @@ for (const [width, height] of [[1280, 800], [1440, 900]]) {
     await expect(info.locator('dt').filter({ hasText: /^206Pb\/238U date/ })).toHaveCount(0);
     await expect(info.locator('dt').filter({ hasText: /^207Pb\/206Pb date/ })).toHaveCount(1);
     await inside(info.getByRole('button', { name: 'Edit in grainatlas', exact: true }), tile);
-    await inside(info.getByRole('button', { name: 'Open in Studio', exact: true }), tile);
+    await inside(info.getByRole('button', { name: 'Edit in UPbRPy Studio', exact: true }), tile);
     const run = info.getByTestId('spot-run');
     await expect(run).toContainText('run-preferre');
     await expect(run).toContainText('Pipeline 0.1.0 · Demo analyst');

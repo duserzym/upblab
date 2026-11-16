@@ -46,3 +46,28 @@ export function listboxMove(lengths: number[], column: number, index: number, ke
   if (key === 'ArrowUp') nextIndex--;
   return { column: nextColumn, index: Math.max(0, Math.min(nextIndex, Math.max(0, lengths[nextColumn] - 1))) };
 }
+
+/**
+ * What "Edit in UPbRPy Studio" opens from Review. A selected spot opens its own
+ * analysis (its run, focused on the acquisition); with no selection the whole
+ * session opens: the session being reviewed, or, for a mount, the one session all
+ * shown spots come from. `null` when Studio has nothing single to open.
+ */
+export function studioTarget(
+  scope: { kind: 'session'; id: string; run: string } | { kind: 'mount'; id: string } | null,
+  selected: { sessionId: string | null; runId: string | null; acquisitionId: string | null } | null,
+  shown: { sessionId: string | null }[],
+): { target: { session: string | null; run: string | null; acquisition?: string | null } | null; reason: string } {
+  if (selected && (selected.sessionId || selected.runId)) {
+    return { target: { session: selected.sessionId, run: selected.runId, acquisition: selected.acquisitionId }, reason: 'Edit this spot\'s data reduction in UPbRPy Studio (S)' };
+  }
+  if (scope?.kind === 'session') {
+    return { target: { session: scope.id, run: scope.run === 'preferred' ? null : scope.run }, reason: 'Edit this session\'s data reduction in UPbRPy Studio (S)' };
+  }
+  const sessions = [...new Set(shown.map(s => s.sessionId).filter((s): s is string => !!s))];
+  if (sessions.length === 1) return { target: { session: sessions[0], run: null }, reason: 'Edit this session\'s data reduction in UPbRPy Studio (S)' };
+  return {
+    target: null,
+    reason: sessions.length ? `These spots come from ${plural(sessions.length, 'session')}: select a spot to open its session in UPbRPy Studio` : 'No measured spots to open in UPbRPy Studio',
+  };
+}

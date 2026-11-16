@@ -129,3 +129,9 @@ body { min-height: 0; overflow: hidden; }
 .view table.data { width: 100%; }
 .view table.data td, .view table.data th { overflow-wrap: anywhere; }
 .view table.data td.actions, .view table.data td.num { overflow-wrap: normal; }
+
+/* Buttons that hand a spot, mount or session over to another app for editing
+   (Review, Spot metadata): accent fill and weight so they read as actions. */
+.btn.edit-action { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); font-weight: 600; letter-spacing: 0.01em; }
+.btn.edit-action:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 86%, black); border-color: var(--accent); }
+.btn.edit-action:disabled { background: var(--accent-soft); border-color: transparent; color: var(--text); opacity: 0.55; }

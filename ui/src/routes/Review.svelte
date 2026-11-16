@@ -17,6 +17,7 @@
   import { allShown, filterRows, groupState, noneShown, rangeToggle, recallShown, reconcile, rememberShown, setGroup, soloSample, toggleSample } from '../lib/sample-filter';
   import { sendCommand } from '../lib/incoming';
   import { editInAtlas, openInStudio } from '../lib/apps.svelte';
+  import { studioTarget } from '../lib/review-header';
   import { shell } from '../lib/shell.svelte';
   import type { ReviewSpotsCommand } from '@lab/bridge';
   import ConcordiaPlot from '../components/review/ConcordiaPlot.svelte';
@@ -29,14 +30,18 @@
   } = $props();
   const dockLayout = $derived(readLayout(split ? settings.reviewDockSplit : settings.reviewDockSolo, split, settings.reviewDataWidth));
   const selectedSpot = $derived(review.selected);
+  // Edit opens the selected spot when it is on a published atlas; otherwise the whole mount.
   const imageTarget = $derived.by(() => {
-    if (selectedSpot) return { project: selectedSpot.atlasProjectId, mount: selectedSpot.mountId, spot: selectedSpot.atlasSpotId };
-    const mount = review.scope?.kind === 'mount' ? review.scope.id : shown.find(row => row.mountId)?.mountId ?? null;
+    if (selectedSpot?.atlasProjectId) return { project: selectedSpot.atlasProjectId, mount: selectedSpot.mountId, spot: selectedSpot.atlasSpotId };
+    const mount = selectedSpot?.mountId ?? (review.scope?.kind === 'mount' ? review.scope.id : shown.find(row => row.mountId)?.mountId ?? null);
     const project = review.rows.find(row => row.mountId === mount && row.atlasProjectId)?.atlasProjectId;
     const atlas = overview.mounts.find(row => row.mount.id === mount)?.atlas;
     return { project: project ?? (atlas && atlas !== 'error' ? atlas.projectId : null), mount };
   });
-  const editTitle = $derived(imageTarget.project ? 'Edit in grainatlas (E)' : 'No published atlas for this spot or mount (E)');
+  const editTitle = $derived(!imageTarget.project ? 'No published atlas for this spot or mount (E)'
+    : imageTarget.spot ? 'Edit this spot in grainatlas (E)' : 'Edit the whole mount in grainatlas (E)');
+  // Edit in UPbRPy Studio: the selected spot's analysis, else the whole session.
+  const studio = $derived.by(() => studioTarget(review.scope, selectedSpot, shown));
   let layoutsOpen = $state(false);
   let layoutChoices = $state<HTMLDivElement>();
   function layoutEscape(event: KeyboardEvent) {
@@ -47,8 +52,8 @@
       const spot = review.selected, key = event.key.toLowerCase();
       if (key === 'e' && imageTarget.project) {
         event.preventDefault(); void editInAtlas(imageTarget, 'review');
-      } else if (key === 's' && spot && (spot.sessionId || spot.runId)) {
-        event.preventDefault(); void openInStudio({ session: spot.sessionId, run: spot.runId, acquisition: spot.acquisitionId }, 'review');
+      } else if (key === 's' && studio.target) {
+        event.preventDefault(); void openInStudio(studio.target, 'review');
       }
     }
     if (layoutsOpen && layoutChoices?.getClientRects().length && event.key === 'Escape' && !event.defaultPrevented && !document.querySelector(':popover-open')) { layoutsOpen = false; event.preventDefault(); }
@@ -301,8 +306,11 @@
   <ReviewDock {active} {split} ready={review.state==='ready'} {images} bind:this={dock}>
     {#snippet headerActions(pane)}
       {#if pane === 'images'}
-        <button class="btn atlas-edit" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}
+        <button class="btn atlas-edit edit-action" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}
           onclick={() => void editInAtlas(imageTarget, 'review')}><span aria-hidden="true">✎</span> <span class="edit-long">Edit in grainatlas</span><span class="edit-short">Edit</span></button>
+      {:else if pane === 'plots'}
+        <button class="btn atlas-edit edit-action" aria-label="Edit in UPbRPy Studio" disabled={!studio.target} title={studio.reason}
+          onclick={() => studio.target && void openInStudio(studio.target, 'review')}><span aria-hidden="true">✎</span> <span class="edit-long">Edit in UPbRPy Studio</span><span class="edit-short">Studio</span></button>
       {/if}
     {/snippet}
     {#snippet detailsRail(expand)}
@@ -310,11 +318,11 @@
         {#if selectedSpot}
           <span class="summary-name" title={selectedSpot.label}>{selectedSpot.label}</span><span aria-hidden="true">·</span>
           <span class="summary-date" title="Preferred date">{dateLabel(selectedSpot)}{selectedSpot.date ? ' Ma' : ''}</span><span aria-hidden="true">·</span>
-          <button class="btn" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}
+          <button class="btn edit-action" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}
             onclick={() => void editInAtlas(imageTarget, 'review')}><span class="edit-long">Edit in grainatlas</span><span class="edit-short">✎ Edit</span></button>
-          <button class="btn" aria-label="Open in Studio" disabled={!selectedSpot.runId && !selectedSpot.sessionId}
-            title={selectedSpot.runId || selectedSpot.sessionId ? 'Open in Studio (S)' : 'Not measured yet'}
-            onclick={() => void openInStudio({ session: selectedSpot!.sessionId, run: selectedSpot!.runId, acquisition: selectedSpot!.acquisitionId }, 'review')}><span class="edit-long">Open in Studio</span><span class="edit-short">Studio</span></button>
+          <button class="btn edit-action" aria-label="Edit in UPbRPy Studio" disabled={!selectedSpot.runId && !selectedSpot.sessionId}
+            title={selectedSpot.runId || selectedSpot.sessionId ? 'Edit this spot\'s data reduction in UPbRPy Studio (S)' : 'Not measured yet'}
+            onclick={() => void openInStudio({ session: selectedSpot!.sessionId, run: selectedSpot!.runId, acquisition: selectedSpot!.acquisitionId }, 'review')}><span class="edit-long">Edit in UPbRPy Studio</span><span class="edit-short"><span aria-hidden="true">✎</span> Studio</span></button>
         {:else}<span class="summary-name">Select a spot</span>{/if}
         <button class="btn" aria-label="Expand Spot metadata" title="Expand Spot metadata" onclick={expand}>⛶</button>
       </div>
@@ -348,7 +356,7 @@
 </section>
 <style>
   .review {overflow:hidden;}
-  .atlas-edit {font-size:0.7rem;padding:1px 6px;gap:3px;white-space:nowrap;}
+  .atlas-edit {font-size:0.72rem;padding:2px 8px;gap:4px;white-space:nowrap;}
   .edit-short {display:none;}
   .details-summary {display:flex;align-items:center;gap:5px;min-width:0;height:100%;padding:0 4px;background:var(--accent-soft);font-size:0.73rem;white-space:nowrap;}
   .summary-name {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
