@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="UPb Lab connects SEM images, laser sessions and stored U-Pb results for the University of Minnesota geochronology lab.">
+  <meta name="color-scheme" content="light dark">
+  <title>Overview · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html" aria-current="page">Overview</a>
+<a href="install.html">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html">Home</a>
+<a href="sessions.html">Sessions</a>
+<a href="review.html">Review</a>
+<a href="sem-images.html">SEM images in Review</a>
+<a href="reduce.html">Reduce</a>
+<a href="settings.html">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / Overview</p>
+      <h1>One window for the lab workflow.</h1>
+      <p class="lead">UPb Lab connects SEM images, laser sessions and stored U-Pb results for the University of Minnesota geochronology lab.</p>
+      
+<div class="row"><a class="btn primary" href="install.html">Install and sign in</a><a class="btn" href="review.html">Read the Review guide</a></div>
+<h2>From an image to its result</h2>
+<p>UPb Lab connects GrainAtlas, the lab database server, UPbDB, and UPbRPy Studio with one sign-in. A spot in an image links to its stored result. GrainAtlas and UPbRPy Studio open as separate desktop applications; on the web, GrainAtlas’s hosted build opens in a new tab.</p>
+<p>Tabs are Home, Sessions, Review and Reduce (Ctrl/Cmd 1–4), plus People &amp; access for accounts allowed to manage people.</p>
+<ol class="workflow">
+<li class="glass"><strong>Images</strong><span>Stitch, segment and place spots in standalone GrainAtlas.</span></li>
+<li class="glass"><strong>Session upload</strong><span>Store the laser session and spot links in UPbDB.</span></li>
+<li class="glass"><strong>Reduction</strong><span>Reduce in UPbRPy Studio and submit the results.</span></li>
+<li class="glass"><strong>Review</strong><span>Inspect stored results beside SEM images in UPb Lab.</span></li>
+</ol>
+<div class="glass panel callout"><strong>The shell does no data reduction.</strong><p>UPb Lab links the modules and displays results already stored in UPbDB. Editing images and reductions happens in GrainAtlas and UPbRPy Studio.</p></div>
+<p>Screenshots show a real zircon session with sample names, people and places replaced by neutral labels.</p>
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Home</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/home-dark-1440x900.png">
+    <img src="images/home-light-1440x900.png" alt="Home in UPb Lab" width="1440" height="900">
+  </picture>
+  <figcaption>Home brings uploads, sessions, mounts and atlases together.</figcaption>
+</figure>
+<h2>Find your next step</h2>
+<div class="cards">
+<section class="glass panel"><h3>SEM images in Review</h3><p>View the published atlas and linked spots. Edit and publish in standalone GrainAtlas.</p><a href="sem-images.html">SEM images guide</a></section>
+<section class="glass panel"><h3>Upload a session</h3><p>Send session exports to UPbDB and confirm the ingest.</p><a href="sessions.html">Sessions guide</a></section>
+<section class="glass panel"><h3>Reduce a session</h3><p>Launch UPbRPy Studio with a one-time sign-in.</p><a href="reduce.html">Reduce guide</a></section>
+<section class="glass panel"><h3>Review stored results</h3><p>Move between plots, spot details and SEM images.</p><a href="review.html">Review guide</a></section>
+</div>
+<h2>The connected apps</h2><ul>
+<li><a href="https://github.com/duserzym/grainatlas">GrainAtlas</a>: SEM grain-mount images, stitching, segmentation, spot placement and atlas publishing.</li>
+<li>The lab database server, UPbDB: sessions, spots and stored reductions.</li>
+<li><a href="https://github.com/duserzym/UPbRPy">UPbRPy</a>: UPbRPy Studio and reduction.</li>
+<li><a href="https://github.com/duserzym/upb-standards">upb-standards</a>: reference material values used in reduction.</li>
+</ul>
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>

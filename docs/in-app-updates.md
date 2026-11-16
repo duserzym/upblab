@@ -99,7 +99,7 @@ them as workflow artifacts without publishing a release; it is the dry run.
   outside Tauri. Manual checks restore the scenario after 600 ms; checking
   stays busy indefinitely and downloading continues without another check.
 - With `SCREENSHOTS=1`, browser tests save screenshots of the icon, popover
-  and panel in `docs/screenshots/`. The button tests write
+  and panel to their configured output directory. The button tests write
   `check-updates-idle.png` and `check-updates-available.png` at 1512 x 982;
   `SHOT_DIR` overrides their output directory.
 

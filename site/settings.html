@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Settings holds the UPbDB connection, Studio path, appearance and update controls.">
+  <meta name="color-scheme" content="light dark">
+  <title>Settings · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html">Overview</a>
+<a href="install.html">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html">Home</a>
+<a href="sessions.html">Sessions</a>
+<a href="review.html">Review</a>
+<a href="sem-images.html">SEM images in Review</a>
+<a href="reduce.html">Reduce</a>
+<a href="settings.html" aria-current="page">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / Settings</p>
+      <h1>Configure the connection and display.</h1>
+      <p class="lead">Settings holds the UPbDB connection, Studio path, appearance and update controls.</p>
+      
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Settings</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/settings-dark-1440x900.png">
+    <img src="images/settings-light-1440x900.png" alt="Settings in UPb Lab" width="1440" height="900">
+  </picture>
+  <figcaption>Connection, appearance, module and update settings in one place.</figcaption>
+</figure>
+<h2>UPbDB</h2><p>Choose <strong>Lab server</strong>, edit <strong>Server URL</strong> and choose <strong>Save</strong>. Use the address supplied by the lab manager. <strong>This computer</strong> needs a service bundle or development checkout; see <a href="install.html#first-run">local mode availability</a>.</p>
+<h2>UPbRPy Studio</h2><p>Leave <strong>Path</strong> empty to use the detected app, or enter the installed application’s path. <strong>UPbRPy checkout (development)</strong> launches a development copy. Choose <strong>Save</strong> after changing these fields.</p>
+<h2>Appearance and layout</h2><p><strong>System</strong> follows your operating system by default. <strong>Light</strong> and <strong>Dark</strong> override it for every app tab. <strong>Reset layout</strong> forgets the saved window size and position.</p>
+<h2>Updates and modules</h2><p>In <strong>Updates</strong>, choose <strong>Check now</strong>, set <strong>Download updates automatically</strong>, or choose <strong>Stable</strong> or <strong>Beta (pre-releases)</strong>. Use <strong>Restart to update</strong> when a download is ready.</p>
+<p><strong>In this build</strong> lists bundled modules, the UPbDB service, PostgreSQL and the detected UPbRPy Studio. Bundled modules update with UPb Lab; Studio has its own updater. <strong>UPb Standards &gt; Check standards</strong> checks the reference material files separately.</p>
+<p>Read <a href="faq.html#files">where files live</a> and <a href="install.html#updates">how updates are delivered</a>.</p>
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>

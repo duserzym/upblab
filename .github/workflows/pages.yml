@@ -1,0 +1,40 @@
+name: pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Assemble the manual
+        run: |
+          mkdir -p _site/images
+          cp -R site/. _site/
+          rm -f _site/README.md
+          if [ -d docs/images ]; then
+            cp -R docs/images/. _site/images/
+          fi
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

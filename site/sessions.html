@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="The Sessions tab opens the web page of the lab database server, UPbDB.">
+  <meta name="color-scheme" content="light dark">
+  <title>Sessions · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html">Overview</a>
+<a href="install.html">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html">Home</a>
+<a href="sessions.html" aria-current="page">Sessions</a>
+<a href="review.html">Review</a>
+<a href="sem-images.html">SEM images in Review</a>
+<a href="reduce.html">Reduce</a>
+<a href="settings.html">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / Sessions</p>
+      <h1>Store and inspect sessions.</h1>
+      <p class="lead">The Sessions tab opens the web page of the lab database server, UPbDB.</p>
+      
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Sessions</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/sessions-dark-1440x900.png">
+    <img src="images/sessions-light-1440x900.png" alt="Sessions in UPb Lab" width="1440" height="900">
+  </picture>
+  <figcaption>UPbDB stores sessions, acquisitions, spots and reduction runs.</figcaption>
+</figure>
+<h2>Upload a laser session</h2><ol><li>On Home, choose <strong>Upload LA-ICP-MS session</strong> and select the session export.</li><li>The shell sends the files to UPbDB’s ingest dialog in Sessions. Confirm the ingest there.</li><li>Return Home to find the stored session. Open it in Sessions or send it to UPbRPy Studio for reduction.</li></ol>
+<p>Accepted inputs include a Rich CSV, a per-spot export folder, a zip, or the Rich CSV and its per-spot folder together. The shell routes the input; UPbDB imports and stores it.</p>
+<h2>Reduce and review</h2><p>Open the <a href="reduce.html">Reduce tab</a> and choose <strong>Open in Studio</strong> for a session. A submitted reduction is stored in UPbDB, then becomes available in <a href="review.html">Review</a>.</p>
+<h2>If the page cannot connect</h2><p>Use <strong>Retry now</strong> to check the server again, or <strong>Change server URL</strong> to open Settings. Check the address and your network or Tailscale connection. See <a href="faq.html#server">server troubleshooting</a>.</p>
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>

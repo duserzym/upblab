@@ -1,250 +1,165 @@
-# UPb Lab
+<p align="center">
+  <img src="src-tauri/icons/128x128@2x.png" width="128" height="128" alt="UPb Lab app icon">
+</p>
+<h1 align="center">UPb Lab</h1>
+<p align="center">One window for the lab’s LA-ICP-MS U-Pb workflow.</p>
 
-Formerly UPb Studio; renamed 2026-11-06 to distinguish this workflow shell
-from the separate UPbRPy Studio reduction app. The repository is `upblab`. The executable, app identifier and stored settings
-retain their existing `upbstudio` names so existing data, sign-in credentials
-and links continue to work.
+UPb Lab is the hub app for the University of Minnesota geochronology lab.
+It connects GrainAtlas, the lab database server, UPbDB, and UPbRPy Studio
+with one sign-in, and links a spot in an image to its stored result.
+GrainAtlas and UPbRPy Studio open as separate applications; on the web,
+GrainAtlas’s hosted build opens in a new tab.
 
-The unified desktop and web shell for the lab's LA-ICP-MS workflow: one window
-with tabs for grain images ([grainatlas](../grainatlas)), sessions and data
-([UPbDB](../upbdb)) and reduction (UPbRPy Studio), with one sign-in and
-links between them, so a click on a spot in an image opens that spot's raw
-sweep and reduced result.
+UPb Lab does no data reduction. It connects the modules and shows the results
+stored in UPbDB.
 
-| Tab | Module | Hosted as |
+| Step | App | What happens |
 | --- | --- | --- |
-| Home | the shell | a tiled board: action tiles (Open folder, Open files, Upload LA-ICP-MS session, Upload image set; anything dropped on the window goes to the right tab by itself), module status, then Sessions, Mounts and Atlases as searchable, sortable card grids (spot-count bar by acquisition kind and run status dot per session; grain and spot counts, atlas badge and thumbnail per mount), link box and log |
-| Images | grainatlas | pinned static build bundled into the app (`modules.lock.json`) |
-| Sessions | UPbDB | `/app/` in a native webview, from a lab server or from the UPbDB the app runs on this computer |
-| Review | the shell | stored results by session or mount with sample chips; Concordia, a multi-panel geochemistry board with mineral presets, depth profiles and spot details linked to Images |
-| Reduce | UPbRPy Studio | launched as its own application with a `upbr://` link and a one-time sign-in code |
-| People & access | UPbDB | `/app/#/people` in its own module webview, after Reduce, for accounts allowed to manage people |
+| Images | GrainAtlas | Stitch SEM images, segment grains, place spots and publish an atlas. |
+| Session upload | UPbDB | Store the laser session and link acquisitions to spots. |
+| Reduction | UPbRPy Studio | Reduce the session and submit results to UPbDB. |
+| Review | UPb Lab | Read stored results beside their SEM images. |
 
-People & access is visible only while signed in and online, as decided by
-UPbDB’s `can_manage_people` account field (falling back to `is_lab_staff`
-on older servers). UPbDB enforces access to the page and its management
-API. This tab has no numbered shortcut and is never restored on restart;
-losing permission while viewing it returns to Home.
+## In the app
 
-Status: roadmap phases 0 and 1 done, phase 2b (ADR-0003, "This computer"
-mode) implemented on the shell side: the app bundles PostgreSQL 17, runs
-UPbDB on this machine, and a first-run wizard chooses between that and a
-lab server. Until UPbDB publishes its service bundle
-([docs/service-bundle-contract.md](docs/service-bundle-contract.md)),
-"This computer" runs a UPbDB checkout, so it works in development builds
-and release builds offer only "Lab server". Phases 3 and 4 on the shell side
-(2026-11-03): one sign-in in the tab bar (password, ORCID or Google), the
-token in the OS keychain and handed to the module tabs through `@lab/bridge`;
-`upbr://session/<id>` and `upbr://run/<id>` launch UPbRPy Studio with a
-handoff code minted on demand; Home lists sessions, runs and atlases
-([docs/installing.md](docs/installing.md#signing-in)). UX conventions
-(2026-11-04, [docs/ux-conventions.md](docs/ux-conventions.md)): System theme by
-default, with Light and Dark choices; every tab follows live without reloading
-([theme bridge](docs/bridge-theme.md)); open anything: a folder or files dropped
-on the window, opened from the Finder or Explorer, or picked on Home go to Images or Sessions by content
-and reach the module through `@lab/bridge` `open-files` (protocol v2); every
-screen fits 1280 × 800, checked in Chromium and WebKit; the window reopens
-where it was left, fitted to the screen. Plan and roadmap:
-[ARCHITECTURE_PLAN.md](ARCHITECTURE_PLAN.md).
+Tabs are Home, Sessions, Review and Reduce (Ctrl/Cmd 1–4), plus People & access
+for accounts allowed to manage people.
 
-The lab workflow and the hand-offs between the apps are in [docs/WORKFLOW.md](docs/WORKFLOW.md).
+Screenshots show a real zircon session with sample names, people and places replaced by neutral labels.
 
-## Upload
+### Home
 
-Home's **Upload LA-ICP-MS session…** sends a Rich CSV, per-spot export
-folder, zip, or a Rich CSV and its per-spot folder to the ingest dialog in
-Sessions. Confirm the ingest there, then return Home to see the session and
-open it in Sessions or reduce it in UPbRPy Studio. **Review** becomes available
-when a complete reduction run has been submitted. Home checks for the session
-and reduction every 5 s for up to 10 minutes while the upload card is open.
-Dismiss stops the watch.
+Open folders or files, upload a laser session or image set, and return to sessions, mounts and atlases from one board. **Upload image set**, opened or dropped image folders, `.grainatlas` folders and `.gaproj` files open standalone GrainAtlas on desktop, or its hosted build in a new tab on the web.
 
-**Upload image set…** sends an SEM package or `.grainatlas` project folder
-to Images. On desktop, a project is offered first, then its saved package
-folder if that path exists. On the web, grainatlas asks which package to open.
-Publish the atlas to its mount with grainatlas's **Publish** button, then use
-Home's **Review mount**. The shell lists and routes files; the modules read them.
-On macOS the session picker accepts files and folders together; Windows and
-Linux collect folders and files in consecutive native dialogs. Web Home has
-separate folder and file inputs. **Open folder…**, **Open files…** and drops
-continue to choose a module by content. An explicit upload button refuses a
-set intended for the other module with a line saying what it accepts.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/home-dark-1440x900.png">
+  <img src="docs/images/home-light-1440x900.png" alt="Home in UPb Lab" width="1440" height="900">
+</picture>
 
-## Review
+### Sessions
 
-Review reads UPbDB's stored results by session and run, or by mount,
-including spots not measured yet. A compact scope bar picks the session or
-mount and run; sample chips (one per sample, with its plot colour and spot
-count) show one sample on click and toggle with Cmd/Ctrl-click, with All and
-Clear. Below it are three columns: the sample and grain list, the plots and the
-spot details; both side columns collapse.
+The lab database server, UPbDB, stores sessions, spots and reductions. Its web page opens in the Sessions tab, where session uploads are confirmed.
 
-The plots are Concordia ellipses, stored depth profiles and a geochemistry
-board: biplot panels in a 2 x 2 grid, 3 x 2 when the board is 880 px wide or
-more (1440 px windows). Each axis opens a chip picker grouped as dates,
-concentrations, ratios, REE anomalies, thermometers and other, with a log
-toggle. **Presets** fills the board for zircon (Th/U, U and Th, Ce/Ce* vs
-Eu/Eu*, Ti-in-zircon T, Yb/Gd and Hf vs date, U/Yb vs Nb/Yb and vs Y after
-Grimes et al. 2015, (Sm/La)N vs La after Hoskin 2005, REE pattern), apatite,
-rutile, titanite or monazite; panels can be added (up to 12), removed and
-maximized. Hovering a spot marks it in every panel, the Concordia and the list.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/sessions-dark-1440x900.png">
+  <img src="docs/images/sessions-light-1440x900.png" alt="Sessions in UPb Lab" width="1440" height="900">
+</picture>
 
-Plots read stored values. For geochemistry the shell may also normalise stored
-concentrations to CI chondrite, divide two stored values (U/Yb, (Sm/La)N) and
-form Eu/Eu*, Ce/Ce* and the sum of REE + Y; such axes say "from stored ppm", a
-stored column of the same name wins, and thermometers are shown only when
-stored. Selecting a result focuses its image spot; selecting a spot in Images
-selects its result. **Show in Images**, Enter or a double-click opens Images.
-At widths of 1440 CSS px or more, **Side by side** shows the existing Images
-surface beside Review. Scope, split choice and each mineral's board are
-remembered. Home links each reduced session and mount to Review. Tabs use
-Ctrl/⌘ 1–5, with Review fourth and Reduce fifth.
+### Review: Concordia
 
-![Review geochemistry board, 1440 x 900](docs/screenshots/after_review_geochemistry_light_1440x900.png)
+Plot stored U-Pb results and their 2σ ellipses on Concordia. Selecting a result selects its linked image spot.
 
-## Quick start
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/review-concordia-dark-1440x900.png">
+  <img src="docs/images/review-concordia-light-1440x900.png" alt="Review: Concordia in UPb Lab" width="1440" height="900">
+</picture>
 
-Needs Node 20+, pnpm (`corepack enable`), Rust stable and the Tauri CLI
-(`cargo install tauri-cli --version '^2.11' --locked`). On macOS also the
-Xcode command line tools; on Windows the MSVC build tools and WebView2 (both
-usually present).
+### Review: geochemistry
+
+Compare stored results on a geochemistry board with mineral presets and REE patterns. Display values derived from stored concentrations are labelled “from stored ppm”; stored columns take precedence.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/review-geochemistry-dark-1440x900.png">
+  <img src="docs/images/review-geochemistry-light-1440x900.png" alt="Review: geochemistry in UPb Lab" width="1440" height="900">
+</picture>
+
+### Review: depth profile
+
+Select a spot to inspect the depth profile stored by its reduction run. UPb Lab reads stored channels and uncertainties; it does no reduction.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/review-depth-dark-1440x900.png">
+  <img src="docs/images/review-depth-light-1440x900.png" alt="Review: depth profile in UPb Lab" width="1440" height="900">
+</picture>
+
+### Review: SEM images beside the plots
+
+Enable **SEM images** to see the published atlas beside the plots and spot details. The bundled GrainAtlas build is a read-only viewer: spots use their sample’s Review colour, and a mount map sits in the corner. **Fit** fits the view; the area menu chooses an area. Selecting a linked spot in the viewer selects its result in Review, and selecting a result focuses its image spot. **Edit in UPbRPy Studio** and **Edit in grainatlas** open the appropriate standalone app to make changes; on the web, GrainAtlas opens in a new tab.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/review-images-dark-1440x900.png">
+  <img src="docs/images/review-images-light-1440x900.png" alt="Review: SEM images beside the plots in UPb Lab" width="1440" height="900">
+</picture>
+
+### Review: SEM images maximised
+
+Maximise the **SEM images** panel for a closer look at the published atlas.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/images-dark-1440x900.png">
+  <img src="docs/images/images-light-1440x900.png" alt="Review: SEM images panel maximised in UPb Lab" width="1440" height="900">
+</picture>
+
+### Review: sample groups on the mount
+
+With **SEM images** on and no single spot selected, the mount map inset outlines where each shown sample’s spots sit on the mount in that sample’s Review colour. Its header counts the samples. This group view appears after opening a scope, toggling **Group unregistered by spot name**, or using sample chips, sample rows, **All**, **Samples** or **Standards**. Picking a single spot returns the inset to that spot.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/review-groups-dark-1440x900.png">
+  <img src="docs/images/review-groups-light-1440x900.png" alt="Review: sample groups outlined on the mount map in UPb Lab" width="1440" height="900">
+</picture>
+
+### Reduce
+
+**Open in Studio** launches UPbRPy Studio for the selected session with a one-time sign-in. Return to Review after submitting a reduction to UPbDB.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/reduce-dark-1440x900.png">
+  <img src="docs/images/reduce-light-1440x900.png" alt="Reduce in UPb Lab" width="1440" height="900">
+</picture>
+
+### Settings
+
+Choose the lab server, set the UPbRPy Studio path, and select System, Light or Dark appearance. Check updates and see which module versions the build contains.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-dark-1440x900.png">
+  <img src="docs/images/settings-light-1440x900.png" alt="Settings in UPb Lab" width="1440" height="900">
+</picture>
+
+## Install and first run
+
+Installers come from [GitHub Releases](https://github.com/duserzym/upblab/releases).
+If no installer is published yet, build from source with the prerequisites in
+[Developing UPb Lab](docs/developing.md#quick-start):
 
 ```bash
 make setup
-```
-
-```bash
-make test
-```
-
-`make test` ends with `make e2e`: Playwright walks every shell screen at
-1440 × 900 and 1280 × 800 in Chromium and WebKit (`ui/tests/sizes.spec.ts`,
-with a stand-in for the Tauri host); `make setup` installs the two browsers.
-
-An opt-in check, not part of `make test`, runs against a running UPbDB with the demo
-data and the real keychain (signs in, reads, mints and redeems a handoff code,
-signs out):
-
-```bash
-UPBSTUDIO_LIVE_SERVER=http://127.0.0.1:8000 cargo test --manifest-path src-tauri/Cargo.toml live_ -- --ignored
-```
-
-```bash
-make dev
-```
-
-`make dev` opens the window with hot reload. The first launch shows the
-first-run wizard:
-
-- **This computer**: When you first open Sessions or Review, UPb Lab starts
-  PostgreSQL 17 (port 55432 or the next free port, never 5432) and UPbDB
-  (port 8000 or the next free port). It creates your first account and can load
-  the demo sessions. Both services stop when the app quits. For development, run
-  `make venv` and `make ui` in `../upbdb`, the local checkout for
-  `upbdb-service` in `modules.lock.json`. The first `cargo build` downloads
-  the pinned PostgreSQL archive (13 MB on macOS) into `~/.theseus/postgresql/`.
-- **Lab server**: a UPbDB URL, e.g. `http://localhost:8000` for
-  `make dev` in the UPbDB repository; then **Sign in** in the tab bar
-  (the demo accounts are in UPbDB's `.env.example`).
-
-To launch UPbRPy Studio from a checkout instead of an installed app, set
-Settings → UPbRPy Studio → UPbRPy checkout (it runs `python -m GUI --open
-<link>` with the checkout's `.venv`). macOS cannot deliver `upbr://` or
-`upbdb://` links from the OS to `make dev`; use the Home link box, or the
-built app (`make build`) for ORCID/Google sign-in, whose callback is such a
-link.
-
-Settings switches between them later. To use another PostgreSQL 17 instead
-of the bundled one during development (for example if the archive cannot be
-downloaded), point `PG_BIN` at its `bin` folder, in the environment
-(`PG_BIN=/opt/homebrew/opt/postgresql@17/bin make dev`) or in Settings. To see
-the wizard again, set `"mode": ""` in `settings.json`
-([docs/installing.md](docs/installing.md) lists the files).
-
-```bash
 make build
 ```
 
-builds the release app and installers into `src-tauri/target/release/bundle/`
-(`.app` and `.dmg` on macOS, `.msi` and NSIS `.exe` on Windows). They are
-unsigned; [docs/installing.md](docs/installing.md) covers the Gatekeeper and
-SmartScreen steps.
+On macOS, drag the app to Applications. For an unsigned or not-notarized
+download blocked at first launch, open **System Settings > Privacy & Security**
+and choose **Open Anyway**. See [Installing UPb Lab](docs/installing.md) for
+macOS and Windows instructions.
 
-CI (`.github/workflows/build.yml`, macOS and Windows) runs only on `v*` tags
-and by hand. Tag builds create a draft release with installers and signed
-updates; publish the draft to make it available in the app. Manual runs
-(`gh workflow run build`) keep installers as workflow artifacts for 14 days.
+On first run, choose **Lab server**, enter the lab server’s address and select
+**Continue**. Open **Sign in** in the tab bar, then **Sign in…**: this one
+button opens UPbDB’s sign-in page in your browser. Use ORCID or your lab
+account, then choose **Sign UPb Lab in** to return to the app.
 
-Without `make` (Windows PowerShell): `pnpm install`, `pnpm --filter @lab/bridge build`,
-`node scripts/fetch-modules.mjs`, then `cargo tauri dev` or `cargo tauri build`.
-
-### The UPbDB service bundle
-
-`make fetch-modules` also unpacks the UPbDB service bundle pinned for the
-build platform in `modules.lock.json` into `src-tauri/resources/upbdb-service/`,
-which the installers ship. Its URLs are empty until UPbDB publishes the
-bundle, so the folder holds only a README and the start-up log says the
-build has no bundled service.
-
-### grainatlas in the Images tab
-
-`make fetch-modules` installs the builds pinned in `modules.lock.json` into
-`ui/public/modules/`, checking each release archive's SHA-256. grainatlas has
-no release yet, so the lock points at its local development build
-(`../grainatlas/ui/dist`); build that in the grainatlas repository, run
-`make fetch-modules` here and restart `make dev`. For a local build,
-`ui/public/modules/manifest.json` records the commit of the checkout it was
-copied from and whether that checkout had uncommitted changes; Settings,
-Updates, "In this build" shows it (for example `local build of f9ca787`), so a
-bundle says which grainatlas it carries. To bundle a build from another
-checkout (a clean worktree), build the shell from an upblab checkout whose
-sibling `grainatlas` folder (a symlink is fine) is that checkout.
+To reach the lab desktop server from outside the lab network, install
+[Tailscale](https://tailscale.com/download) and ask the lab manager to share
+the lab server with you. Use the address they give you.
 
 ## Updates
 
-The header chip shows the version and whether an update is available or ready.
-Click it for **Settings > Updates**, including this build's module versions,
-**Check now**, automatic downloads and the **Stable / Beta** channel choice.
-When a download is ready, **Restart to update** installs it.
+The app checks GitHub releases in the background. Open **Settings > Updates**
+to **Check now**, choose a channel or change automatic downloads; choose
+**Restart to update** when ready. See [In-app updates](docs/in-app-updates.md).
 
-The owner configures signing once (generates the key, writes the public key
-and sets the GitHub secret), then checks the version copies:
+## Related repositories and manual
 
-```bash
-pnpm updater:setup
-make check-version
-```
+- [GrainAtlas](https://github.com/duserzym/grainatlas): SEM images, grains, spots and atlases.
+- The lab database server, UPbDB: sessions, spots and stored reductions.
+- [UPbRPy](https://github.com/duserzym/UPbRPy): UPbRPy Studio and data reduction.
+- [upb-standards](https://github.com/duserzym/upb-standards): reference material values used in reduction.
+- [UPb Lab manual](https://duserzym.github.io/upblab/): installation, screen guides and troubleshooting.
 
-Back up `~/.tauri/upbstudio-updater.key`. See
-[docs/in-app-updates.md](docs/in-app-updates.md) for setup and releases.
+## Development
 
-## Layout
+The host uses Rust and Tauri 2; the shell uses Svelte 5 and TypeScript.
+Start with [Developing UPb Lab](docs/developing.md) and [Testing](docs/testing.md).
+See [ARCHITECTURE_PLAN.md](ARCHITECTURE_PLAN.md) for the module boundaries and roadmap.
 
-```text
-src-tauri/        Rust host: window (geometry), module webviews, deep links, dropped and opened
-                  files (files.rs), probe, auth (sign-in, keychain, handoff), Studio detection
-                  and launch, local_service/ (PostgreSQL and UPbDB on this computer)
-ui/               shell page (Svelte 5): tab bar, Home, Settings, link resolver, drop routing;
-                  tests/ the screen-size check
-bridge/           @lab/bridge, the API grainatlas and UPbDB call to talk to the shell
-scripts/          fetch-modules (pinning)
-modules.lock.json pinned module builds and the UPbDB service bundle
-docs/             decisions (ADRs), cross-platform contract, deep links, installing
-```
-
-## Documents
-
-- [docs/cross-platform-contract.md](docs/cross-platform-contract.md): rules every module follows on macOS and Windows
-- [docs/service-bundle-contract.md](docs/service-bundle-contract.md): what the UPbDB service bundle provides and how the shell runs it
-- [docs/installing.md](docs/installing.md): installing, opening files and folders with UPb Lab, the two modes, data and log locations
-- [docs/deep-links.md](docs/deep-links.md): the `upbdb://`, `grainatlas://` and `upbr://` links
-- [docs/ux-conventions.md](docs/ux-conventions.md): where the shell follows the lab's UX rules (source: grainatlas `docs/ux-conventions.md`)
-- [bridge/README.md](bridge/README.md): `@lab/bridge` for module authors
-- [docs/decisions/](docs/decisions/): ADR-0001 hosting pinned builds, ADR-0002 tab hosting, ADR-0003 local service mode
-
-## Credits
-
-The app icon's zircon is a Pupin S2 habit projected from the STL models of
-[Mineral Habit Matrix](https://github.com/duserzym/mineral-habit-matrix).
-
-License: MIT.
+License: [MIT](LICENSE).

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Home brings opening files, uploads, sessions, mounts and atlases into one board.">
+  <meta name="color-scheme" content="light dark">
+  <title>Home · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html">Overview</a>
+<a href="install.html">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html" aria-current="page">Home</a>
+<a href="sessions.html">Sessions</a>
+<a href="review.html">Review</a>
+<a href="sem-images.html">SEM images in Review</a>
+<a href="reduce.html">Reduce</a>
+<a href="settings.html">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / Home</p>
+      <h1>Start with your files.</h1>
+      <p class="lead">Home brings opening files, uploads, sessions, mounts and atlases into one board.</p>
+      
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Home</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/home-dark-1440x900.png">
+    <img src="images/home-light-1440x900.png" alt="Home in UPb Lab" width="1440" height="900">
+  </picture>
+  <figcaption>Open data, follow an upload and return to a stored session or mount.</figcaption>
+</figure>
+<h2>Open or upload</h2><ul>
+<li><strong>Open folder</strong> and <strong>Open files</strong> route files by their contents. You can also drop them on the app window.</li>
+<li><strong>Upload LA-ICP-MS session</strong> sends a Rich CSV, per-spot export folder, zip, or a Rich CSV with its per-spot folder to Sessions. Confirm the ingest there.</li>
+<li><strong>Upload image set</strong> opens standalone GrainAtlas on desktop, or its hosted build in a new tab on the web. Opened or dropped image folders, <code>.grainatlas</code> folders and <code>.gaproj</code> files go there too. Publish the atlas from GrainAtlas to link it to a mount; Home’s mount cards show its publish status.</li></ul>
+<h2>Return to work</h2><p>Use the Sessions and Mounts cards to open a session, reduce it in UPbRPy Studio, or review stored results. Search and sort the grids to find what you need. Module status is shown at the top of Home.</p>
+<p>The session upload panel checks for an uploaded session and a completed reduction every 5 s for up to 10 minutes while it remains open. Dismissing it stops the watch. Review becomes available once a complete reduction run is stored.</p>
+<h2>Follow an app link</h2><p>Paste a <code>upbdb://</code>, <code>grainatlas://</code> or <code>upbr://</code> link into Home’s <strong>Links</strong> box and choose <strong>Open</strong>. The shell routes it to the matching module or application.</p>
+<p>Continue with <a href="sem-images.html">SEM images in Review</a> or <a href="sessions.html">Sessions</a>.</p>
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>

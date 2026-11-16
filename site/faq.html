@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Start with the server address and sign-in, then check the app paths and update status.">
+  <meta name="color-scheme" content="light dark">
+  <title>FAQ · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html">Overview</a>
+<a href="install.html">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html">Home</a>
+<a href="sessions.html">Sessions</a>
+<a href="review.html">Review</a>
+<a href="sem-images.html">SEM images in Review</a>
+<a href="reduce.html">Reduce</a>
+<a href="settings.html">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html" aria-current="page">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / FAQ</p>
+      <h1>Troubleshoot the connection.</h1>
+      <p class="lead">Start with the server address and sign-in, then check the app paths and update status.</p>
+      
+<section id="server"><h2>Cannot reach the server</h2><p>Check <strong>Settings &gt; UPbDB &gt; Lab server &gt; Server URL</strong> against the address supplied by the lab manager. Test that address in your browser. Outside the lab network, connect Tailscale and confirm that the lab manager has shared the lab server with you.</p><p>In Sessions, use <strong>Retry now</strong> after reconnecting, or <strong>Change server URL</strong> to fix the address. If the browser cannot reach it either, ask the lab manager whether the server is running.</p></section>
+<section id="sign-in"><h2>Sign-in does not return to the app</h2><p>Open the installed app once from Applications on macOS so the system registers its links. Start sign-in from UPb Lab: <strong>Sign in</strong>, then <strong>Sign in…</strong>. Finish on UPbDB’s browser page, choose <strong>Sign UPb Lab in</strong>, and allow the browser to open the app.</p><p>The returning link must match the sign-in started by UPb Lab. If an old browser tab is left open, cancel the pending attempt in the app and start again. A desktop development window does not receive system callbacks the same way as the installed app; use a built app for that check.</p></section>
+<section id="updates"><h2>An update check fails or finds nothing</h2><p>Open <strong>Settings &gt; Updates</strong> and choose <strong>Check now</strong> after checking your internet connection. A release must be published with update artifacts before the app can receive it. Stable excludes pre-releases; Beta includes them.</p><p>If the build cannot install updates, use <strong>Open download page</strong> when offered, or download an installer from <a href="https://github.com/duserzym/upblab/releases">Releases</a>. A downloaded update is installed only when you choose <strong>Restart to update</strong>.</p></section>
+<section id="files"><h2>Where files live</h2><p>In Lab server mode, UPbDB stores uploaded sessions and reduction results on the server. Opening a file in UPb Lab routes it to the appropriate module; it does not move the whole database onto your computer.</p><p>Local settings use the existing <code>edu.umn.upbstudio</code> app identifier. On macOS they are in <code>~/Library/Application Support/edu.umn.upbstudio/</code>; on Windows they are in <code>%APPDATA%\edu.umn.upbstudio\</code>. Sign-in tokens are in the system keychain or Windows Credential Manager.</p><p>In This computer mode, the PostgreSQL directory and the UPbDB data root are separate. Back up both with the app closed. Do not delete <code>local-service.json</code>: it contains the generated password needed to reach the local database. The <a href="https://github.com/duserzym/upblab/blob/main/docs/installing.md#where-things-are">installation reference</a> lists the full locations.</p></section>
+<section id="missing-results"><h2>Why are results or images missing?</h2><p>Review needs a complete reduction run submitted to UPbDB. A raw session alone has no reduced results. A depth profile must have been stored by that run. Image selection needs a linked spot and atlas; publish the atlas from GrainAtlas to its mount.</p></section>
+
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>

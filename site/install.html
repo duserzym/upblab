@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Choose a lab server, sign in once, and open the workflow.">
+  <meta name="color-scheme" content="light dark">
+  <title>Install · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html">Overview</a>
+<a href="install.html" aria-current="page">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html">Home</a>
+<a href="sessions.html">Sessions</a>
+<a href="review.html">Review</a>
+<a href="sem-images.html">SEM images in Review</a>
+<a href="reduce.html">Reduce</a>
+<a href="settings.html">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / Install</p>
+      <h1>Install and connect.</h1>
+      <p class="lead">Choose a lab server, sign in once, and open the workflow.</p>
+      
+<section id="download"><h2>Get the app</h2>
+<p>Download an installer from <a href="https://github.com/duserzym/upblab/releases">GitHub Releases</a>: a <code>.dmg</code> for macOS (Apple Silicon), or a <code>.msi</code> or <code>-setup.exe</code> for Windows (x86-64). If no installer is published yet, build from source:</p>
+<pre><code>make setup
+make build</code></pre>
+<p>See the <a href="https://github.com/duserzym/upblab/blob/main/docs/developing.md#quick-start">developer guide</a> for prerequisites. The build command prints the installer location.</p>
+<h3>macOS first launch</h3><ol>
+<li>Open the disk image and drag <strong>UPb Lab</strong> to <strong>Applications</strong>. Launch it from Applications once to register its app links.</li>
+<li>If an unsigned or not-notarized download is blocked, close the warning. Open <strong>System Settings &gt; Privacy &amp; Security</strong>, choose <strong>Open Anyway</strong>, and confirm.</li></ol>
+<h3>Windows first launch</h3><p>The NSIS <code>-setup.exe</code> installs for your user; the <code>.msi</code> needs administrator rights. For an unsigned installer, SmartScreen may show <strong>Windows protected your PC</strong>. Choose <strong>More info</strong>, then <strong>Run anyway</strong>. The installer also installs WebView2 if needed.</p></section>
+<section id="first-run"><h2>Choose Lab server</h2><ol>
+<li>On first run, choose <strong>Lab server</strong>.</li>
+<li>Enter the UPbDB server address supplied by the lab manager, then choose <strong>Continue</strong>.</li>
+<li>Open <strong>Sign in</strong> in the tab bar, then choose <strong>Sign in…</strong> in the dialog.</li>
+<li>The one button opens UPbDB’s sign-in page in your browser. Use ORCID or your lab account, then choose <strong>Sign UPb Lab in</strong>. Allow the browser to return to UPb Lab.</li></ol>
+<p>The sign-in is shared with the module tabs; launching UPbRPy Studio passes a one-time sign-in code. Use the account button to <strong>Sign out</strong>.</p>
+<p><strong>This computer</strong> runs a local UPbDB and PostgreSQL when a service bundle or a development checkout is available. Release builds offer Lab server only until the UPbDB service bundle is published. See the <a href="https://github.com/duserzym/upblab/blob/main/docs/installing.md">installation reference</a> for local mode and file locations.</p></section>
+<section id="tailscale"><h2>Outside the lab network</h2><p>To reach the lab desktop server, install <a href="https://tailscale.com/download">Tailscale</a> and ask the lab manager to share the lab server with you. Connect Tailscale and use the address they give you in <strong>Lab server</strong>.</p></section>
+<section id="updates"><h2>Updates</h2><p>UPb Lab checks GitHub releases in the background. Open <strong>Settings &gt; Updates</strong> and choose <strong>Check now</strong>. Automatic downloads are on by default. When a download is ready, choose <strong>Restart to update</strong>.</p>
+<p><strong>Stable</strong> receives published releases; <strong>Beta (pre-releases)</strong> also receives pre-releases. Bundled modules update with UPb Lab. UPbRPy Studio updates from its own Settings. Read the <a href="https://github.com/duserzym/upblab/blob/main/docs/in-app-updates.md">update reference</a> for signing and release details.</p></section>
+
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>

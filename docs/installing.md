@@ -1,12 +1,14 @@
 # Installing UPb Lab
 
-Releases are on the [Releases page](https://github.com/duserzym/upblab/releases).
-Download the macOS `.dmg` or Windows `.msi` / `-setup.exe` there. Later versions
-install from inside UPb Lab: click the version chip in the header, or open
+Installers are distributed through the [Releases page](https://github.com/duserzym/upblab/releases).
+Use the macOS `.dmg` or Windows `.msi` / `-setup.exe` there; if none is listed
+yet, follow [Building it yourself](#building-it-yourself). Later versions
+install from inside UPb Lab: open the update button in the header or
 Settings > Updates, then Check now and Restart to update when ready.
 
-Until the lab has an Apple Developer ID and a Windows code-signing certificate,
-UPb Lab installers are **unsigned** (macOS builds are ad-hoc signed only).
+Downloads are not notarized with an Apple Developer ID, and Windows
+installers are unsigned. A local macOS build uses the lab’s code-signing
+certificate when available; other macOS builds use ad-hoc signing.
 Both operating systems warn before the first launch. The steps below are the
 expected, one-time way past those warnings; they do not lower security for
 other apps.
@@ -66,10 +68,14 @@ also register the three link schemes.
 
 UPb Lab opens anything the lab's modules read and decides where it goes
 by content, without asking (grainatlas `docs/ux-conventions.md` rule 4): a
-TM4000 package, an area folder, image files or a `.grainatlas` project go to
-**Images**; a Qtegra export folder, its zip or its CSVs open the ingest page in
+TM4000 package, an area folder, image files, a `.grainatlas` folder or a
+`.gaproj` file open standalone **GrainAtlas**; a Qtegra export folder, its zip
+or its CSVs open the ingest page in
 **Sessions**. Inside the app, drop them anywhere on the window or use **Open
-folder…** / **Open files…** on Home. From the system:
+folder…** / **Open files…** on Home. **Upload image set** and **Edit in
+grainatlas** also open standalone GrainAtlas; on the web, its hosted build
+opens in a new tab. Inside UPb Lab, GrainAtlas appears only as Review’s
+read-only **SEM images** panel. From the system:
 
 | | macOS | Windows |
 | --- | --- | --- |
@@ -100,23 +106,37 @@ The first launch asks where UPbDB, the Sessions tab, should live. Settings
   **Retry** and **Use a lab server instead**.
   The wizard signs UPb Lab in with that account.
 - **Lab server**: the URL of the lab's UPbDB (e.g.
-  `https://upbdb.example.edu`); then sign in with **Sign in** in the tab
-  bar.
+  `https://upbdb.example.edu`); select **Continue**, then **Sign in** in the
+  tab bar and **Sign in…** in the dialog.
 
 ## Signing in
 
-UPb Lab signs in to UPbDB once, with **Sign in** at the right of the
-tab bar: a user name and password, or **Sign in with ORCID** / **with
-Google** when the server offers them (your web browser opens, and returns to
-UPb Lab through a `upbdb://auth/callback` link). The Sessions and
-Images tabs and UPbRPy Studio use that sign-in; the button then shows your
-name, and clicking it shows the account and **Sign out**. The token is kept
-in the system keychain, one entry per server under `edu.umn.upbstudio`
+On the desktop, open **Sign in** at the right of the tab bar, then select
+**Sign in…**. This single button opens UPbDB’s sign-in page in your browser.
+Use ORCID or your lab account; the page may offer other methods enabled by
+that server. After signing in, choose **Sign UPb Lab in** and allow the
+browser to open UPb Lab. The browser returns through a
+`upbdb://auth/callback` link tied to the sign-in started in the app.
+
+Sessions, Review’s SEM images viewer and UPbRPy Studio use that sign-in. The account
+button then shows your name; clicking it shows your account and **Sign out**.
+The web shell retains its user name and password form, plus the provider
+buttons offered by the server.
+
+The token is kept in the system keychain, one entry per server under `edu.umn.upbstudio`
 (macOS: Keychain Access, kind "application password"; Windows: Credential
 Manager → Windows Credentials), never in `settings.json`; the local instance's
 entry is named `this-computer`. Signing out revokes it on the server and
 removes the entry. A development build re-signed by each `cargo build` may
 make macOS ask once to allow keychain access.
+
+## Outside the lab network
+
+To reach the lab desktop server from outside the lab network, install
+[Tailscale](https://tailscale.com/download) and ask the lab manager to share
+the lab server with you. Connect Tailscale, then enter the address they give
+you under **Lab server**. If the server cannot be reached, check Tailscale
+and the server address before trying to sign in again.
 
 ## Reducing a session in UPbRPy Studio
 
@@ -173,5 +193,7 @@ UPbRPy Studio: if it is not in its usual place, set its path in Settings (see
 
 ## Building it yourself
 
-See the quick start in the [README](../README.md): `make setup`, then
-`make build`. The installers land in `src-tauri/target/release/bundle/`.
+See the quick start in [Developing UPb Lab](developing.md#quick-start):
+`make setup`, then `make build`. The command prints the installer directory.
+Local macOS builds use a shared release target; other builds use
+`src-tauri/target/release/bundle/` ([build details](testing.md#release-build)).

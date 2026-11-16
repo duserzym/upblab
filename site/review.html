@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Review connects stored results, spot metadata and the published SEM atlas. Changes belong in the editing apps.">
+  <meta name="color-scheme" content="light dark">
+  <title>Review · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html">Overview</a>
+<a href="install.html">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html">Home</a>
+<a href="sessions.html">Sessions</a>
+<a href="review.html" aria-current="page">Review</a>
+<a href="sem-images.html">SEM images in Review</a>
+<a href="reduce.html">Reduce</a>
+<a href="settings.html">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / Review</p>
+      <h1>Read results beside their images.</h1>
+      <p class="lead">Review connects stored results, spot metadata and the published SEM atlas. Changes belong in the editing apps.</p>
+      
+<h2>Choose a scope</h2><p>Choose a session or mount and a reduction run in the scope bar. A mount uses each session’s preferred run. The spot list also includes spots that have not been measured.</p>
+<p>Sample chips control visibility. Click to toggle a sample, Shift-click to toggle a range, or Alt/Option-click to show only that sample. <strong>All</strong>, <strong>None</strong>, <strong>Samples</strong> and <strong>Standards</strong> control groups.</p>
+<section id="concordia"><h2>Concordia</h2><p>Choose <strong>Concordia</strong> for Wetherill or Tera-Wasserburg plots. Ellipses use stored results, their 2σ uncertainties and error correlations; reference curves are drawn for display. Selecting a point selects its spot and updates the details.</p>
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Review: Concordia</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/review-concordia-dark-1440x900.png">
+    <img src="images/review-concordia-light-1440x900.png" alt="Review: Concordia in UPb Lab" width="1440" height="900">
+  </picture>
+  <figcaption>Stored U-Pb results with their uncertainties and linked spot selection.</figcaption>
+</figure></section>
+<section id="geochemistry"><h2>Geochemistry board</h2><p>Choose <strong>Geochemistry</strong> to compare result columns in multiple panels. Axis pickers, log scales and <strong>Presets</strong> configure the display. Mineral presets include zircon, apatite, rutile, titanite and monazite. Add up to 12 panels and maximise a panel for a closer look.</p>
+<p>Stored columns take precedence. Display arithmetic on stored concentrations includes CI normalisation, quotients, Eu/Eu*, Ce/Ce* and the sum of REE + Y. Derived axes say <strong>from stored ppm</strong> and carry no uncertainty. Dates, thermometers and their uncertainties are read only when stored.</p>
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Review: geochemistry</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/review-geochemistry-dark-1440x900.png">
+    <img src="images/review-geochemistry-light-1440x900.png" alt="Review: geochemistry in UPb Lab" width="1440" height="900" loading="lazy">
+  </picture>
+  <figcaption>A board of linked geochemistry plots and REE patterns.</figcaption>
+</figure></section>
+<section id="depth"><h2>Depth profile</h2><p>Select a visible spot and choose <strong>Depth profile</strong>. The plot reads the profile saved by its reduction run, including stored channels and uncertainty bands where available. It does not calculate ratios or dates from raw sweeps.</p>
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Review: depth profile</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/review-depth-dark-1440x900.png">
+    <img src="images/review-depth-light-1440x900.png" alt="Review: depth profile in UPb Lab" width="1440" height="900" loading="lazy">
+  </picture>
+  <figcaption>The selected spot’s stored profile, with available channels and uncertainties.</figcaption>
+</figure></section>
+<section id="sem-images"><h2>SEM images beside the plots</h2><p>Enable <strong>SEM images</strong> in the scope bar to show the published atlas beside Review. The panel uses the bundled GrainAtlas build in a read-only viewer presentation. A plot selection focuses the corresponding image spot; selecting a linked spot in the SEM images panel selects its result. See <a href="sem-images.html">SEM images in Review</a> for the maximised panel, mount map, <strong>Fit</strong> and area menu.</p>
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Review: SEM images</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/review-images-dark-1440x900.png">
+    <img src="images/review-images-light-1440x900.png" alt="Review: SEM images in UPb Lab" width="1440" height="900" loading="lazy">
+  </picture>
+  <figcaption>Plots, SEM images and spot metadata share the selected spot.</figcaption>
+</figure>
+<p>Move and resize the <strong>Spots</strong>, <strong>Age &amp; plots</strong>, <strong>Spot metadata</strong> and <strong>SEM images</strong> panels. Use <strong>Balanced</strong>, <strong>Plots focus</strong> or <strong>Image focus</strong> to restore a preset. Panels can be maximised and restored; the layout choice is remembered.</p></section>
+<section id="sample-groups"><h2>See sample groups on the mount</h2><p>With <strong>SEM images</strong> on and no single spot selected, the mount map inset outlines where each shown sample’s spots sit on the mount in that sample’s Review colour. The inset’s header counts the samples. This group view appears after opening a scope, toggling <strong>Group unregistered by spot name</strong>, or using sample chips, sample rows, <strong>All</strong>, <strong>Samples</strong> or <strong>Standards</strong>. Picking a single spot returns the inset to that spot.</p>
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Review: sample groups</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/review-groups-dark-1440x900.png">
+    <img src="images/review-groups-light-1440x900.png" alt="Review: sample groups outlined on the mount map in UPb Lab" width="1440" height="900" loading="lazy">
+  </picture>
+  <figcaption>The mount map outlines the shown samples in their Review colours and counts them in its header.</figcaption>
+</figure></section>
+<h2>Edit in the appropriate app</h2><ul><li><strong>Edit in UPbRPy Studio</strong> opens the session or run in Studio with the selected acquisition when available. Reduction happens there, then results are submitted to UPbDB.</li><li><strong>Edit in grainatlas</strong> opens the linked project in standalone GrainAtlas on desktop, or its hosted build in a new tab on the web. Publish image changes there to update the atlas.</li></ul>
+<p>These actions need a linked session, run or image project. An unmeasured spot has no reduction to edit. See <a href="reduce.html">Reduce</a> if Studio is not found.</p>
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>

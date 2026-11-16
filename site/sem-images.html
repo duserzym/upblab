@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Review’s SEM images panel shows the published atlas in a read-only GrainAtlas viewer.">
+  <meta name="color-scheme" content="light dark">
+  <title>SEM images in Review · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html">Overview</a>
+<a href="install.html">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html">Home</a>
+<a href="sessions.html">Sessions</a>
+<a href="review.html">Review</a>
+<a href="sem-images.html" aria-current="page">SEM images in Review</a>
+<a href="reduce.html">Reduce</a>
+<a href="settings.html">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / Review: SEM images</p>
+      <h1>SEM images in Review</h1>
+      <p class="lead">Review’s SEM images panel shows the published atlas in a read-only GrainAtlas viewer.</p>
+      
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Review: SEM images</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/images-dark-1440x900.png">
+    <img src="images/images-light-1440x900.png" alt="Review: SEM images panel maximised in UPb Lab" width="1440" height="900">
+  </picture>
+  <figcaption>Review’s SEM images panel maximised, with the mount map inset in the corner.</figcaption>
+</figure>
+<h2>Read the published atlas</h2><p>Enable <strong>SEM images</strong> in Review’s scope bar. The panel uses the bundled GrainAtlas build in a read-only viewer presentation. Spots are coloured by sample using Review’s colours, and the mount map inset in the corner shows their position on the mount. Use <strong>Fit</strong> to fit the view and the area menu to choose an area. Maximise the panel for a closer look, then restore it to see the plots beside it.</p>
+<h2>Connect images to results</h2><p>Selecting a linked spot in the SEM images panel selects its result in Review. Selecting a result in Review focuses the corresponding image spot. See <a href="review.html#sem-images">SEM images beside the plots</a>.</p>
+<section id="sample-groups"><h2>See sample groups on the mount</h2><p>With <strong>SEM images</strong> on and no single spot selected, the mount map inset outlines where each shown sample’s spots sit on the mount in that sample’s Review colour. The inset’s header counts the samples. This group view appears after opening a scope, toggling <strong>Group unregistered by spot name</strong>, or using sample chips, sample rows, <strong>All</strong>, <strong>Samples</strong> or <strong>Standards</strong>. Picking a single spot returns the inset to that spot.</p>
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Review: sample groups</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/review-groups-dark-1440x900.png">
+    <img src="images/review-groups-light-1440x900.png" alt="Review: sample groups outlined on the mount map in UPb Lab" width="1440" height="900" loading="lazy">
+  </picture>
+  <figcaption>The mount map outlines the shown samples in their Review colours and counts them in its header.</figcaption>
+</figure></section>
+<h2>Edit and publish in GrainAtlas</h2><p>Review’s <strong>Edit in grainatlas</strong> opens the associated project in standalone GrainAtlas on desktop, or its hosted build in a new tab on the web. Home’s <strong>Upload image set</strong>, opened or dropped image folders, <code>.grainatlas</code> folders and <code>.gaproj</code> files also open GrainAtlas there.</p>
+<p>Use GrainAtlas to stitch images, segment grains and place spots. Its <strong>Publish</strong> button publishes the atlas to a mount on UPbDB. Editing happens in GrainAtlas; UPb Lab shows the published atlas. See the <a href="https://github.com/duserzym/grainatlas">GrainAtlas repository</a>.</p>
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>

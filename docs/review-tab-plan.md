@@ -208,7 +208,6 @@ v3 in both transports; UPbDB pytest for the new endpoints; grainatlas
 Playwright for `focus-spot` and `lab.spot.selected` through the web shell.
 Then the Tauri app against the scratch UPbDB with Run1 and the demo
 or second project: concordia point to the spot in the CL image, and back.
-Screenshots in `docs/screenshots/`.
 
 ## 4. Walkthrough with the lab-visit data, 2026-11-06
 
@@ -231,22 +230,15 @@ unchanged.
 2. Click on the discordant SampleA_S_157 ellipse (side by side, 1480 px):
    grainatlas opened the published atlas read-only from the server, switched
    to area SampleA, selected and centred SampleA_S_157 and flashed it; it reported
-   `lab.spot.selected` with `via: shell` and Review did not answer
-   ([review_concordia_to_image_1480x920.png](screenshots/review_concordia_to_image_1480x920.png)).
+   `lab.spot.selected` with `via: shell` and Review did not answer.
 3. A spot picked in grainatlas's spot list (SampleA_S_145, later SampleB_S_120) was
    selected in Review: tree scrolled to it, details and plot ring updated; the
-   values agree with grainatlas's spot panel
-   ([review_image_to_review_1480x920.png](screenshots/review_image_to_review_1480x920.png),
-   [review_split_1480x920.png](screenshots/review_split_1480x920.png)).
+   values agree with grainatlas's spot panel.
 4. Depth profile of SampleA_S_145: stored 206Pb/238U and 207Pb/206Pb dates per
-   sweep with 2se bands
-   ([review_depth_profile_1480x920.png](screenshots/review_depth_profile_1480x920.png)).
-   Geochemistry U against Th/U, and the CI-normalised REE patterns
-   ([review_ree_1280x800.png](screenshots/review_ree_1280x800.png)).
-5. Window at 1280 × 800: three columns, no side-by-side toggle
-   ([review_concordia_1280x800.png](screenshots/review_concordia_1280x800.png)).
-   Double-click on SampleB_S_123 switched to Images centred on that spot
-   ([review_show_in_images_1280x800.png](screenshots/review_show_in_images_1280x800.png));
+   sweep with 2se bands.
+   Geochemistry U against Th/U, and the CI-normalised REE patterns.
+5. Window at 1280 × 800: three columns, no side-by-side toggle.
+   Double-click on SampleB_S_123 switched to Images centred on that spot;
    SampleB_S_122 clicked on the canvas there was selected in Review when its tab
    was shown again.
 

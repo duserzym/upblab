@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="UPbRPy Studio performs the reduction. UPb Lab opens the session and shows its stored results afterwards.">
+  <meta name="color-scheme" content="light dark">
+  <title>Reduce · UPb Lab manual</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="site.js"></script>
+</head>
+<body>
+<a class="skip" href="#content">Skip to content</a>
+<div class="manual">
+  <aside class="sidebar glass">
+    <div class="sidebar-top">
+      <a class="brand" href="index.html"><img src="brand-44.png" width="44" height="44" alt=""><span>UPb Lab<small>User manual</small></span></a>
+      <button class="btn nav-toggle" aria-expanded="false" aria-controls="navigation">Menu</button>
+    </div>
+    <nav id="navigation" aria-label="Manual"><a href="index.html">Overview</a>
+<a href="install.html">Install and first run</a>
+<div class="nav-label">Screen guides</div>
+<a href="home.html">Home</a>
+<a href="sessions.html">Sessions</a>
+<a href="review.html">Review</a>
+<a href="sem-images.html">SEM images in Review</a>
+<a href="reduce.html" aria-current="page">Reduce</a>
+<a href="settings.html">Settings</a>
+<div class="nav-label">Help</div>
+<a href="faq.html">FAQ</a>
+</nav>
+    <div class="settings stack">
+      <label class="field theme-control" for="theme">Appearance
+        <select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select>
+      </label>
+      <a class="small" href="https://github.com/duserzym/upblab">Source on GitHub</a>
+    </div>
+  </aside>
+  <main id="content" tabindex="-1">
+    <article>
+      <p class="eyebrow">UPb Lab / Reduce</p>
+      <h1>Open a session in Studio.</h1>
+      <p class="lead">UPbRPy Studio performs the reduction. UPb Lab opens the session and shows its stored results afterwards.</p>
+      
+<figure class="window glass">
+  <div class="window-bar" aria-hidden="true"><i></i><i></i><i></i><span>UPb Lab / Reduce</span></div>
+  <picture>
+    <source data-dark media="(prefers-color-scheme: dark)" srcset="images/reduce-dark-1440x900.png">
+    <img src="images/reduce-light-1440x900.png" alt="Reduce in UPb Lab" width="1440" height="900">
+  </picture>
+  <figcaption>Sessions show their reduction status and an Open in Studio action.</figcaption>
+</figure>
+<h2>Launch a session</h2><ol><li>Install <a href="https://github.com/duserzym/UPbRPy">UPbRPy Studio</a> on this computer.</li><li>Sign in to UPbDB in UPb Lab, then open <strong>Reduce</strong>.</li><li>Choose <strong>Open in Studio</strong> for a session. UPb Lab launches Studio with a one-time sign-in code, valid for five minutes.</li><li>Reduce and submit from Studio. Use <strong>Review</strong> once a completed run is stored.</li></ol>
+<h2>If Studio is not found</h2><p>Choose <strong>Studio settings</strong>. In <strong>Settings &gt; UPbRPy Studio &gt; Path</strong>, select the installed <code>.app</code> on macOS or <code>.exe</code> on Windows. Developers can set <strong>UPbRPy checkout (development)</strong>.</p>
+<p>Studio opens as a separate application. In the web shell, follow <strong>Open in Studio</strong> using the app link registered by Studio’s installer.</p>
+<h2>Return to a stored run</h2><p>Review’s <strong>Edit in UPbRPy Studio</strong> opens the session or run for the chosen spot. UPb Lab does no data reduction and does not change the stored values through its plot controls.</p>
+    </article>
+    <footer>UPb Lab · University of Minnesota geochronology lab · <a href="https://github.com/duserzym/upblab/blob/main/LICENSE">MIT license</a></footer>
+  </main>
+</div>
+</body>
+</html>
