@@ -191,7 +191,18 @@ describe('Review selection and loading', () => {
     get.mockResolvedValue({ status: 503, body: { detail: 'maintenance' } } as never);
     await review.load();
     expect(review.state).toBe('error');
-    expect(review.error).toContain('maintenance');
+    expect(review.error).toBe('Server returned 503: maintenance');
+  });
+  it('shows non-JSON and body-read diagnostics from identity', async () => {
+    for (const error of [
+      'Server returned 502: <html> Bad gateway </html>',
+      'Reading the reply from lab.example/v1/results failed after 30.0 s: timed out (status 200, 919000 bytes expected)',
+    ]) {
+      get.mockRejectedValue(new Error(error));
+      await review.load();
+      expect(review.state).toBe('error');
+      expect(review.error).toBe(error);
+    }
   });
   it('does not restore rows when an in-flight load completes after sign-out', async () => {
     let release!: (value: unknown) => void;

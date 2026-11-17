@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { serverCode, serverMessage, statusSentence } from './server-error';
+import { apiReplyMessage, serverCode, serverMessage, statusSentence } from './server-error';
+
+describe('apiReplyMessage', () => {
+  it('keeps status and detail for API failures', () => {
+    expect(apiReplyMessage({ status: 503, body: { detail: 'Maintenance in progress.' } }))
+      .toBe('Server returned 503: Maintenance in progress.');
+  });
+  it('uses the safe non-JSON diagnostic from the host', () => {
+    expect(apiReplyMessage({ status: 502, body: null, error: 'Server returned 502: Bad gateway' }))
+      .toBe('Server returned 502: Bad gateway');
+  });
+});
 
 describe('serverMessage', () => {
   it('prefers detail, then message when detail is a list', () => {

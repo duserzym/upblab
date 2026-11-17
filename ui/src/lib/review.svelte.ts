@@ -7,7 +7,7 @@ import { moduleSurfaces, sendCommand } from './incoming';
 import type { SessionOut, MountOut, RunOut } from './overview.svelte';
 import { assignSampleColors } from '../components/review/plot-data';
 import { normalise, parseScope, type ReviewScope, type ReviewSpot, type ResultTable, type ResultRow, type RunBrief, type DepthProfile } from './review-data';
-import { serverMessage } from './server-error';
+import { apiReplyMessage } from './server-error';
 const enc = encodeURIComponent;
 type ScopeInput = {
   kind: 'session';
@@ -65,7 +65,7 @@ export class Review {
     const r = await identity.get<T>(path);
     if (r.status !== 200) {
       if (r.status !== 401) void logWarn(`[review] ${path}: ${r.status} ${JSON.stringify(r.body)?.slice(0, 300)}`);
-      throw new Error(r.status === 401 ? 'Sign in again to read results.' : serverMessage(r.body, r.status));
+      throw new Error(r.status === 401 ? 'Sign in again to read results.' : apiReplyMessage(r));
     }
     return r.body;
   }

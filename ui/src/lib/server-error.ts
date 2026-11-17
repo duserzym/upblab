@@ -11,6 +11,11 @@ export function serverMessage(body: unknown, status: number): string {
   return statusSentence(status);
 }
 
+/** API reads keep the HTTP status alongside the server's explanation. */
+export function apiReplyMessage(reply: { status: number; body: unknown; error?: string }): string {
+  return reply.error || `Server returned ${reply.status}: ${serverMessage(reply.body, reply.status)}`;
+}
+
 export function statusSentence(status: number): string {
   if (status === 401) return 'Sign in again to continue.';
   if (status === 403) return 'Your account does not have access to this.';

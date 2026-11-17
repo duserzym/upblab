@@ -199,6 +199,8 @@ export interface AuthState {
 export interface ApiReply<T = unknown> {
   status: number;
   body: T;
+  /** A non-JSON response, with status and a short, credential-free excerpt. */
+  error?: string;
 }
 
 /** Desktop: the token stays in Rust and the OS keychain (src-tauri/src/auth.rs). */

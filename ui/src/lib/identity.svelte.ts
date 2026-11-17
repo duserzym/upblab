@@ -371,7 +371,11 @@ class Identity {
   /** GET a UPbDB read endpoint as the signed-in account. */
   async get<T>(path: string): Promise<ApiReply<T>> {
     if (!this.target) throw new Error('No UPbDB server is configured yet.');
-    return this.backend.get<T>(this.target, path);
+    const reply = await this.backend.get<T>(this.target, path);
+    // A proxy can return HTML even with status 200. All read consumers must
+    // see that diagnostic before treating the body as endpoint data.
+    if (reply.error) throw new Error(reply.error);
+    return reply;
   }
 
   /** Web delivery: what the frame host gives module iframes for `token()`. */

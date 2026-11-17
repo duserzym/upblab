@@ -10,7 +10,7 @@
 import { atlasFileUrl, capInventory, newestMounts, thumbnailPaths } from './home';
 import { identity } from './identity.svelte';
 import type { ApiReply } from './platform';
-import { serverMessage } from './server-error';
+import { apiReplyMessage } from './server-error';
 
 export interface SessionOut {
   id: string;
@@ -128,7 +128,7 @@ function isList<T>(r: ApiReply<unknown>): r is ApiReply<T[]> {
 }
 
 function detail(r: ApiReply<unknown>): string {
-  return serverMessage(r.body, r.status);
+  return apiReplyMessage(r);
 }
 
 class Overview {

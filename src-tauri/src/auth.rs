@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -23,6 +23,8 @@ use tokio::sync::watch;
 
 /// Keychain service name (the app identifier in tauri.conf.json).
 pub const KEYCHAIN_SERVICE: &str = "edu.umn.upbstudio";
+
+const AUTH_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Target {
@@ -144,11 +146,142 @@ impl AuthState {
     }
 }
 
-/// An API reply for the shell page: status and JSON body (null when not JSON).
+/// An API reply for the shell page. Invalid JSON keeps the status and a safe
+/// diagnostic in `error`, including when a proxy answers with status 200.
 #[derive(Debug, Serialize)]
 pub struct ApiReply {
     status: u16,
     body: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+impl ApiReply {
+    fn from_text(status: u16, text: &str, secrets: &[String]) -> Self {
+        match serde_json::from_str(text) {
+            Ok(body) => Self {
+                status,
+                body,
+                error: None,
+            },
+            Err(_) => {
+                let excerpt = reply_excerpt(text, secrets);
+                let error = format!("Server returned {status}: {excerpt}");
+                Self {
+                    status,
+                    body: Value::Null,
+                    error: Some(error),
+                }
+            }
+        }
+    }
+
+    fn message(&self) -> String {
+        self.error
+            .clone()
+            .unwrap_or_else(|| detail(&self.body, self.status))
+    }
+}
+
+/// Proxy error pages can echo request credentials. Omit such bodies rather
+/// than sending secrets to the page or logs. Bound by characters, not bytes.
+fn reply_excerpt(text: &str, secrets: &[String]) -> String {
+    let lower = text.to_ascii_lowercase();
+    if secrets.iter().any(|s| !s.is_empty() && text.contains(s))
+        || [
+            "token",
+            "bearer ",
+            "authorization",
+            "password",
+            "secret",
+            "code=",
+            "code:",
+            "\"code\"",
+        ]
+        .iter()
+        .any(|marker| lower.contains(marker))
+        || text
+            .split(|c: char| !c.is_ascii_alphanumeric() && !"_-./+=".contains(c))
+            .any(|word| word.len() >= 32 && word.chars().any(|c| c.is_ascii_digit()))
+    {
+        return "[reply omitted because it may contain credentials]".into();
+    }
+    let collapsed = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if collapsed.is_empty() {
+        return "Empty reply; expected JSON.".into();
+    }
+    let mut chars = collapsed.chars();
+    let mut excerpt: String = chars.by_ref().take(200).collect();
+    if chars.next().is_some() {
+        excerpt.push('…');
+    }
+    excerpt
+}
+
+/// Only host, port and path: query strings and URL credentials may be secret.
+fn reply_location(url: &Url) -> String {
+    let mut location = url.host().map(|h| h.to_string()).unwrap_or_default();
+    if let Some(port) = url.port() {
+        location.push_str(&format!(":{port}"));
+    }
+    location.push_str(url.path());
+    location
+}
+
+fn body_read_error(
+    url: &Url,
+    elapsed: Duration,
+    status: u16,
+    expected: Option<u64>,
+    error: &reqwest::Error,
+) -> String {
+    let reason = if error.is_timeout() {
+        "timed out"
+    } else {
+        let mut source = std::error::Error::source(error);
+        let mut closed = false;
+        while let Some(cause) = source {
+            if let Some(io) = cause.downcast_ref::<std::io::Error>() {
+                closed |= matches!(
+                    io.kind(),
+                    std::io::ErrorKind::UnexpectedEof
+                        | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::BrokenPipe
+                );
+            }
+            // Hyper also has an incomplete-message error without an io::Error.
+            let description = cause.to_string();
+            closed |= description.contains("end of file before message length reached")
+                || description.contains("connection closed before message completed");
+            source = cause.source();
+        }
+        if closed {
+            "connection closed"
+        } else if error.is_decode() {
+            "could not decode the reply"
+        } else {
+            "connection interrupted"
+        }
+    };
+    format_body_read_error(url, elapsed, status, expected, reason)
+}
+
+fn format_body_read_error(
+    url: &Url,
+    elapsed: Duration,
+    status: u16,
+    expected: Option<u64>,
+    reason: &str,
+) -> String {
+    let expected = expected
+        .map(|n| format!(", {n} bytes expected"))
+        .unwrap_or_default();
+    format!(
+        "Reading the reply from {} failed after {:.1} s: {reason} (status {status}{expected})",
+        reply_location(url),
+        elapsed.as_secs_f64()
+    )
 }
 
 /// UPbDB errors are `{"detail": "...", "code": "..."}` (sync contract,
@@ -186,12 +319,17 @@ fn valid_api_path(path: &str) -> bool {
 impl Identity {
     pub fn with_vault(vault: Box<dyn Vault>) -> Self {
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(300))
+            .read_timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(4))
             .user_agent(concat!("UPbLab/", env!("CARGO_PKG_VERSION")))
             .build()
             .expect("HTTP client");
-        Self { vault, http, active: watch::Sender::new(None) }
+        Self {
+            vault,
+            http,
+            active: watch::Sender::new(None),
+        }
     }
 
     fn set_active(&self, target: &Target, token: Option<String>) {
@@ -214,17 +352,49 @@ impl Identity {
         let _ = tokio::time::timeout(timeout, rx.wait_for(|a| a.is_some())).await;
     }
 
-    async fn send_json(
-        &self,
-        req: reqwest::RequestBuilder,
-    ) -> Result<(u16, Value), String> {
-        let res = req.send().await.map_err(|e| {
-            if e.is_connect() || e.is_timeout() { format!("server unreachable: {e}") } else { e.to_string() }
+    async fn send_json(&self, req: reqwest::RequestBuilder) -> Result<ApiReply, String> {
+        let req = req
+            .build()
+            .map_err(|_| "Could not prepare the server request.".to_string())?;
+        let mut secrets = Vec::new();
+        if let Some(auth) = req
+            .headers()
+            .get(reqwest::header::AUTHORIZATION)
+            .and_then(|h| h.to_str().ok())
+        {
+            secrets.push(auth.strip_prefix("Bearer ").unwrap_or(auth).to_owned());
+        }
+        if let Some(body) = req
+            .body()
+            .and_then(|b| b.as_bytes())
+            .and_then(|b| serde_json::from_slice::<Value>(b).ok())
+        {
+            for key in ["token", "password", "code"] {
+                if let Some(secret) = body.get(key).and_then(Value::as_str) {
+                    secrets.push(secret.to_owned());
+                }
+            }
+        }
+        let started = Instant::now();
+        let res = self.http.execute(req).await.map_err(|e| {
+            // Do not include reqwest's URL: it can contain a credential or query.
+            if e.is_connect() {
+                "server unreachable: connection failed".into()
+            } else if e.is_timeout() {
+                "Timed out waiting for the server's reply.".into()
+            } else {
+                "Could not send the server request.".to_string()
+            }
         })?;
         let status = res.status().as_u16();
-        let text = res.text().await.map_err(|e| e.to_string())?;
-        let body = serde_json::from_str(&text).unwrap_or(Value::Null);
-        Ok((status, body))
+        let url = res.url().clone();
+        // Gzip removes Content-Length because the decoded size is unknown.
+        let expected = res.content_length();
+        let text = res
+            .text()
+            .await
+            .map_err(|e| body_read_error(&url, started.elapsed(), status, expected, &e))?;
+        Ok(ApiReply::from_text(status, &text, &secrets))
     }
 
     /// Store a token from login or exchange; returns the account it came with.
@@ -240,38 +410,81 @@ impl Identity {
         let stored = self.vault.get(&target.key)?;
         // Make the token available to module webviews before validating it.
         self.set_active(target, stored.clone());
-        let Some(token) = stored else { return Ok(AuthState::signed_out()) };
-        let req = self.http.get(target.endpoint("/v1/accounts/me")?).bearer_auth(&token);
+        let Some(token) = stored else {
+            return Ok(AuthState::signed_out());
+        };
+        let req = self
+            .http
+            .get(target.endpoint("/v1/accounts/me")?)
+            .bearer_auth(&token)
+            .timeout(AUTH_TIMEOUT);
         match self.send_json(req).await {
-            Ok((200, account)) => Ok(AuthState { signed_in: true, account: Some(account), offline: false, error: None }),
-            Ok((401, _)) => {
+            Ok(reply) if reply.status == 200 && reply.error.is_none() => Ok(AuthState {
+                signed_in: true,
+                account: Some(reply.body),
+                offline: false,
+                error: None,
+            }),
+            Ok(reply) if reply.status == 401 => {
                 // Revoked or expired, or a different database at this address.
                 self.vault.delete(&target.key)?;
                 self.set_active(target, None);
-                Ok(AuthState { error: Some("Your sign-in expired; please sign in again".into()), ..AuthState::signed_out() })
+                Ok(AuthState {
+                    error: Some("Your sign-in expired; please sign in again".into()),
+                    ..AuthState::signed_out()
+                })
             }
-            Ok((status, body)) => Ok(AuthState { signed_in: true, account: None, offline: true, error: Some(detail(&body, status)) }),
-            Err(e) => Ok(AuthState { signed_in: true, account: None, offline: true, error: Some(e) }),
+            Ok(reply) => Ok(AuthState {
+                signed_in: true,
+                account: None,
+                offline: true,
+                error: Some(reply.message()),
+            }),
+            Err(e) => Ok(AuthState {
+                signed_in: true,
+                account: None,
+                offline: true,
+                error: Some(e),
+            }),
         }
     }
 
-    pub async fn login(&self, target: &Target, username: &str, password: &str) -> Result<AuthState, String> {
+    pub async fn login(
+        &self,
+        target: &Target,
+        username: &str,
+        password: &str,
+    ) -> Result<AuthState, String> {
         let body = serde_json::json!({ "username": username, "password": password });
-        let (status, reply) = self.send_json(self.http.post(target.endpoint("/v1/auth/login")?).json(&body)).await?;
-        if status != 200 {
-            return Err(detail(&reply, status));
+        let reply = self
+            .send_json(
+                self.http
+                    .post(target.endpoint("/v1/auth/login")?)
+                    .json(&body)
+                    .timeout(AUTH_TIMEOUT),
+            )
+            .await?;
+        if reply.status != 200 || reply.error.is_some() {
+            return Err(reply.message());
         }
-        self.adopt(target, reply)
+        self.adopt(target, reply.body)
     }
 
     /// The one-time code from an ORCID or Google sign-in in the system browser.
     pub async fn exchange(&self, target: &Target, code: &str) -> Result<AuthState, String> {
         let body = serde_json::json!({ "code": code });
-        let (status, reply) = self.send_json(self.http.post(target.endpoint("/v1/auth/exchange")?).json(&body)).await?;
-        if status != 200 {
-            return Err(detail(&reply, status));
+        let reply = self
+            .send_json(
+                self.http
+                    .post(target.endpoint("/v1/auth/exchange")?)
+                    .json(&body)
+                    .timeout(AUTH_TIMEOUT),
+            )
+            .await?;
+        if reply.status != 200 || reply.error.is_some() {
+            return Err(reply.message());
         }
-        self.adopt(target, reply)
+        self.adopt(target, reply.body)
     }
 
     /// Revoke the token on the server (best effort) and forget it here.
@@ -281,7 +494,15 @@ impl Identity {
         self.vault.delete(&target.key)?;
         self.set_active(target, None);
         if let Some(token) = token {
-            if let Err(e) = self.send_json(self.http.post(target.endpoint("/v1/auth/logout")?).bearer_auth(token)).await {
+            if let Err(e) = self
+                .send_json(
+                    self.http
+                        .post(target.endpoint("/v1/auth/logout")?)
+                        .bearer_auth(token)
+                        .timeout(AUTH_TIMEOUT),
+                )
+                .await
+            {
                 log::warn!("could not revoke the token on {}: {e}", target.server);
             }
         }
@@ -291,18 +512,31 @@ impl Identity {
     /// A single-use, five-minute code for UPbRPy Studio (docs/WORKFLOW.md section 4).
     pub async fn handoff(&self, target: &Target) -> Result<String, String> {
         let token = self.vault.get(&target.key)?.ok_or("not signed in")?;
-        let (status, reply) = self
-            .send_json(self.http.post(target.endpoint("/v1/auth/handoff")?).bearer_auth(token).json(&serde_json::json!({})))
+        let reply = self
+            .send_json(
+                self.http
+                    .post(target.endpoint("/v1/auth/handoff")?)
+                    .bearer_auth(token)
+                    .json(&serde_json::json!({}))
+                    .timeout(AUTH_TIMEOUT),
+            )
             .await?;
-        if !(200..300).contains(&status) {
-            return Err(format!("Could not open the app: {}", detail(&reply, status)));
+        if !(200..300).contains(&reply.status) || reply.error.is_some() {
+            return Err(format!("Could not open the app: {}", reply.message()));
         }
-        reply.get("code").and_then(Value::as_str).map(str::to_string).ok_or_else(|| "no code in the handoff reply".into())
+        reply
+            .body
+            .get("code")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| "no code in the handoff reply".into())
     }
 
     /// GET a read endpoint as the signed-in account (anonymous when signed out).
     pub async fn get(&self, target: &Target, path_and_query: &str) -> Result<ApiReply, String> {
-        let (path, query) = path_and_query.split_once('?').unwrap_or((path_and_query, ""));
+        let (path, query) = path_and_query
+            .split_once('?')
+            .unwrap_or((path_and_query, ""));
         if !valid_api_path(path) {
             return Err(format!("refused API path {path:?}"));
         }
@@ -314,8 +548,7 @@ impl Identity {
         if let Some(token) = self.vault.get(&target.key)? {
             req = req.bearer_auth(token);
         }
-        let (status, body) = self.send_json(req).await?;
-        Ok(ApiReply { status, body })
+        self.send_json(req).await
     }
 }
 
@@ -461,6 +694,192 @@ mod tests {
 
     fn rt() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap()
+    }
+
+    /// GET-only server for partial, stalled or encoded response bodies.
+    fn raw_server(reply: impl FnOnce(std::net::TcpStream, String) + Send + 'static) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0];
+            while !request.ends_with(b"\r\n\r\n") {
+                if stream.read(&mut byte).unwrap() == 0 {
+                    return;
+                }
+                request.push(byte[0]);
+            }
+            reply(stream, String::from_utf8(request).unwrap());
+        });
+        format!("http://{addr}")
+    }
+
+    #[test]
+    fn non_json_reply_keeps_status_and_a_short_excerpt() {
+        let reply = ApiReply::from_text(502, "<html>\n  Bad gateway\t Try later. </html>", &[]);
+        assert_eq!(reply.status, 502);
+        assert_eq!(reply.body, Value::Null);
+        assert_eq!(
+            reply.error.as_deref(),
+            Some("Server returned 502: <html> Bad gateway Try later. </html>")
+        );
+        assert_eq!(
+            serde_json::to_value(&reply).unwrap()["error"],
+            reply.error.unwrap()
+        );
+        assert_eq!(
+            reply_excerpt(&"é".repeat(201), &[]),
+            format!("{}…", "é".repeat(200))
+        );
+        assert!(ApiReply::from_text(200, "not JSON", &[]).error.is_some());
+        assert_eq!(
+            ApiReply::from_text(204, "", &[]).message(),
+            "Server returned 204: Empty reply; expected JSON."
+        );
+        assert!(ApiReply::from_text(200, "null", &[]).error.is_none());
+    }
+
+    #[test]
+    fn non_json_api_response_reaches_the_page() {
+        let server = fake_server(1, |_, _, _| {
+            (502, "<html>\n  Bad gateway\t Try later. </html>".into())
+        });
+        let reply = rt()
+            .block_on(identity().get(&target(&server), "/v1/mounts/demo/results"))
+            .unwrap();
+        assert_eq!(reply.status, 502);
+        assert_eq!(reply.body, Value::Null);
+        assert_eq!(
+            reply.error.as_deref(),
+            Some("Server returned 502: <html> Bad gateway Try later. </html>")
+        );
+        assert_eq!(
+            serde_json::to_value(&reply).unwrap()["error"],
+            reply.error.unwrap()
+        );
+    }
+
+    #[test]
+    fn excerpts_omit_credentials() {
+        for text in [
+            "Bearer demo-credential",
+            "token=demo-credential",
+            "password: invented",
+            "code=one-use",
+        ] {
+            assert_eq!(
+                reply_excerpt(text, &[]),
+                "[reply omitted because it may contain credentials]"
+            );
+        }
+        assert_eq!(
+            reply_excerpt(
+                "Request echoed demo-credential",
+                &["demo-credential".into()]
+            ),
+            "[reply omitted because it may contain credentials]"
+        );
+    }
+
+    #[test]
+    fn non_json_response_omits_the_request_token() {
+        let server = fake_server(1, |_, _, _| (502, "Request echoed demo-credential".into()));
+        let id = identity();
+        let t = target(&server);
+        id.vault.set(&t.key, "demo-credential").unwrap();
+        let reply = rt().block_on(id.get(&t, "/v1/mounts")).unwrap();
+        assert!(!reply.message().contains("demo-credential"));
+    }
+
+    #[test]
+    fn body_read_error_wording_keeps_context_without_url_credentials() {
+        let url = "https://user:password@lab.example:8443/v1/results?token=hidden#fragment"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            format_body_read_error(&url, Duration::from_secs(30), 200, Some(919000), "timed out"),
+            "Reading the reply from lab.example:8443/v1/results failed after 30.0 s: timed out (status 200, 919000 bytes expected)"
+        );
+        assert_eq!(
+            format_body_read_error(&url, Duration::from_millis(1500), 502, None, "connection closed"),
+            "Reading the reply from lab.example:8443/v1/results failed after 1.5 s: connection closed (status 502)"
+        );
+    }
+
+    #[test]
+    fn body_read_timeout_reports_location_elapsed_status_and_size() {
+        let server = raw_server(|mut stream, _| {
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 919000\r\n\r\n{")
+                .unwrap();
+            stream.flush().unwrap();
+            thread::sleep(Duration::from_millis(300));
+        });
+        let mut id = identity();
+        id.http = reqwest::Client::builder()
+            .read_timeout(Duration::from_millis(50))
+            .build()
+            .unwrap();
+        let err = rt()
+            .block_on(id.get(&target(&server), "/v1/mounts/demo/results?token=hidden"))
+            .unwrap_err();
+        assert!(
+            err.starts_with(&format!(
+                "Reading the reply from {}/v1/mounts/demo/results failed after ",
+                server.trim_start_matches("http://")
+            )),
+            "{err}"
+        );
+        assert!(
+            err.contains(" s: timed out (status 200, 919000 bytes expected)"),
+            "{err}"
+        );
+        assert!(!err.contains("decoding response body"));
+        assert!(!err.contains("hidden"));
+        assert!(!err.contains("server unreachable"));
+    }
+
+    #[test]
+    fn closed_body_reports_the_connection_and_handles_unknown_length() {
+        let server = raw_server(|mut stream, _| {
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\n{")
+                .unwrap();
+        });
+        let err = rt()
+            .block_on(identity().get(&target(&server), "/v1/results"))
+            .unwrap_err();
+        assert!(err.contains("connection closed (status 200)"), "{err}");
+    }
+
+    #[test]
+    fn progressing_body_can_take_longer_than_the_read_timeout() {
+        let server = raw_server(|mut stream, _| {
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n")
+                .unwrap();
+            for byte in b"[1,2,3] " {
+                stream.write_all(&[*byte]).unwrap();
+                stream.flush().unwrap();
+                thread::sleep(Duration::from_millis(50));
+            }
+        });
+        let mut id = identity();
+        id.http = reqwest::Client::builder()
+            .read_timeout(Duration::from_millis(200))
+            .timeout(Duration::from_secs(3))
+            .build()
+            .unwrap();
+        let started = Instant::now();
+        let reply = rt()
+            .block_on(id.get(&target(&server), "/v1/results"))
+            .unwrap();
+        assert!(started.elapsed() > Duration::from_millis(200));
+        assert_eq!(reply.body, serde_json::json!([1, 2, 3]));
     }
 
     #[test]
