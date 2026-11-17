@@ -62,6 +62,28 @@ it, the supervisor does. Write or update the spec files when the brief asks.
 - Prose in docs: plain sentences, no marketing, no emoji, numbers with units.
 - Say in your final message what you did not finish or could not verify.
 
+## Performance and scale (server calls)
+
+The lab database is built for many users and very large datasets (millions of
+grains, acquisitions and spots) reached over slow networks. Every call this app
+makes to it follows these rules:
+
+- **Page, never fetch everything.** Request lists with `limit` and follow the
+  `X-Next-Cursor` cursor; show the first page at once and load more on demand.
+- **Revalidate, do not re-download.** Keep the `ETag` of each list or detail
+  and send `If-None-Match`; a 304 means the cached copy is current. Cache per
+  account and server, and clear it on sign-out.
+- **Never block the interface on a download.** Fetch progressively, show what
+  has arrived, and keep the app usable while the rest loads.
+- **Time out on stalls, not on size.** Use a short connect timeout and a stall
+  timeout without data; never a short cap on the whole transfer. Accept gzip.
+- **No request per row.** Ask for a batch or a summary the server provides;
+  if one is missing, say so instead of looping over items.
+- **Errors say what happened**: the status and a short excerpt of the reply,
+  never only a library message.
+- **Measure** request count and time before and after a change that touches
+  server calls, and test with a large mocked list (thousands of rows).
+
 ## After a major update
 
 Rust and PyInstaller builds fill the disk quickly. Once the work is pushed and
