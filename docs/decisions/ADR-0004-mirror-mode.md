@@ -91,28 +91,48 @@ working. Edits are written locally first and leave through a durable **outbox**.
 - The server's revision check stays the final arbiter: a stale base is refused
   (409) and becomes a merge, never a blind overwrite.
 
-### 5. Server needs (UPbDB; owned by the UPbDB session)
+### 5. Server needs (UPbDB ADR-0011, proposed 2026-11-18)
 
-1. **Per-account change feed**: `GET /v1/changes?after=<cursor>&limit=` returns
-   changed and deleted object ids (kind, id, revision) the caller can see, in
-   commit order, with `X-Next-Cursor`. Built on the per-kind change counters
-   ADR-0009 already adds to `record()`.
-2. **Tombstones** for deletes and for access lost (so mirrors drop rows the
-   account can no longer see), kept at least 90 days; a client older than that
-   does a full refresh.
-3. ETags on every list and detail (ADR-0009), and the batch revision lookup.
-4. Idempotent writes on every write route (ADR-0010).
-5. Content-addressed file fetches (`/files/<sha256>`, immutable caching) so
-   mirrors share tiles across atlas versions.
-6. **Standby host**: a second server holding a replica answers reads when the
-   primary is down, and refuses writes with a clear "read-only standby"
-   (like the 2026-11-17 offline copy's `X-UPbDB-Offline-Copy`). Mirrors keep
-   their outbox for the primary; they never send writes to a standby.
+The server side is UPbDB's ADR-0011 "change feed and standby", building on
+ADR-0009 and ADR-0010. In short:
+
+1. **Change feed** `GET /v1/changes?after=&limit=` with `X-Next-Cursor`, read
+   from a change log that stores the transaction id and returns only rows
+   below the oldest running transaction, so a later commit never hides an
+   earlier one. Children (acquisitions; grains, spots, atlases) bump their
+   parent's `revision` and are reported as the parent; the client then reads
+   the details or the mount's own `/changes?since=`.
+2. **Revisions** on projects, samples, sessions and mounts (only mounts have
+   one today).
+3. **Access changes are not tombstones.** Each account has an
+   `access_epoch`; when grants, memberships, roles or base permissions change,
+   the feed answers `X-Resync: access` and the client reconciles once (paged
+   lists with ETags plus the batch revision lookup), dropping what it can no
+   longer see. Tombstones are for real deletes only, kept at least 90 days. A
+   cursor older than that, or older than a restore, gets 410
+   `cursor_expired` and the same reconcile.
+4. **Writes:** `Idempotency-Key` (ADR-0010) and `If-Match: <revision>`; a
+   stale replay gets 409 with the current object and becomes a merge
+   (section 4).
+5. **Files by hash** `/v1/files/<sha256>`: visibility-checked (404 when the
+   hash belongs only to invisible objects), `private, immutable`, Range.
+6. **Server identity and standby:** `GET /v1/server` returns `dataset_id`
+   (the same on primary and standby), `role: primary|standby`, `as_of` and
+   `primary_url`. Mirrors are keyed by `dataset_id` (not URL), so they stay
+   valid across a failover. A standby refuses writes with 409
+   `read_only_standby` and `X-UPbDB-Offline-Copy`; clients send the outbox
+   only when `role` is `primary`.
+
+Server build order (UPbDB): ADR-0009 keyset `limit`/`after` on sessions and
+mounts first (UPb Lab already sends them), then other lists, ETags and the
+batch lookup; ADR-0010 with `If-Match`; ADR-0011 revisions, change log, feed,
+tombstones and access epoch; files by hash; standby (`/v1/server` fields first,
+then read-only mode in code, then replication).
 
 ### 6. Accounts and protection on disk
 
 - Mirrors are kept per account and server
-  (`<app data>/mirror/<server hash>/<account id>/`). Another account signing
+  (`<app data>/mirror/<dataset id>/<account id>/`, keyed by the server URL until `/v1/server` reports `dataset_id`). Another account signing
   in at the same server gets its own folder and never reads another's.
 - **Sign-out keeps the mirror** but hides it. If the outbox is not empty,
   sign-out warns ("3 changes have not reached the server yet. Sign out anyway?
@@ -145,14 +165,14 @@ details (cursor, revision, outbox entries, raw errors) live behind the chip.
    sessions; submit retry (calibration-panel session) becomes an outbox with
    a stored body and key; `upbr://session/<id>` falls back to the cached bundle
    when the server is unreachable (`find_cached_session` exists, unused).
-4. **UPbDB**: change feed, tombstones and file-by-hash routes (section 5).
+4. **UPbDB**: ADR-0011 (section 5).
 5. A shared spec (`docs/mirror-contract.md` in UPb Lab, next to WORKFLOW.md)
    with the outbox entry format, status words and conflict prompts, so the
    three apps behave the same.
 
 ## Build order
 
-1. UPbDB: change feed and tombstones (with ADR-0009's counters), file-by-hash.
+1. UPbDB: ADR-0009 paging and ETags, ADR-0010 with If-Match, ADR-0011 feed, then files by hash and the standby role.
 2. Studio: outbox for submit and preferred run; offline fallback for
    `upbr://session` links.
 3. GrainAtlas: keep atlas.json and project.json; pin "Keep offline".
@@ -181,6 +201,8 @@ details (cursor, revision, outbox entries, raw errors) live behind the chip.
 3. Conflict on registered data: is "Keep the database copy (recommended)" the
    right default, or should the most recent edit be recommended?
 4. Shared lab computers: one OS account per person, or an encrypted mirror?
-5. Should offline edits to sample assignments and preferred runs be allowed in
+5. (from UPbDB ADR-0011) Tombstone retention: 90 days or longer? Standby: a
+   live replica or a nightly copy?
+6. Should offline edits to sample assignments and preferred runs be allowed in
    Studio and UPb Lab (queued), or stay online-only until the server's change
    feed exists?
