@@ -430,26 +430,6 @@ impl Identity {
             Ok(())
         }
     }
-    /// Check at delivery too: a queued focus may predate discovery of the copy.
-    pub(crate) fn filter_module_command(&self, label: &str, command: &mut Value) {
-        if label != "module-images" {
-            return;
-        }
-        let copy = self
-            .current_server()
-            .is_some_and(|s| self.offline_copy(&s).is_some())
-            || command
-                .get("server")
-                .and_then(Value::as_str)
-                .is_some_and(|s| self.offline_copy(s).is_some());
-        if copy {
-            if let Some(object) = command.as_object_mut() {
-                object.remove("server");
-                object.remove("token");
-                object.remove("code");
-            }
-        }
-    }
     async fn send_json(
         &self,
         target: &Target,
@@ -853,15 +833,6 @@ fn clean_offline_copy(text: &str) -> Option<String> {
         Some(clean)
     }
 }
-fn module_may_receive_token(identity: &Identity, module: &str, page: &Url, server: &str) -> bool {
-    if (module == "module-images" || page.path().contains("/grainatlas/"))
-        && identity.offline_copy(server).is_some()
-    {
-        return false;
-    }
-    may_receive_token(page, server)
-}
-
 /// Origin of a URL as `scheme://host[:port]`.
 fn origin(url: &Url) -> String {
     url.origin().ascii_serialization()
@@ -950,7 +921,7 @@ pub async fn token_for<R: Runtime>(identity: &Identity, webview: &Webview<R>) ->
     identity.wait_for_active(Duration::from_secs(3)).await;
     let server = identity.current_server()?;
     let page = webview.url().ok()?;
-    if !module_may_receive_token(identity, webview.label(), &page, &server) {
+    if !may_receive_token(&page, &server) {
         log::warn!(
             "withheld the token from {} ({})",
             webview.label(),
@@ -1064,10 +1035,16 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn offline_copy_guard_normalizes_targets_and_preserves_other_module_access() {
+    fn offline_copy_guard_normalizes_targets_and_preserves_embedded_module_access() {
         let id = identity();
         let target = target("https://copy.invalid/");
         id.remember_copy(&target, clean_offline_copy("  invented\t copy\u{7f}  "));
+        id.set_active(&target, Some("invented-token".into()));
+        assert_eq!(
+            id.current_server().as_deref(),
+            Some("https://copy.invalid/")
+        );
+        assert_eq!(id.current_token().as_deref(), Some("invented-token"));
         assert_eq!(
             id.offline_copy("https://copy.invalid").as_deref(),
             Some("invented copy")
@@ -1077,19 +1054,9 @@ pub(crate) mod tests {
         let page = "tauri://localhost/modules/grainatlas/index.html"
             .parse()
             .unwrap();
-        assert!(!module_may_receive_token(
-            &id,
-            "module-images",
-            &page,
-            &target.server
-        ));
+        assert!(may_receive_token(&page, &target.server));
         let page = "https://copy.invalid/app/".parse().unwrap();
-        assert!(module_may_receive_token(
-            &id,
-            "module-sessions",
-            &page,
-            &target.server
-        ));
+        assert!(may_receive_token(&page, &target.server));
         assert_eq!(
             clean_offline_copy(&"é".repeat(210))
                 .unwrap()
@@ -1098,18 +1065,12 @@ pub(crate) mod tests {
             200
         );
         assert!(clean_offline_copy(" \t ").is_none());
-        let mut command = serde_json::json!({"type":"focus-spot", "project":"p", "spot":"s", "server":"https://copy.invalid"});
-        let mut sessions_command = command.clone();
-        id.filter_module_command("module-images", &mut command);
-        assert!(command.get("server").is_none());
-        id.filter_module_command("module-sessions", &mut sessions_command);
-        assert!(sessions_command.get("server").is_some());
         id.remember_copy(&target, None);
         assert!(id.guard_grainatlas("https://copy.invalid").is_ok());
     }
 
     #[test]
-    fn offline_copy_header_restores_caches_and_guards_only_grainatlas() {
+    fn offline_copy_header_restores_caches_and_guards_only_standalone_grainatlas() {
         const MARKER: &str = "offline copy as of 2026-11-17 21:49 UTC, read-only";
         let server = raw_server(|mut stream, _| {
             let body = r#"{"id":"invented","username":"analyst"}"#;
@@ -1128,24 +1089,15 @@ pub(crate) mod tests {
         let page = "tauri://localhost/modules/grainatlas/index.html"
             .parse()
             .unwrap();
-        assert!(!module_may_receive_token(
-            &id,
-            "module-images",
-            &page,
-            &server
-        ));
+        assert!(may_receive_token(&page, &server));
+        assert_eq!(id.current_token().as_deref(), Some("invented-token"));
         let page = "tauri://localhost/app/index.html".parse().unwrap();
-        assert!(module_may_receive_token(
-            &id,
-            "module-sessions",
-            &page,
-            &server
-        ));
+        assert!(may_receive_token(&page, &server));
         let reply = rt().block_on(id.get(&t, "/v1/accounts/me")).unwrap();
         assert_eq!(reply.offline_copy.as_deref(), Some(MARKER));
         assert!(reply.cached.is_some());
         assert_eq!(serde_json::to_value(reply).unwrap()["offlineCopy"], MARKER);
-        // A fresh process restores the copy marker before giving modules credentials.
+        // A fresh process restores the copy marker for the standalone launch guard.
         let fresh = identity();
         fresh.cache.configure(dir.path().into());
         fresh.vault.set(&t.key, "invented-token").unwrap();

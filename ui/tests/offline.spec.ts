@@ -106,6 +106,7 @@ test('read-only copy banner and pill fit 1440 x 900', async ({ page }, testInfo)
   await page.goto('./');
   await expect(page.getByTestId('offline-banner')).toHaveText('Read-only copy of UPbDB on this computer (offline copy as of 2026-11-17 21:49 UTC). Changes are not accepted here; make them when the lab server is back.');
   await expect(page.getByTestId('status-pills')).toContainText('Read-only copy');
+  await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(0);
   await expect(page.locator('.board-section')).toHaveCount(2);
   expect(await problems(page, 'Read-only copy Home')).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('read-only-copy-home-1440x900.png') });
@@ -121,19 +122,26 @@ test('cached read-only copy uses normal offline wording and names the source', a
   await expect(page.getByTestId('status-pills')).toContainText('Offline · saved data');
 });
 
-test('read-only copy opens GrainAtlas locally once and still hands off to Studio', async ({ page }) => {
+test('read-only copy shows one inline notice after a local GrainAtlas launch and still hands off to Studio', async ({ page }) => {
   await page.addInitScript(installFakeTauri, {
     store: { mode: 'server', serverUrl: 'http://127.0.0.1:8765', lastTab: 'home' },
     signedIn: true, offlineCopy, fixtures: reviewFixtures, studioFound: true,
   });
   await page.goto('./');
   await expect(page.getByTestId('offline-banner')).toContainText('Read-only copy of UPbDB');
+  await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(0);
   const input = page.getByRole('textbox', { name: 'Open a link', exact: true });
   const open = page.getByRole('button', { name: 'Open', exact: true });
   for (let count = 1; count <= 2; count++) {
     await input.fill('grainatlas://project/project-demo'); await open.click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.filter(([cmd]) => cmd === 'grainatlas_launch').length)).toBe(count);
-    await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(1);
+    const notice = page.getByTestId('grainatlas-local-notice');
+    await expect(notice).toHaveCount(1);
+    await expect(notice).toBeVisible();
+    await expect(page.locator('main').getByTestId('grainatlas-local-notice')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(notice).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Home', exact: true }).click();
   }
   const atlas = await page.evaluate(() => (window as unknown as { __fake: { calls: [string, Record<string, unknown>][] } }).__fake.calls.filter(([cmd]) => cmd === 'grainatlas_launch').map(([, args]) => args));
   expect(atlas).toHaveLength(2);
@@ -142,4 +150,54 @@ test('read-only copy opens GrainAtlas locally once and still hands off to Studio
   await input.fill(`upbr://session/${session.id}`); await open.click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.some(([cmd]) => cmd === 'auth_handoff'))).toBe(true);
   await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.some(([cmd]) => cmd === 'studio_launch'))).toBe(true);
+});
+
+test('read-only copy gives the embedded SEM viewer its server and token without a GrainAtlas banner', async ({ page }) => {
+  const server = 'http://127.0.0.1:8765';
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.route('**/modules/manifest.json', r => r.fulfill({ json: { modules: [{ name: 'grainatlas', version: 'demo', source: 'fixture', sha256: 'demo', entry: 'modules/grainatlas/index.html' }] } }));
+  // A tiny embedded viewer requests a token over the fake host's real frame bridge.
+  await page.route('**/modules/grainatlas/**', r => r.fulfill({ contentType: 'text/html', body: `<!doctype html><body>SEM viewer<script>
+    window.addEventListener('message', event => {
+      if (event.data?.id === 'copy-token' && event.data.ok) document.body.dataset.token = event.data.result;
+    });
+    parent.postMessage({ tag: 'lab-bridge', v: 5, id: 'copy-token', op: 'token' }, location.origin);
+  </script></body>` }));
+  await page.addInitScript(installFakeTauri, {
+    store: { mode: 'server', serverUrl: server, lastTab: 'review', reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }) },
+    signedIn: true, offlineCopy, fixtures: reviewFixtures, renderModules: true,
+  });
+  await page.goto('./');
+  await expect(page.locator('[data-spot-key]').first()).toBeAttached();
+  await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(0);
+  await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
+  await expect(page.frameLocator('iframe[data-fake-module="images"]').locator('body')).toHaveAttribute('data-token', 'DEMO-SCREENSHOTS-TOKEN');
+  await expect.poll(() => page.evaluate(() => (window as unknown as {
+    __fake: { bridgeTokens: { module: string; token: string | null }[] };
+  }).__fake.bridgeTokens.some(request => request.module === 'images' && request.token === 'DEMO-SCREENSHOTS-TOKEN'))).toBe(true);
+  await page.locator('[data-spot-key="acq-2"]').click();
+  await expect.poll(() => page.evaluate(server => (window as unknown as {
+    __fake: { calls: [string, { module?: string; command?: { type?: string; server?: string } }][] };
+  }).__fake.calls.some(([cmd, args]) => cmd === 'module_command' && args?.module === 'images' && args.command?.type === 'focus-spot' && args.command.server === server), server)).toBe(true);
+  await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(0);
+  // Standalone launch still goes local, with exactly one notice inside Review.
+  await page.getByRole('button', { name: 'Edit in grainatlas', exact: true }).first().click();
+  await expect(page.locator('main').getByTestId('grainatlas-local-notice')).toBeVisible();
+  await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(1);
+  await page.getByRole('tab', { name: 'Home', exact: true }).click();
+  await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
+  await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(0);
+});
+
+test('failed standalone launch on a copy leaves no local notice', async ({ page }) => {
+  await page.addInitScript(installFakeTauri, {
+    store: { mode: 'server', serverUrl: 'http://127.0.0.1:8765', lastTab: 'home' },
+    signedIn: true, offlineCopy, fixtures: reviewFixtures, grainatlasLaunchErrors: ['GrainAtlas is not installed'],
+  });
+  await page.goto('./');
+  await page.getByRole('textbox', { name: 'Open a link', exact: true }).fill('grainatlas://project/project-demo');
+  await page.getByRole('button', { name: 'Open', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.filter(([cmd]) => cmd === 'grainatlas_launch').length)).toBe(1);
+  await expect(page.getByTestId('grainatlas-local-notice')).toHaveCount(0);
 });

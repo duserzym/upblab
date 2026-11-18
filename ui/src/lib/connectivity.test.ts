@@ -51,6 +51,6 @@ it('tracks copy marking through cached fallback and clears it on a live server o
   state.report({ status: 200, body: [] }); expect(state.offlineCopy).toBeNull();
   state.report({ status: 403, body: { code: 'offline_read_only' }, offlineCopy });
   expect(state.offlineCopy).toBe(offlineCopy);
-  state.grainAtlasLocal = true; state.reset();
-  expect(state.offlineCopy).toBeNull(); expect(state.grainAtlasLocal).toBe(false);
+  state.grainAtlasLocal = 'review'; state.reset();
+  expect(state.offlineCopy).toBeNull(); expect(state.grainAtlasLocal).toBeNull();
 });

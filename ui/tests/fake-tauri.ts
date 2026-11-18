@@ -36,6 +36,12 @@ export function installFakeTauri(opts: FakeOptions) {
   const callbacks = new Map<number, Cb>();
   const listeners = new Map<string, number[]>();
   const calls: [string, Record<string, unknown> | undefined][] = [];
+  const bridgeTokens: { module: string; token: string | null }[] = [];
+  const moduleToken = (module: string) => {
+    const token = opts.signedIn ? 'DEMO-SCREENSHOTS-TOKEN' : null;
+    bridgeTokens.push({ module, token });
+    return token; // Embedded modules can read a copy; standalone launches remain local.
+  };
   const store = { ...opts.store };
   const fixtures = { ...opts.fixtures };
   const apiReplies = { ...opts.apiReplies };
@@ -64,7 +70,7 @@ export function installFakeTauri(opts: FakeOptions) {
   // pushes onto window.__inbox and the next `inbox_take` empties it.
   const inbox: unknown[] = [];
   w.__inbox = inbox;
-  w.__fake = { calls, store, listeners, fixtures, apiReplies, goOnline: () => { savedReply = undefined; offline = false; } };
+  w.__fake = { calls, bridgeTokens, store, listeners, fixtures, apiReplies, goOnline: () => { savedReply = undefined; offline = false; } };
   const emit = async (event: string, payload: unknown) => {
     await Promise.all((listeners.get(event) ?? []).map(id => callbacks.get(id)?.({ event, id, payload })));
   };
@@ -103,7 +109,7 @@ export function installFakeTauri(opts: FakeOptions) {
     const reply = (result: unknown) => (event.source as WindowProxy).postMessage(
       { tag: 'lab-bridge', v: 5, id: request.id, ok: true, result }, event.origin);
     switch (request.op) {
-      case 'token': reply(opts.signedIn ? 'DEMO-SCREENSHOTS-TOKEN' : null); break;
+      case 'token': reply(moduleToken(module)); break;
       case 'open-files': reply(null); break;
       case 'notify': void emit('lab-bridge://notify', { source: module, event: request.event }); break;
       case 'open': void emit('lab-bridge://open', { source: module, url: request.url }); reply(true); break;
@@ -170,6 +176,7 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'auth_handoff':
           return 'ONE-TIME-FIXTURE';
         case 'grainatlas_launch': {
+          if (opts.offlineCopy && args?.server) throw new Error('GrainAtlas cannot connect to a read-only copy of UPbDB');
           const error = launchErrors.shift();
           if (error) throw new Error(error);
           return null;

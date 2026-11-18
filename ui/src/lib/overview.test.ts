@@ -555,7 +555,7 @@ it('keeps thousands of legacy rows bounded and follows list cursors only on dema
   const rows = Array.from({ length: 3000 }, (_, i) => ({ id: `s${i}`, session_key: `Invented ${i}`, material: 'zircon', started_at: null, acquisition_count: 1 }));
   get.mockImplementation(async path => {
     if (path === '/v1/sessions?limit=500') return { status: 200, body: rows, nextCursor: 'next/opaque' };
-    if (path === '/v1/sessions?limit=500&cursor=next%2Fopaque') return { status: 200, body: [{ ...rows[0], id: 'next' }] };
+    if (path === '/v1/sessions?limit=500&after=next%2Fopaque') return { status: 200, body: [{ ...rows[0], id: 'next' }] };
     if (path === '/v1/mounts?limit=500') return { status: 200, body: [] };
     return { status: 200, body: path.endsWith('/reductions') ? [] : {} };
   });
@@ -563,9 +563,9 @@ it('keeps thousands of legacy rows bounded and follows list cursors only on dema
   expect(overview.sessions).toHaveLength(500);
   expect(get).toHaveBeenCalledWith('/v1/sessions/s499/reductions');
   expect(get).toHaveBeenCalledTimes(1002); // two lists plus both details for every shown row
-  expect(get).not.toHaveBeenCalledWith('/v1/sessions?limit=500&cursor=next%2Fopaque');
+  expect(get).not.toHaveBeenCalledWith('/v1/sessions?limit=500&after=next%2Fopaque');
   await overview.loadRest('sessions');
-  expect(get).toHaveBeenCalledWith('/v1/sessions?limit=500&cursor=next%2Fopaque');
+  expect(get).toHaveBeenCalledWith('/v1/sessions?limit=500&after=next%2Fopaque');
   expect(overview.sessionCursor).toBeNull(); expect(overview.sessions.some(row => row.session.id === 'next')).toBe(true);
 });
 

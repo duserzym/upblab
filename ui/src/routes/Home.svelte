@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GrainAtlasLocalNotice from '../components/GrainAtlasLocalNotice.svelte';
   import { connectivity } from '../lib/connectivity.svelte';
   import { localInventory } from '../lib/local-sessions.svelte';
   import { day, capInventory } from '../lib/home';
@@ -170,6 +171,7 @@
         <UploadCard {card} showChoose={false} bind:this={uploadCards[which]} />
       </div>
     {/each}
+    <GrainAtlasLocalNotice {active} view="home" />
     {#if opener.status}
       <p class="small open-status" role="status">
         <span class="dot" style="background: {openColor(opener.status.state)}"></span>

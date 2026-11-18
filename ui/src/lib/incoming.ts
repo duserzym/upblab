@@ -1,4 +1,3 @@
-import { connectivity } from './connectivity.svelte';
 // Every way a URL or a file reaches the shell:
 //   desktop  OS deep links (tauri-plugin-deep-link, plus single-instance on
 //            Windows) and module calls through @lab/bridge (Rust re-emits them
@@ -127,7 +126,7 @@ export function registerFrame(tab: ModuleTab, frame: Window, loaded = true): voi
   const command = waitingCommands.get(tab);
   if (command) {
     waitingCommands.delete(tab);
-    pushCommand(frame, copySafeCommand(tab, command), '*');
+    pushCommand(frame, command, '*');
   }
   moduleReady(tab);
 }
@@ -137,12 +136,6 @@ export function unregisterFrame(tab: ModuleTab): void {
   loadingFrames.delete(tab);
 }
 
-function copySafeCommand(tab: ModuleTab, command: BridgeCommand): BridgeCommand {
-  if (tab !== 'images' || !connectivity.offlineCopy || !('server' in command)) return command;
-  const { server: _server, ...local } = command;
-  return local;
-}
-
 /** Ask a module to focus an object without navigating away from its open project. */
 export async function sendCommand(tab: ModuleTab, command: BridgeCommand): Promise<boolean> {
   if (!isBridgeCommand(command)) return false;
@@ -150,7 +143,6 @@ export async function sendCommand(tab: ModuleTab, command: BridgeCommand): Promi
     || command.type === 'set-presentation' && command.presentation !== 'viewer'
     || command.type === 'open-project' && command.mode === 'edit')) return false;
   if (!atlasSync.v4 && ['open-project', 'set-mode', 'leave-edit', 'sync-draft', 'discard-draft', 'report-status', 'atlas-synced'].includes(command.type)) return false;
-  command = copySafeCommand(tab, command);
   if (isDesktop) return desktopModules.command(tab, command);
   const frame = frames.get(tab);
   if (!frame || loadingFrames.has(tab)) {

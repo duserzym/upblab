@@ -6,7 +6,8 @@ const backoff = [10_000, 30_000, 60_000, 120_000];
 export class Connectivity {
   state = $state<ConnectionState>('unknown');
   offlineCopy = $state<string | null>(null);
-  grainAtlasLocal = $state(false);
+  /** Inline notice belongs to the view that launched the standalone app. */
+  grainAtlasLocal = $state<'home' | 'review' | null>(null);
   asOf = $state<string | null>(null);
   detail = $state('');
   retryIn = $state(0);
@@ -70,7 +71,7 @@ export class Connectivity {
     }
   }
   reset() {
-    this.generation++; this.offlineCopy = null; this.grainAtlasLocal = false; this.state = 'unknown'; this.asOf = null; this.detail = '';
+    this.generation++; this.offlineCopy = null; this.grainAtlasLocal = null; this.state = 'unknown'; this.asOf = null; this.detail = '';
     this.recoveredAt = -Infinity; this.retrying = false; this.attempt = 0; this.due = 0; this.retryIn = 0;
   }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = undefined; }

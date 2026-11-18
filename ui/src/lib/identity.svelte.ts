@@ -404,8 +404,7 @@ class Identity {
   }
 
   /** Web delivery: what the frame host gives module iframes for `token()`. */
-  frameToken(module?: string): string | null {
-    if ((module === 'images' || module === 'grainatlas') && connectivity.offlineCopy) return null;
+  frameToken(_module?: string): string | null {
     return this.target && this.state.signedIn ? this.backend.token(this.target) : null;
   }
 }

@@ -23,12 +23,16 @@ export async function editInAtlas(target: AtlasTarget, from: string) {
   const current = () => origin === `${identity.target?.server}:${identity.revision}`;
   const request: AppRequest<AtlasTarget> = { target, from, state: 'launching', message: '' };
   apps.atlas = request;
+  connectivity.grainAtlasLocal = null;
   try {
     if (!target.project) throw new Error('No grainatlas project is available for this mount.');
     if (connectivity.offlineCopy) {
-      connectivity.grainAtlasLocal = true;
-      if (isDesktop) await launchGrainAtlas(target.project, undefined, undefined, target.revision, target.spot, target.grain);
-      else {
+      const copy = connectivity.offlineCopy;
+      const view = shell.view === 'review' ? 'review' : 'home';
+      if (isDesktop) {
+        await launchGrainAtlas(target.project, undefined, undefined, target.revision, target.spot, target.grain);
+        if (current() && copy === connectivity.offlineCopy) connectivity.grainAtlasLocal = view;
+      } else {
         const url = new URL(atlasEditorUrl(shell.homeUrl('images'), target.project, target.spot), location.href);
         url.searchParams.delete('server'); url.searchParams.delete('code');
         window.open(url.href, '_blank', 'noopener');

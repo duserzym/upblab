@@ -18,9 +18,6 @@
     <span aria-hidden="true">·</span><button class="btn small" disabled={connectivity.retrying} onclick={() => void connectivity.retryNow()}>Retry now</button>
   </div>
 {/if}
-{#if connectivity.grainAtlasLocal && connectivity.offlineCopy}
-  <div class="glass row small offline-banner" role="status" data-testid="grainatlas-local-notice">GrainAtlas opens without the server while UPb Lab shows a read-only copy, so your edits stay in GrainAtlas's local drafts.</div>
-{/if}
 <style>
   .offline-banner { flex: none; flex-wrap: wrap; padding: var(--space-1) var(--space-3); gap: var(--space-1); border-radius: 0; color: var(--text-muted); }
   .server-error { color: var(--danger); }

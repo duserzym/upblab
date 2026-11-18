@@ -439,14 +439,10 @@ pub fn module_command<R: Runtime>(
 /// Module only: callers can take only their own webview's command, once.
 #[tauri::command]
 pub fn bridge_take_command<R: Runtime>(
-    identity: State<'_, Identity>,
     state: State<'_, Commands>,
     webview: Webview<R>,
 ) -> Result<Option<Value>, String> {
-    let mut command = state.take(webview.label())?;
-    if let Some(command) = &mut command {
-        identity.filter_module_command(webview.label(), command);
-    }
+    let command = state.take(webview.label())?;
     if state.has_waiting(webview.label())? {
         // The bridge serialises pulls. This nudge queues the second kind after
         // this reply, even for an older module that ignores presentation.
@@ -949,6 +945,17 @@ mod tests {
             assert_eq!(state.take("module-images").unwrap(), Some(focus));
             assert!(!state.has_waiting("module-images").unwrap());
         }
+    }
+
+    #[test]
+    fn module_images_command_keeps_read_only_copy_credentials() {
+        let state = Commands::default();
+        let command = json!({
+            "type": "focus-spot", "project": "p", "spot": "s",
+            "server": "https://copy.invalid", "token": "invented-token", "code": "invented-code"
+        });
+        state.store("module-images", command.clone()).unwrap();
+        assert_eq!(state.take("module-images").unwrap(), Some(command));
     }
 
     #[test]

@@ -103,15 +103,15 @@ describe('sendCommand', () => {
   });
 });
 
-it('strips copy server URLs from direct and previously queued Images commands', async () => {
+it('keeps copy server URLs in direct and previously queued Images commands', async () => {
   const command: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 's', server: 'https://copy.invalid' };
   await sendCommand('images', command);
   connectivity.offlineCopy = 'invented copy';
   const frame = { postMessage: vi.fn() };
   registerFrame('images', frame as unknown as Window);
-  expect(frame.postMessage.mock.calls[0][0].command).not.toHaveProperty('server');
+  expect(frame.postMessage.mock.calls[0][0].command).toEqual(command);
   await sendCommand('images', command);
-  expect(frame.postMessage.mock.calls.at(-1)![0].command).not.toHaveProperty('server');
+  expect(frame.postMessage.mock.calls.at(-1)![0].command).toEqual(command);
 });
 
 describe('module selections', () => {

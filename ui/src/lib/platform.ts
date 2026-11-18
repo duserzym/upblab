@@ -296,8 +296,10 @@ export function pickSessionPaths(): Promise<string[]> {
 
 /** Hand local images and project paths to the standalone application. */
 export async function openGrainAtlasPaths(paths: string[]): Promise<void> {
-  if (connectivity.offlineCopy) connectivity.grainAtlasLocal = true;
+  const copy = connectivity.offlineCopy;
+  connectivity.grainAtlasLocal = null;
   await invoke('grainatlas_open_paths', { paths });
+  if (copy && copy === connectivity.offlineCopy) connectivity.grainAtlasLocal = 'home';
 }
 
 /** src-tauri/src/inbox.rs `Notice`: what a standalone app reported; looked up again, never trusted. */
@@ -314,6 +316,9 @@ export async function takeInbox(): Promise<InboxNotice[]> {
 
 export async function launchGrainAtlas(project: string, server: string | undefined, code: string | undefined, revision?: number, spot?: string | null, grain?: string | null): Promise<void> {
   if (!isDesktop) throw new Error('GrainAtlas can only be launched from the desktop app.');
-  if (connectivity.offlineCopy) { server = undefined; code = undefined; connectivity.grainAtlasLocal = true; }
+  const copy = connectivity.offlineCopy;
+  connectivity.grainAtlasLocal = null;
+  if (copy) { server = undefined; code = undefined; }
   await invoke('grainatlas_launch', { project, ...(server ? { server, code } : {}), ...(revision === undefined ? {} : { revision }), ...(spot ? { spot } : grain ? { grain } : {}) });
+  if (copy && copy === connectivity.offlineCopy) connectivity.grainAtlasLocal = 'home';
 }

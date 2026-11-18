@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 vi.mock('./platform', () => ({ isDesktop: true, launchGrainAtlas: vi.fn(async () => {}) }));
 vi.mock('./identity.svelte', () => ({ identity: { target: { server: 'https://lab' }, handoff: vi.fn(async () => 'CODE') } }));
-vi.mock('./shell.svelte', () => ({ shell: { studio: { state: 'launched' }, handleLink: vi.fn(async () => true), homeUrl: vi.fn(() => 'https://lab/atlas/?server=https%3A%2F%2Flab') } }));
+vi.mock('./shell.svelte', () => ({ shell: { view: 'review', studio: { state: 'launched' }, handleLink: vi.fn(async () => true), homeUrl: vi.fn(() => 'https://lab/atlas/?server=https%3A%2F%2Flab') } }));
 vi.mock('./app-watch.svelte', () => ({ appWatch: { atlas: vi.fn(), session: vi.fn() } }));
 const { editInAtlas, openInStudio, apps } = await import('./apps.svelte');
 const platform = await import('./platform');
@@ -61,10 +61,21 @@ it('opens GrainAtlas locally without minting a handoff for a read-only copy, and
   expect(identity.handoff).not.toHaveBeenCalled();
   expect(platform.launchGrainAtlas).toHaveBeenCalledWith('p', undefined, undefined, undefined, 's', undefined);
   expect(apps.atlas?.state).toBe('launched');
-  expect(connectivity.grainAtlasLocal).toBe(true);
+  expect(connectivity.grainAtlasLocal).toBe('review');
   expect(appWatch.atlas).not.toHaveBeenCalled();
   await openInStudio({ session: 's', run: null }, 'review');
   expect(shell.handleLink).toHaveBeenCalledWith('upbr://session/s?via=upblab', 'review');
+});
+it('shows no local notice while a copy launch is pending or after it fails', async () => {
+  connectivity.offlineCopy = 'invented copy';
+  let fail!: (reason: Error) => void;
+  vi.mocked(platform.launchGrainAtlas).mockReturnValueOnce(new Promise((_, reject) => { fail = reject; }));
+  const pending = editInAtlas(target, 'review');
+  expect(connectivity.grainAtlasLocal).toBeNull();
+  fail(new Error('GrainAtlas is not installed'));
+  await pending;
+  expect(apps.atlas?.state).toBe('missing');
+  expect(connectivity.grainAtlasLocal).toBeNull();
 });
 it('opens the hosted build in a new window on web without minting a code', async () => {
   vi.resetModules();
@@ -80,5 +91,10 @@ it('opens the hosted build in a new window on web without minting a code', async
     expect(shell.handleLink).not.toHaveBeenCalled();
     expect(appWatch.atlas).toHaveBeenCalledWith('p', 'm');
     expect(web.apps.atlas?.state).toBe('fallback');
+    const { connectivity: webConnectivity } = await import('./connectivity.svelte');
+    webConnectivity.offlineCopy = 'invented copy';
+    await web.editInAtlas(target, 'review');
+    expect(open).toHaveBeenLastCalledWith('https://lab/atlas/?project=p&spot=s', '_blank', 'noopener');
+    expect(webConnectivity.grainAtlasLocal).toBeNull();
   } finally { vi.unstubAllGlobals(); vi.doUnmock('./platform'); }
 });

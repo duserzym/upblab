@@ -51,14 +51,12 @@ it('retains the account offline and reports saved replies without opening sign-i
   expect(connectivity.state).toBe('offline'); expect(connectivity.asOf).toBe(reply.cached.asOf);
 });
 
-it('records restored copy marking, hides Images credentials and clears the marking on a target change', async () => {
+it('records restored copy marking and clears it on a target change', async () => {
   const { connectivity } = await import('./connectivity.svelte');
   const offlineCopy = 'invented read-only copy';
   vi.mocked(desktopAuth.restore).mockResolvedValueOnce({ signedIn: true, offline: false, offlineCopy, account: { username: 'invented' } });
   await identity.restore({ server: 'https://copy.example', key: 'copy' });
   expect(connectivity.offlineCopy).toBe(offlineCopy);
-  expect(identity.frameToken('images')).toBeNull();
-  expect(identity.frameToken('grainatlas')).toBeNull();
   vi.mocked(desktopAuth.restore).mockResolvedValueOnce({ signedIn: true, offline: false, account: { username: 'other' } });
   await identity.restore({ server: 'https://other.example', key: 'other' });
   expect(connectivity.offlineCopy).toBeNull();

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import GrainAtlasLocalNotice from '../components/GrainAtlasLocalNotice.svelte';
   import { untrack, setContext, type Snippet } from 'svelte';
   import ScopePicker from '../components/review/ScopePicker.svelte';
   import ReviewDock from '../components/ReviewDock.svelte';
@@ -324,6 +325,7 @@
   {:else}
     {#if review.error}<p class="error small notice" role="status">{review.error}</p>{/if}
   {/if}
+  <GrainAtlasLocalNotice {active} view="review" />
   <ReviewDock {active} {split} ready={review.state==='ready'} {images} bind:this={dock}>
     {#snippet headerActions(pane)}
       {#if pane === 'images'}
