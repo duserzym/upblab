@@ -682,17 +682,31 @@ impl Identity {
 
     /// A single-use, five-minute code for UPbRPy Studio (docs/WORKFLOW.md section 4).
     pub async fn handoff(&self, target: &Target) -> Result<String, String> {
+        self.handoff_with_oversight(target, false).await
+    }
+    async fn handoff_with_oversight(
+        &self,
+        target: &Target,
+        on_behalf: bool,
+    ) -> Result<String, String> {
         let token = self.vault.get(&target.key)?.ok_or("not signed in")?;
-        let reply = self
-            .send_json(
-                target,
-                self.http
-                    .post(target.endpoint("/v1/auth/handoff")?)
-                    .bearer_auth(token)
-                    .json(&serde_json::json!({}))
-                    .timeout(AUTH_TIMEOUT),
-            )
-            .await?;
+        let mut req = self
+            .http
+            .post(target.endpoint("/v1/auth/handoff")?)
+            .bearer_auth(token)
+            .json(&serde_json::json!({}))
+            .timeout(AUTH_TIMEOUT);
+        if on_behalf {
+            req = req.header("X-UPbDB-Oversight", "on-behalf");
+        }
+        let reply = self.send_json(target, req).await?;
+        if reply.status == 403
+            && reply.body.get("code").and_then(Value::as_str) == Some("oversight_confirm")
+        {
+            return Err(
+                serde_json::json!({ "status": reply.status, "body": reply.body }).to_string(),
+            );
+        }
         if !(200..300).contains(&reply.status) || reply.error.is_some() {
             return Err(format!("Could not open the app: {}", reply.message()));
         }
@@ -702,6 +716,49 @@ impl Identity {
             .and_then(Value::as_str)
             .map(str::to_string)
             .ok_or_else(|| "no code in the handoff reply".into())
+    }
+
+    /// Authenticated shell write. Consent is supplied for this operation only.
+    pub async fn write(
+        &self,
+        target: &Target,
+        path: &str,
+        method: &str,
+        body: Value,
+        on_behalf: bool,
+    ) -> Result<ApiReply, String> {
+        let (base, query) = path.split_once('?').unwrap_or((path, ""));
+        if !valid_api_path(base)
+            || url::form_urlencoded::parse(query.as_bytes()).any(|(key, _)| key == "as")
+        {
+            return Err("Refused write path or view-as query".into());
+        }
+        let method = match method {
+            "POST" => reqwest::Method::POST,
+            "PATCH" => reqwest::Method::PATCH,
+            "PUT" => reqwest::Method::PUT,
+            "DELETE" => reqwest::Method::DELETE,
+            _ => return Err("Refused write method".into()),
+        };
+        let token = self.vault.get(&target.key)?.ok_or("not signed in")?;
+        let mut url = target.endpoint(base)?;
+        if !query.is_empty() {
+            url.set_query(Some(query));
+        }
+        let mut req = self
+            .http
+            .request(method, url)
+            .bearer_auth(token)
+            .header("Accept", "application/json")
+            .json(&body);
+        if on_behalf {
+            req = req.header("X-UPbDB-Oversight", "on-behalf");
+        }
+        let mut reply = self.send_json(target, req).await?;
+        if reply.status == 204 {
+            reply.error = None;
+        }
+        Ok(reply)
     }
 
     /// GET a read endpoint as the signed-in account (anonymous when signed out).
@@ -902,8 +959,18 @@ pub async fn auth_logout(
 }
 
 #[tauri::command]
-pub async fn auth_handoff(identity: State<'_, Identity>, target: Target) -> Result<String, String> {
-    identity.handoff(&target).await
+pub async fn auth_handoff(
+    identity: State<'_, Identity>,
+    oversight: State<'_, crate::bridge::OversightState>,
+    target: Target,
+    on_behalf: Option<bool>,
+) -> Result<String, String> {
+    oversight.writable()?;
+    if on_behalf.unwrap_or(false) {
+        identity.handoff_with_oversight(&target, true).await
+    } else {
+        identity.handoff(&target).await
+    }
 }
 
 #[tauri::command]
@@ -913,6 +980,22 @@ pub async fn api_get(
     path: String,
 ) -> Result<ApiReply, String> {
     identity.get(&target, &path).await
+}
+
+#[tauri::command]
+pub async fn api_write(
+    identity: State<'_, Identity>,
+    oversight: State<'_, crate::bridge::OversightState>,
+    target: Target,
+    path: String,
+    method: String,
+    body: Value,
+    on_behalf: bool,
+) -> Result<ApiReply, String> {
+    oversight.writable()?;
+    identity
+        .write(&target, &path, &method, body, on_behalf)
+        .await
 }
 
 /// The bearer token for a module webview (`@lab/bridge` `token()`), or None
@@ -1587,5 +1670,23 @@ pub(crate) mod tests {
             key: "k".into(),
         };
         assert_eq!(t.endpoint("/v1/x").unwrap().as_str(), "http://h:1/p/v1/x");
+    }
+    #[test]
+    fn writes_refuse_view_as_queries_and_unrecognized_methods_before_sending() {
+        let id = identity();
+        let t = target("https://invented.invalid");
+        for path in [
+            "/v1/samples/demo?as=cedar",
+            "/v1/samples/demo?%61s=cedar",
+            "/v1/samples/demo?as=",
+            "/outside",
+        ] {
+            assert!(rt()
+                .block_on(id.write(&t, path, "PATCH", serde_json::json!({}), false))
+                .is_err());
+        }
+        assert!(rt()
+            .block_on(id.write(&t, "/v1/samples/demo", "GET", serde_json::json!({}), true))
+            .is_err());
     }
 }

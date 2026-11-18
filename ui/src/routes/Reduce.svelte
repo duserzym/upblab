@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
+  import { identity } from '../lib/identity.svelte';
+  import { ownerName } from '../lib/records.svelte';
   import { untrack } from 'svelte';
   import { overview } from '../lib/overview.svelte';
   import { settings } from '../lib/settings.svelte';
@@ -10,7 +13,7 @@
   import StudioGuidance from '../components/StudioGuidance.svelte';
   let { active }: { active: boolean } = $props();
   // Load once per activation; untracked so the state load() reads cannot re-run this effect.
-  $effect(() => { if (active && settings.loaded) untrack(() => void overview.load()); });
+  $effect(() => { void identity.revision; if (active && settings.loaded) untrack(() => void overview.load()); });
 </script>
 <section class="view scroll" class:hidden={!active}>
   <div class="page stack">
@@ -23,11 +26,11 @@
       {#each overview.sessions as row (row.session.id)}
         {@const status = reduceStatus(row, settings.studioOpened[row.session.id])}
         <article class="glass panel row wrap">
-          <div class="session-name stack"><strong>{row.session.session_key}</strong><span class="muted small">{status.label}{status.date ? ` · ${day(status.date)}` : ''}</span>
+          <div class="session-name stack"><strong>{row.session.session_key}</strong>{#if ownerName(row.session)}<span class="muted small">Owner: {ownerName(row.session)}</span>{/if}<span class="muted small">{status.label}{status.date ? ` · ${day(status.date)}` : ''}</span>
             {#if settings.studioOpened[row.session.id]}<span class="faint small">Last opened from here {day(settings.studioOpened[row.session.id])}</span>{/if}
           </div>
           <div class="row wrap">
-            <button class="btn" onclick={() => void openInStudio({ session: row.session.id, run: null }, 'reduce')}>Open in Studio</button>
+            <button class="btn" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void openInStudio({ session: row.session.id, run: null }, 'reduce')}>Open in Studio</button>
             {#if status.label === 'submitted'}<button class="btn" onclick={() => { void shell.show('review'); void review.open({ kind: 'session', id: row.session.id }); }}>Review</button>{/if}
           </div>
         </article>

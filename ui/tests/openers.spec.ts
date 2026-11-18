@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { calls, openReview, inside } from './review-helpers';
 import { atlasStatusFixture } from './fixtures/atlas-sync';
-import { session, mount, runs, table } from './fixtures/review';
+import { session, mount, runs, table, reviewFixtures } from './fixtures/review';
 
 const tab = (page: Page, name: string) => page.getByRole('tab', { name, exact: true });
 const details = (page: Page) => page.getByTestId('review-details');
@@ -130,10 +130,10 @@ test('Home mount editor and session Reduce keep their context', async ({ page })
 });
 
 test('Reduce lists not started, in progress and submitted sessions', async ({ page }) => {
-  const fresh = { ...session, id: 'session-fresh', session_key: 'Fresh demo', run_count: 0 };
+  const fresh = { ...session, id: 'session-fresh', session_key: 'Fresh demo', run_count: 0, preferred_run: null };
   const opened = { ...fresh, id: 'session-opened', session_key: 'Opened demo' };
   await openReview(page, { studioFound: true, store: { studioOpened: { [opened.id]: '2026-11-13T10:00:00Z' } }, fixtures: {
-    ...fixtures, '/v1/sessions': [session, fresh, opened], [`/v1/sessions/${fresh.id}`]: fresh, [`/v1/sessions/${opened.id}`]: opened,
+    ...fixtures, '/v1/sessions': [...(reviewFixtures['/v1/sessions'] as object[]), fresh, opened], [`/v1/sessions/${fresh.id}`]: fresh, [`/v1/sessions/${opened.id}`]: opened,
     [`/v1/sessions/${fresh.id}/reductions`]: [], [`/v1/sessions/${opened.id}/reductions`]: [],
   } });
   await tab(page, 'Reduce').click();

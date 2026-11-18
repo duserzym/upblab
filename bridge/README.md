@@ -556,3 +556,18 @@ viewer never writes storage, so the shell remembers the inset for the user:
   `frame-ancestors 'self'`) on `/app/` and `/atlas/` instead of `DENY`, and
   serve the shell build at `/desk/` and the grainatlas build at `/atlas/`.
   The desktop shell does not need this: it uses native webviews.
+
+### Oversight (protocol 5.3)
+
+`await oversight()` reads `{ viewAs: { username, name } | null, onBehalf: boolean }`.
+It resolves to `null` standalone or on an older shell. `onOversight(handler)`
+receives the current state when known and subsequent changes; it returns an
+unsubscribe function. The shell answers the `oversight` read operation (desktop
+`bridge_oversight`) and publishes `oversight` pushes (desktop DOM event
+`lab-bridge:oversight`, state in `detail`). Older modules ignore these additions.
+
+View-as uses the viewer's own token from `token()`. Modules must apply `as=` to
+reads, disable write controls while `viewAs` is non-null, and never send a write
+with `as=`. `onBehalf` describes the shell's single confirmed operation; it is
+not transferable consent for a module write. Each module obtains its own
+per-operation confirmation before sending `X-UPbDB-Oversight: on-behalf`.

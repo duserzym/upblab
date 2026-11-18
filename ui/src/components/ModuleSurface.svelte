@@ -5,6 +5,8 @@
   transport.
 -->
 <script lang="ts">
+  import { oversight } from '../lib/oversight.svelte';
+  import { withOversight } from '../lib/links';
   import { onDestroy, untrack } from 'svelte';
   import { frameName, pushTheme } from '@lab/bridge/host';
   import { withTheme, withoutTheme, type ModuleTab } from '../lib/links';
@@ -46,6 +48,9 @@
     return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), viewportHeight: window.innerHeight };
   }
 
+  const scopedHome = $derived(module === 'sessions' || module === 'people' ? withOversight(home, oversight, module === 'sessions') : home);
+  const scopedTarget = $derived(target && (module === 'sessions' || module === 'people') ? { ...target, url: withOversight(target.url, oversight) } : target);
+  let lastScope = '';
   let lastSeq = -1;
   let lastHome = '';
   let shown = false;
@@ -53,8 +58,11 @@
   $effect(() => {
     if (!isDesktop || !el) return;
     const visible = active && !shell.overlay;
-    const t = target;
-    const h = home;
+    const t = scopedTarget;
+    const h = scopedHome;
+    const scope = `${identity.target?.server ?? ''}:${identity.revision}:${oversight.viewAs?.username ?? ''}`;
+    const scopeChanged = scope !== lastScope;
+    lastScope = scope;
     if (!visible) {
       if (shown) queue(() => desktopModules.hide(module));
       shown = false;
@@ -63,13 +71,13 @@
     // A new link wins; a changed home (server URL edited) goes home; otherwise
     // Rust just re-shows the existing webview where the user left it.
     const newTarget = t !== null && t.seq !== lastSeq;
-    const navigate = newTarget || withoutTheme(h) !== lastHome;
-    const url = withTheme(newTarget ? t.url : h, untrack(() => settings.effectiveTheme));
+    const navigate = newTarget || scopeChanged || withoutTheme(h) !== lastHome;
+    const url = withTheme(newTarget || scopeChanged && t ? t!.url : h, untrack(() => settings.effectiveTheme));
     if (t) lastSeq = t.seq;
     lastHome = withoutTheme(h);
     shown = true;
     const bounds = rect();
-    queue(() => desktopModules.open(module, url, bounds, navigate));
+    queue(() => desktopModules.open(module, url, bounds, navigate, scope));
   });
 
   $effect(() => {
@@ -96,36 +104,20 @@
     unregisterFrame(module);
   });
 
-  // Signed in or out in the shell: reload, so the module asks token() again.
-  let seenRevision = identity.revision;
-  $effect(() => {
-    const r = identity.revision;
-    if (r === seenRevision) return;
-    seenRevision = r;
-    if (isDesktop) queue(() => desktopModules.reload(module));
-    else if (iframe) {
-      try {
-        iframe.contentWindow?.location.reload();
-      } catch {
-        iframe.src = iframe.src; // cross-origin frame
-      }
-    }
-  });
-
   // Keep navigation separate from live theme delivery. Read the latest theme
   // for each new load, including a previously queued target.
-  let src = $state(untrack(() => withTheme(target?.url ?? home, settings.effectiveTheme)));
+  let src = $state(untrack(() => withTheme(scopedTarget?.url ?? scopedHome, settings.effectiveTheme)));
   let webHome = '';
   let webSeq = -1;
-  $effect(() => {
+  $effect.pre(() => {
     if (isDesktop) return;
-    const h = withoutTheme(home);
-    const t = target;
+    const h = withoutTheme(scopedHome);
+    const t = scopedTarget;
     if (h === webHome && (t?.seq ?? -1) === webSeq) return;
     const newTarget = t !== null && t.seq !== webSeq;
     webHome = h;
     webSeq = t?.seq ?? -1;
-    src = withTheme(newTarget ? t.url : home, untrack(() => settings.effectiveTheme));
+    src = withTheme(newTarget ? t.url : scopedHome, untrack(() => settings.effectiveTheme));
   });
 
   function publishTheme() {
@@ -156,6 +148,7 @@
     {:else}<p class="faint small">Loading {title}…</p>{/if}
   </div>
 {:else}
+  {#key identity.revision}
   <iframe
     class="surface"
     bind:this={iframe}
@@ -166,6 +159,7 @@
     referrerpolicy="same-origin"
     onload={frameLoaded}
   ></iframe>
+  {/key}
 {/if}
 
 <style>

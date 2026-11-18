@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { oversight, READ_ONLY_REASON } from '../../lib/oversight.svelte';
   import { editInAtlas, openInStudio } from '../../lib/apps.svelte';
   import AtlasGuidance from '../AtlasGuidance.svelte';
   import StudioGuidance from '../StudioGuidance.svelte';
@@ -25,8 +26,8 @@
       <div class="identity-actions">
         <h2>{spot.label}</h2>
         <div class="openers row">
-        <button class="btn edit-action" disabled={!spot.atlasProjectId} title={spot.atlasProjectId ? 'Edit this spot in grainatlas (E)' : 'No published images'} onclick={() => void editInAtlas({ project: spot!.atlasProjectId, mount: spot!.mountId, spot: spot!.atlasSpotId }, 'review')}><span aria-hidden="true">✎</span> Edit in grainatlas</button>
-        <button class="btn edit-action" disabled={!spot.runId && !spot.sessionId} title={spot.runId || spot.sessionId ? 'Edit this spot\'s data reduction in UPbRPy Studio (S)' : 'Not measured yet'} onclick={() => void openInStudio({ session: spot!.sessionId, run: spot!.runId, acquisition: spot!.acquisitionId }, 'review')}><span aria-hidden="true">✎</span> Edit in UPbRPy Studio</button>
+        <button class="btn edit-action" disabled={!!oversight.viewAs || !spot.atlasProjectId} title={oversight.viewAs ? READ_ONLY_REASON : spot.atlasProjectId ? 'Edit this spot in grainatlas (E)' : 'No published images'} onclick={() => void editInAtlas({ project: spot!.atlasProjectId, mount: spot!.mountId, spot: spot!.atlasSpotId }, 'review')}><span aria-hidden="true">✎</span> Edit in grainatlas</button>
+        <button class="btn edit-action" disabled={!!oversight.viewAs || !spot.runId && !spot.sessionId} title={oversight.viewAs ? READ_ONLY_REASON : spot.runId || spot.sessionId ? 'Edit this spot\'s data reduction in UPbRPy Studio (S)' : 'Not measured yet'} onclick={() => void openInStudio({ session: spot!.sessionId, run: spot!.runId, acquisition: spot!.acquisitionId }, 'review')}><span aria-hidden="true">✎</span> Edit in UPbRPy Studio</button>
         </div>
       </div>
       <p class="small">{spot.isReference ? `${spot.sampleName} · ${spot.kind.replaceAll('_', ' ')}` : spot.sampleName} · grain {spot.grainLabel??'none'}</p>

@@ -1,6 +1,7 @@
 // Shell state: the active tab, what each module tab should show, the module
 // builds that are installed, and the routing of every incoming link.
 
+import { oversight, READ_ONLY_REASON } from './oversight.svelte';
 import { moduleHome, moduleUrl, resolve, type ModuleBases, type ModuleTab, type Resolution, type TabId } from './links';
 import { isDesktop, launchStudio, logInfo, logWarn, openExternal, studioStatus, type AuthTarget, type StudioConfig } from './platform';
 import { identity } from './identity.svelte';
@@ -268,6 +269,7 @@ class Shell {
         await openExternal(r.url);
         return true;
       case 'atlas':
+        if (oversight.viewAs) { this.record(url, from, READ_ONLY_REASON, true); return false; }
         await editInAtlas({ project: r.project, mount: null, spot: r.spot }, from);
         return true;
       case 'tab': {
@@ -291,6 +293,7 @@ class Shell {
         }
       }
       case 'studio':
+        if (oversight.viewAs) { this.record(url, from, READ_ONLY_REASON, true); return false; }
         return this.reduce(r.object, r.id, r.url, from);
     }
   }

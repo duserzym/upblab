@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-api-write"
+description = "Enables the api_write command without any pre-configured scope."
+commands.allow = ["api_write"]
+
+[[permission]]
+identifier = "deny-api-write"
+description = "Denies the api_write command without any pre-configured scope."
+commands.deny = ["api_write"]

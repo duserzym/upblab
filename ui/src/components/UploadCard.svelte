@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
   import { fromFileList } from '../lib/drop';
   import { isDesktop, pickPaths, pickSessionPaths } from '../lib/platform';
   import { review } from '../lib/review.svelte';
@@ -11,6 +12,7 @@
   const sessions = $derived(card.target === 'sessions');
   /** Start the upload (Home's action tiles call this directly, one click). */
   export async function choose() {
+    if (oversight.viewAs) return;
     if (!isDesktop) { if (sessions) folderInput?.click(); else card.open = true; return; }
     try {
       const paths = await (sessions ? pickSessionPaths() : pickPaths(true));
@@ -32,9 +34,9 @@
 
 <section class="stack upload-card" data-testid="upload-{card.target}">
   <div class="row">
-    {#if showChoose}<button class="btn primary" onclick={() => void choose()}>{sessions ? 'Upload LA-ICP-MS session…' : 'Upload image set…'}</button>
-    {:else}<button class="btn" onclick={() => void choose()}>{sessions ? 'Choose another session…' : 'Choose another image set…'}</button>{/if}
-    {#if !isDesktop && sessions}<button class="btn" onclick={() => filesInput?.click()}>Choose session files…</button>{/if}
+    {#if showChoose}<button class="btn primary" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void choose()}>{sessions ? 'Upload LA-ICP-MS session…' : 'Upload image set…'}</button>
+    {:else}<button class="btn" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void choose()}>{sessions ? 'Choose another session…' : 'Choose another image set…'}</button>{/if}
+    {#if !isDesktop && sessions}<button class="btn" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => filesInput?.click()}>Choose session files…</button>{/if}
     {#if card.open || card.error}<button class="btn" aria-label="Dismiss {sessions ? 'session' : 'image'} upload" onclick={() => { card.close(); card.error = ''; }}>Dismiss</button>{/if}
   </div>
   <p class="muted small">{sessions ? 'Rich CSV, per-spot folder, or both. Opens the ingest dialog in Sessions.' : isDesktop ? 'SEM package folder, .grainatlas folder or .gaproj file. Opens in standalone grainatlas.' : 'Open grainatlas in a new browser tab and drop the files there.'}</p>
@@ -52,7 +54,7 @@
     {#if sessions && card.session}
       <div class="row">
         <button class="btn" onclick={() => void shell.handleLink(`upbdb://session/${card.session!.id}`, 'home')}>Open in Sessions</button>
-        <button class="btn" onclick={() => void shell.handleLink(`upbr://session/${card.session!.id}`, 'home')}>Reduce in UPbRPy Studio</button>
+        <button class="btn" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void shell.handleLink(`upbr://session/${card.session!.id}`, 'home')}>Reduce in UPbRPy Studio</button>
         <button class="btn" disabled={!card.ready} onclick={showReview}>Review</button>
       </div>
       {#if !card.ready}<p class="faint small">Review is available once a reduction run is submitted from UPbRPy Studio</p>{/if}

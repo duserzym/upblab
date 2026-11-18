@@ -1,3 +1,4 @@
+import { oversight } from './oversight.svelte';
 import { identity } from './identity.svelte';
 import { isDesktop, savedReads, logInfo, type Prefetched } from './platform';
 import { prefetchPaths } from './read-prefetch';
@@ -19,7 +20,7 @@ export class SavedData {
   reset() { this.cancel(); this.last.clear(); }
   schedule(sessions: SessionOut[], mounts: MountOut[]) {
     this.cancel();
-    if (!isDesktop || !identity.signedIn) return;
+    if (!isDesktop || !identity.signedIn || oversight.viewAs) return;
     const key = this.key();
     if (Date.now() - (this.last.get(key) ?? -Infinity) < 600_000) return;
     this.timer = setTimeout(() => {
@@ -34,7 +35,7 @@ export class SavedData {
   save(sessions: SessionOut[], mounts: MountOut[]): Promise<Prefetched> {
     if (this.pending) return this.pending;
     const target = identity.target;
-    if (!target || !identity.signedIn) return Promise.reject(new Error('Sign in to save server data.'));
+    if (!target || !identity.signedIn || oversight.viewAs) return Promise.reject(new Error('Sign in to save server data.'));
     const key = this.key(), started = performance.now();
     const paths = prefetchPaths(sessions, mounts, settings.reviewScope);
     this.last.set(key, Date.now());

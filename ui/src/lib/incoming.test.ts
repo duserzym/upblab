@@ -18,13 +18,14 @@ vi.mock('./spot-actions', () => ({ dispatchSpotAction: vi.fn(async () => {}) }))
 
 const platform = await import('./platform');
 const { opener } = await import('./opener.svelte');
-const { frames, registerFrame, sendCommand, onModuleEvent, moduleReady, publishImagesPresentation } = await import('./incoming');
+const { frames, registerFrame, sendCommand, onModuleEvent, moduleReady, publishImagesPresentation, publishOversight, unregisterFrame } = await import('./incoming');
+const { oversight } = await import('./oversight.svelte');
 const { shell } = await import('./shell.svelte');
 const { settings } = await import('./settings.svelte');
 const { dispatchSpotAction } = await import('./spot-actions');
 const { selection } = await import('./selection.svelte');
 const command: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 's', via: 'review' };
-const types = (frame: { postMessage: ReturnType<typeof vi.fn> }) => frame.postMessage.mock.calls.map(call => call[0].command.type);
+const types = (frame: { postMessage: ReturnType<typeof vi.fn> }) => frame.postMessage.mock.calls.filter(call => call[0].push === 'command').map(call => call[0].command.type);
 
 beforeEach(() => {
   connectivity.reset();
@@ -36,6 +37,22 @@ beforeEach(() => {
   settings.reviewInset = null;
   selection.fromImages = null;
   vi.clearAllMocks();
+  oversight.reset();
+});
+
+it('posts cloneable oversight snapshots on module load, scope change and reload', () => {
+  const delivered: unknown[] = [];
+  const frame = { postMessage: vi.fn(message => { delivered.push(structuredClone(message)); }) };
+  registerFrame('sessions', frame as unknown as Window);
+  oversight.select({ username: 'cedar', name: 'Cedar Analyst' }); publishOversight();
+  const state = { viewAs: { username: 'cedar', name: 'Cedar Analyst' }, onBehalf: false };
+  expect(delivered.at(-1)).toMatchObject({ push: 'oversight', oversight: state });
+  expect(structuredClone(oversight.state)).toEqual(state); // The frame host's oversight read uses this too.
+  registerFrame('sessions', frame as unknown as Window);
+  expect(delivered.at(-1)).toMatchObject({ push: 'oversight', oversight: state });
+  oversight.select(null); publishOversight();
+  expect(delivered.at(-1)).toMatchObject({ push: 'oversight', oversight: { viewAs: null, onBehalf: false } });
+  unregisterFrame('sessions');
 });
 
 describe('sendCommand', () => {
@@ -55,7 +72,7 @@ describe('sendCommand', () => {
     expect(await sendCommand('images', latest)).toBe(false);
     const other = { postMessage: vi.fn() };
     registerFrame('sessions', other as unknown as Window);
-    expect(other.postMessage).not.toHaveBeenCalled();
+    expect(other.postMessage).toHaveBeenCalledWith(expect.objectContaining({ push: 'oversight' }), '*');
     const frame = { postMessage: vi.fn() };
     registerFrame('images', frame as unknown as Window);
     expect(types(frame)).toEqual(['focus-grain', 'set-presentation']);
@@ -194,7 +211,7 @@ describe('Images presentation delivery', () => {
     await publishImagesPresentation();
     const frame = { postMessage: vi.fn() };
     registerFrame('images', frame as unknown as Window);
-    expect(frame.postMessage.mock.calls.map(call => call[0].command.type)).toEqual(['focus-spot', 'set-presentation']);
+    expect(frame.postMessage.mock.calls.filter(call => call[0].push === 'command').map(call => call[0].command.type)).toEqual(['focus-spot', 'set-presentation']);
     expect(frame.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ command: { type: 'set-presentation', presentation: 'viewer' } }), '*');
     frame.postMessage.mockClear();
     moduleReady('images');

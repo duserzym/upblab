@@ -16,9 +16,10 @@
 // Module tabs reload when the account changes (`revision`), so they pick up
 // the new token, or their own sign-in screen after a sign-out.
 
+import { oversight, WriteError } from './oversight.svelte';
 import { connectivity } from './connectivity.svelte';
 import { SHELL_EVENTS } from '@lab/bridge';
-import { serverMessage, statusSentence } from './server-error';
+import { serverMessage, statusSentence, apiReplyMessage } from './server-error';
 import {
   desktopAuth,
   isDesktop,
@@ -65,7 +66,8 @@ interface Backend {
   login(t: AuthTarget, username: string, password: string): Promise<AuthState>;
   exchange(t: AuthTarget, code: string): Promise<AuthState>;
   logout(t: AuthTarget): Promise<AuthState>;
-  handoff(t: AuthTarget): Promise<string>;
+  handoff(t: AuthTarget, onBehalf?: boolean): Promise<string>;
+  write<T>(t: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean): Promise<ApiReply<T>>;
   get<T>(t: AuthTarget, path: string): Promise<ApiReply<T>>;
   /** Web only: the token for module iframes. */
   token(t: AuthTarget): string | null;
@@ -104,6 +106,37 @@ async function json(res: Response): Promise<unknown> {
   }
 }
 
+/** Browser reads use a connect timeout, then a timeout only while no bytes arrive. */
+async function apiRequest(t: AuthTarget, path: string, init: RequestInit): Promise<{ response: Response; body: unknown; error?: string }> {
+  const controller = new AbortController();
+  let timer = setTimeout(() => controller.abort(), 4000);
+  const stalled = () => { clearTimeout(timer); timer = setTimeout(() => controller.abort(), 30_000); };
+  try {
+    const response = await fetch(endpoint(t, path), { ...init, signal: controller.signal });
+    stalled();
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    if (reader) {
+      try {
+        for (;;) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          stalled(); text += decoder.decode(chunk.value, { stream: true });
+        }
+        text += decoder.decode();
+      } finally { reader.releaseLock(); }
+    }
+    if (!text) return { response, body: null };
+    try { return { response, body: JSON.parse(text) }; }
+    catch {
+      const excerpt = /bearer|token|password|code["' ]*[:=]/i.test(text) ? '[reply omitted because it may contain credentials]'
+        : text.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').trim().slice(0, 200);
+      return { response, body: null, error: `Server returned ${response.status}: ${excerpt || 'Empty reply; expected JSON.'}` };
+    }
+  } finally { clearTimeout(timer); }
+}
+
 function detail(body: unknown, status: number): string {
   return serverMessage(body, status);
 }
@@ -112,6 +145,7 @@ function offlineCopy(res: Response): string | undefined {
   return res.headers.get('X-UPbDB-Offline-Copy')?.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 200) || undefined;
 }
 const memory = new Map<string, string>();
+const webReads = new Map<string, { etag: string; reply: ApiReply<unknown> }>();
 
 /** Web delivery: fetch from the shell page, same origin as UPbDB at /desk/. */
 const webBackend: Backend = {
@@ -145,22 +179,36 @@ const webBackend: Backend = {
     }
     return SIGNED_OUT;
   },
-  async handoff(t) {
+  async handoff(t, onBehalf = false) {
     const token = readToken(t);
     if (!token) throw new Error('not signed in');
     const req = post({});
     req.headers.Authorization = `Bearer ${token}`;
+    if (onBehalf) req.headers['X-UPbDB-Oversight'] = 'on-behalf';
     const res = await fetch(endpoint(t, '/v1/auth/handoff'), req);
     const body = (await json(res)) as { code?: string } | null;
-    if (!res.ok || !body?.code) throw new Error(`Could not open the app: ${detail(body, res.status)}`);
+    if (!res.ok || !body?.code) throw new WriteError(res.status, body, `Server returned ${res.status}: ${detail(body, res.status)}`);
     return body.code;
   },
   async get<T>(t: AuthTarget, path: string) {
     const token = readToken(t);
-    const res = await fetch(endpoint(t, path), {
-      headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    const key = JSON.stringify([t, token, path]), saved = webReads.get(key);
+    const { response: res, body, error } = await apiRequest(t, path, {
+      headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(saved ? { 'If-None-Match': saved.etag } : {}) },
     });
-    return { offlineCopy: offlineCopy(res), status: res.status, body: (await json(res)) as T, nextCursor: res.headers.get('X-Next-Cursor') ?? undefined };
+    if (res.status === 304 && saved) return saved.reply as ApiReply<T>;
+    const reply = { offlineCopy: offlineCopy(res), status: res.status, body: body as T, error, nextCursor: res.headers.get('X-Next-Cursor') ?? undefined };
+    const etag = res.headers.get('ETag');
+    if (res.ok && !error && etag && token === readToken(t)) {
+      if (webReads.size >= 1000) webReads.delete(webReads.keys().next().value!);
+      webReads.set(key, { etag, reply });
+    }
+    return reply;
+  },
+  async write<T>(t: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean) {
+    const token = readToken(t);
+    const { response: res, body: replyBody, error } = await apiRequest(t, path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(onBehalf ? { 'X-UPbDB-Oversight': 'on-behalf' } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: res.status, body: replyBody as T, error };
   },
   token: (t) => readToken(t) ?? memory.get(t.key) ?? null,
 };
@@ -220,6 +268,16 @@ class Identity {
   private backend: Backend = isDesktop ? desktopBackend : webBackend;
   private restoring: string | null = null;
 
+  constructor() {
+    let scope = '';
+    oversight.subscribe(() => {
+      const next = oversight.viewAs?.username ?? '';
+      if (next === scope) return;
+      scope = next; this.revision++;
+      webReads.clear();
+    });
+  }
+
   get signedIn(): boolean {
     return this.state.signedIn;
   }
@@ -240,6 +298,7 @@ class Identity {
     this.state = next;
     const who = (s: AuthState) => (s.signedIn ? (s.account?.username ?? '?') : '');
     if (before.signedIn !== next.signedIn || (next.account && who(before) !== who(next))) {
+      oversight.reset(); webReads.clear();
       const copy = connectivity.offlineCopy;
       connectivity.reset(); connectivity.offlineCopy = copy; this.revision += 1;
     }
@@ -378,7 +437,9 @@ class Identity {
   /** A one-time code for UPbRPy Studio (POST /v1/auth/handoff); null when signed out. */
   async handoff(): Promise<string | null> {
     if (!this.target || !this.state.signedIn) return null;
-    return this.backend.handoff(this.target);
+    oversight.assertWritable();
+    const target = this.target, revision = this.revision;
+    return oversight.write(onBehalf => this.backend.handoff(target, onBehalf), () => target === this.target && revision === this.revision);
   }
 
   /** GET a UPbDB read endpoint as the signed-in account. */
@@ -386,7 +447,7 @@ class Identity {
     if (!this.target) throw new Error('No UPbDB server is configured yet.');
     const target = this.target, revision = this.revision;
     let reply: ApiReply<T>;
-    try { reply = await this.backend.get<T>(target, path); }
+    try { reply = await this.backend.get<T>(target, oversight.readPath(path)); }
     catch (err) {
       if (this.target?.server === target.server && this.target?.key === target.key && revision === this.revision)
         connectivity.unavailable(message(err));
@@ -394,13 +455,27 @@ class Identity {
     }
     if (this.target?.server === target.server && this.target?.key === target.key && revision === this.revision) {
       connectivity.report(reply);
-      if (!reply.cached && reply.status === 200 && path === '/v1/accounts/me')
+      if (!reply.cached && reply.status === 200 && path === '/v1/accounts/me' && !oversight.viewAs)
         this.changed({ signedIn: this.signedIn, account: reply.body as Account, offline: false, offlineCopy: reply.offlineCopy });
     }
+    if (revision !== this.revision || target !== this.target) throw new Error('The account or view changed during the request.');
     // A proxy can return HTML even with status 200. All read consumers must
     // see that diagnostic before treating the body as endpoint data.
     if (reply.error) throw new Error(reply.error);
     return reply;
+  }
+
+  /** All data writes share one per-operation oversight guard. */
+  async write<T>(path: string, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: unknown): Promise<ApiReply<T>> {
+    oversight.assertWritable(path);
+    if (!this.target || !this.signedIn) throw new Error('Sign in to make changes.');
+    const target = this.target, revision = this.revision;
+    const payload = body === undefined ? undefined : structuredClone(body);
+    return oversight.write(async onBehalf => {
+      const reply = await this.backend.write<T>(target, path, method, payload, onBehalf);
+      if (reply.status < 200 || reply.status >= 300 || reply.error) throw new WriteError(reply.status, reply.body, apiReplyMessage(reply));
+      return reply;
+    }, () => target === this.target && revision === this.revision);
   }
 
   /** Web delivery: what the frame host gives module iframes for `token()`. */

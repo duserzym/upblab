@@ -15,6 +15,9 @@
 
 import {
   COMMANDS,
+  OVERSIGHT_EVENT,
+  isOversightState,
+  type OversightState,
   COMMAND_EVENT,
   THEME_EVENT,
   isTheme,
@@ -55,6 +58,9 @@ export interface Bridge {
   readonly module: string | null;
   /** v3.1: last known resolved shell theme, null when unavailable. */
   theme(): Theme | null;
+  /** v5.3: read the shell scope; null on older shells or standalone. */
+  oversight(): Promise<OversightState | null>;
+  onOversight(handler: (state: OversightState) => void): () => void;
   /** Called immediately if known, then for every change. Returns an unsubscribe. */
   onTheme(handler: ThemeHandler): () => void;
   /** Ask the shell to route a URL (upbdb://, grainatlas://, upbr://, https://). */
@@ -102,6 +108,8 @@ function noopBridge(): Bridge {
     transport: 'none',
     module: null,
     theme: () => null,
+    oversight: async () => null,
+    onOversight: () => () => {},
     onTheme: () => () => {},
     open: async () => false,
     token: async () => null,
@@ -181,8 +189,32 @@ function themeHub(initial?: unknown) {
   };
 }
 
+function oversightHub(pull: () => Promise<unknown>) {
+  let current: OversightState | null = null;
+  let version = 0;
+  const handlers = new Set<(state: OversightState) => void>();
+  const receive = (value: unknown) => {
+    if (!isOversightState(value)) return;
+    version++;
+    current = value;
+    for (const handler of [...handlers]) handler(value);
+  };
+  const read = async () => {
+    const before = version;
+    try { const value = await pull(); if (version === before) receive(value); } catch { /* older shell */ }
+    return current;
+  };
+  return { receive, oversight: read, onOversight(handler: (state: OversightState) => void) {
+    handlers.add(handler);
+    if (current) handler(current); else void read();
+    return () => { handlers.delete(handler); };
+  } };
+}
+
 function tauriBridge(marker: ShellMarker, internals: TauriInternals, env: BridgeEnv): Bridge {
   const themes = themeHub(marker.theme);
+  const scope = oversightHub(() => internals.invoke(COMMANDS.oversight));
+  env.addEventListener?.(OVERSIGHT_EVENT, event => scope.receive((event as unknown as { detail?: unknown }).detail));
   let receivedEvent = false;
   env.addEventListener?.(THEME_EVENT, (event) => {
     const detail = (event as unknown as { detail?: { theme?: unknown } }).detail;
@@ -237,6 +269,8 @@ function tauriBridge(marker: ShellMarker, internals: TauriInternals, env: Bridge
   return {
     transport: 'tauri',
     theme: themes.theme,
+    oversight: scope.oversight,
+    onOversight: scope.onOversight,
     onTheme: themes.onTheme,
     module: marker.module,
     async open(url) {
@@ -306,6 +340,10 @@ function frameBridge(env: BridgeEnv, module: string, opts: BridgeOptions): Bridg
     });
   }
 
+  const scope = oversightHub(() => request('oversight', {}));
+  env.addEventListener?.('message', ev => {
+    if (ev.source === parent && isBridgePush(ev.data) && ev.data.push === 'oversight') scope.receive(ev.data.oversight);
+  });
   const onOpenFiles = deliveryHub(
     async () => {
       try {
@@ -347,6 +385,8 @@ function frameBridge(env: BridgeEnv, module: string, opts: BridgeOptions): Bridg
   return {
     transport: 'postMessage',
     theme: themes.theme,
+    oversight: scope.oversight,
+    onOversight: scope.onOversight,
     onTheme: themes.onTheme,
     module,
     async open(url) {
@@ -420,3 +460,6 @@ export const onCommand = (handler: CommandHandler): (() => void) => bridge().onC
 
 export const theme = (): Theme | null => bridge().theme();
 export const onTheme = (handler: ThemeHandler): (() => void) => bridge().onTheme(handler);
+
+export const oversight = (): Promise<OversightState | null> => bridge().oversight();
+export const onOversight = (handler: (state: OversightState) => void): (() => void) => bridge().onOversight(handler);

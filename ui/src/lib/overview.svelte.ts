@@ -7,6 +7,7 @@
 //   GET /v1/mounts
 //   GET /v1/mounts/{id}/atlas            {current: {...} | null, versions, …}; current null = none published
 
+import { oversight } from './oversight.svelte';
 import { atlasFileUrl, capInventory, newestMounts, thumbnailPaths } from './home';
 import { listPath } from './api-list';
 import { savedData } from './saved-data.svelte';
@@ -19,12 +20,15 @@ import { apiReplyMessage } from './server-error';
 export interface SessionOut {
   id: string;
   session_key: string;
+  owner?: string | null;
+  owner_name?: string | null;
   material: string;
   kind?: string;
   status?: string;
   started_at: string | null;
   acquisition_count: number;
   run_count?: number;
+  spot_kinds?: Record<string, number>;
   kind_counts?: Record<string, number>;
   preferred_run?: Partial<RunOut> | null;
   instrument?: { name?: string } | null;
@@ -49,6 +53,10 @@ export interface RunOut {
 export interface MountOut {
   id: string;
   label: string;
+  owner?: string | null;
+  owner_name?: string | null;
+  creator?: { id: string; name: string } | null;
+  atlas?: { project_id: string; version?: number; uploaded_at?: string; thumbnail?: string | null } | null;
   mount_type?: string;
   grain_count: number;
   spot_count: number;
@@ -155,11 +163,12 @@ class Overview {
   private generation = 0;
 
   private source = '';
+  private sourceKey() { return `${identity.target?.server ?? ''}:${identity.revision}:${JSON.stringify(oversight.filters)}`; }
   private requestCount = 0;
   private get<T = unknown>(path: string) { this.requestCount++; return identity.get<T>(path); }
 
   async load({ force = false } = {}) {
-    const source = `${identity.target?.server ?? ''}:${identity.revision}`;
+    const source = this.sourceKey();
     if (source !== this.source) {
       this.clear();
       this.source = source;
@@ -183,7 +192,7 @@ class Overview {
     const started = performance.now();
     const requestBaseline = this.requestCount;
     try {
-      const reads = await Promise.allSettled([this.get(listPath('/v1/sessions')), this.get(listPath('/v1/mounts'))]);
+      const reads = await Promise.allSettled([this.get(listPath('/v1/sessions', null, oversight.filters)), this.get(listPath('/v1/mounts', null, oversight.filters))]);
       const reply = (read: PromiseSettledResult<ApiReply>): ApiReply => read.status === 'fulfilled' ? read.value
         : { status: 0, body: null, error: read.reason instanceof Error ? read.reason.message : String(read.reason) };
       const [sessions, mounts] = reads.map(reply);
@@ -211,9 +220,9 @@ class Overview {
       this.mountList = isList<MountOut>(mounts) ? newestMounts(mounts.body) : [];
       const shown = capInventory(this.sessionList);
       const shownMounts = capInventory(this.mountList);
-      const previousSessions = new Map(inPlace ? this.sessions.map(row => [row.session.id, row]) : []);
+      const previousSessions = new Map(this.sessions.map(row => [row.session.id, row]));
       const previousMounts = new Map(inPlace ? this.mounts.map(row => [row.mount.id, row]) : []);
-      this.sessions = shown.map(session => previousSessions.get(session.id) ?? baseSession(session));
+      this.sessions = shown.map(session => sessionFromList(session, previousSessions.get(session.id)));
       this.mounts = shownMounts.map(mount => previousMounts.get(mount.id) ?? { mount, atlas: null, detailsPending: true });
       for (const id of this.thumbnailSources.keys()) {
         if (!this.mountList.some(mount => mount.id === id)) this.thumbnailSources.delete(id);
@@ -231,7 +240,7 @@ class Overview {
       ]);
       if (gen === this.generation) {
         this.loadedAt = new Date(Date.now());
-        if (!sessions.cached && !mounts.cached && connectivity.state !== 'offline' && connectivity.state !== 'server-error')
+        if (!oversight.viewAs && !sessions.cached && !mounts.cached && connectivity.state !== 'offline' && connectivity.state !== 'server-error')
           savedData.schedule(this.sessionList, this.mountList);
       }
     } catch (err) {
@@ -261,6 +270,9 @@ class Overview {
       if (!session) { if (strict) throw new Error('Session unavailable'); return; }
       const row = await this.sessionRow(session);
       if (gen !== this.generation || source !== `${identity.target?.server}:${identity.revision}`) return;
+      // An explicit submission refresh may arrive before Home's first list load.
+      // Keep its richer run metadata when that unchanged list subsequently arrives.
+      if (!this.source) this.source = this.sourceKey();
       const index = this.sessions.findIndex(row => row.session.id === id);
       if (index >= 0) this.sessions[index] = row;
       else this.sessions = [...this.sessions, row];
@@ -282,10 +294,10 @@ class Overview {
       let mount: MountOut | undefined;
       if (reply.status === 200 && reply.body?.id === id) {
         // Detail replies contain other metadata that Home does not use.
-        const { id, label, mount_type, grain_count, spot_count } = reply.body;
-        mount = { id, label, mount_type, grain_count, spot_count };
+        const { id, label, mount_type, grain_count, spot_count, owner, owner_name, creator } = reply.body;
+        mount = { id, label, mount_type, grain_count, spot_count, owner, owner_name, creator };
       } else if (reply.status === 404 || reply.status === 405) {
-        const list = await this.get<MountOut[]>(listPath('/v1/mounts'));
+        const list = await this.get<MountOut[]>(listPath('/v1/mounts', null, oversight.filters));
         if (!current() || !isList<MountOut>(list)) return;
         mount = list.body.find(m => m.id === id);
       }
@@ -315,7 +327,7 @@ class Overview {
     try {
       const cursor = section === 'sessions' ? this.sessionCursor : this.mountCursor;
       if (cursor) {
-        const reply = await this.get(listPath(section === 'sessions' ? '/v1/sessions' : '/v1/mounts', cursor));
+        const reply = await this.get(listPath(section === 'sessions' ? '/v1/sessions' : '/v1/mounts', cursor, oversight.filters));
         if (gen !== this.generation) return;
         if (!isList(reply)) throw new Error(detail(reply));
         if (section === 'sessions') {
@@ -350,27 +362,26 @@ class Overview {
     }
   }
 
-  // Extra Home details stay within the same 20-item background scope as prefetch.
-  // Larger inventories retain list summaries and explicit unknowns without row fan-out.
-  private async fillSessions(items: SessionOut[], offset: number, gen: number, progress = true) {
-    await mapLimited(items, async (session, index) => {
-      const row = await this.sessionRow(session);
-      if (gen !== this.generation) return;
-      this.sessions[offset + index] = row;
-      if (progress) this.sessionProgress.completed += 1;
-    }, () => gen === this.generation);
+  // Lists already contain batched summaries. Missing summaries remain unavailable;
+  // never turn a page of rows into a request per row.
+  private async fillSessions(items: SessionOut[], offset: number, gen: number, _progress = true) {
+    if (gen !== this.generation) return;
+    items.forEach((session, i) => { this.sessions[offset + i] = sessionFromList(session, this.sessions[offset + i]); });
+    this.sessionProgress = { completed: this.sessions.length, total: this.sessions.length };
   }
-
-  private async fillMounts(items: MountOut[], offset: number, gen: number, progress = true) {
-    await mapLimited(items, async (mount, index) => {
-      const reloadThumbnails = this.thumbnailSources.get(mount.id)?.started === true
-        || this.mounts.find(row => row.mount.id === mount.id)?.thumbnails !== undefined;
-      const row: MountRow = await this.mountRow(mount, gen);
-      if (gen !== this.generation) return;
-      this.mounts[offset + index] = row;
-      if (reloadThumbnails) void this.loadThumbnails(mount.id);
-      if (progress) this.mountProgress.completed += 1;
-    }, () => gen === this.generation);
+  private async fillMounts(items: MountOut[], offset: number, gen: number, _progress = true) {
+    if (gen !== this.generation) return;
+    items.forEach((mount, i) => {
+      let thumbnails: string[] = [];
+      if (mount.atlas?.thumbnail && identity.target) {
+        try {
+          const url = new URL(mount.atlas.thumbnail, identity.target.server);
+          if (url.origin === new URL(identity.target.server).origin && ['http:', 'https:'].includes(url.protocol)) thumbnails = [oversight.readPath(url.href)];
+        } catch { /* An invalid thumbnail never hides the rest of the page. */ }
+      }
+      this.mounts[offset + i] = { mount, atlas: mount.atlas === undefined ? 'error' : parseAtlas(mount.atlas), thumbnails };
+    });
+    this.mountProgress = { completed: this.mounts.length, total: this.mounts.length };
   }
 
   private async sessionRow(session: SessionOut): Promise<SessionRow> {
@@ -384,7 +395,7 @@ class Overview {
         canShare: info.can_share === true,
       } : undefined;
     return {
-      session, kindCounts: info?.kind_counts ?? session.kind_counts ?? null, access,
+      session, detailsPending: false, kindCounts: info?.kind_counts ?? session.spot_kinds ?? session.kind_counts ?? null, access,
       ...(runs.status === 'fulfilled' && isList<RunOut>(runs.value)
         ? summariseRuns(runs.value.body) : { runs: null, preferred: null, latest: null }),
     };
@@ -425,9 +436,9 @@ class Overview {
     // The host's authenticated proxy only permits /v1/. Atlas files use the
     // project-scoped read token directly, also in desktop webviews.
     try {
-      const response = await fetch(atlasFileUrl(server, atlas.projectId, 'atlas.json', access), { cache: 'no-store', referrerPolicy: 'no-referrer', signal: controller.signal });
+      const response = await fetch(oversight.readPath(atlasFileUrl(server, atlas.projectId, 'atlas.json', access)), { cache: 'no-store', referrerPolicy: 'no-referrer', signal: controller.signal });
       if (response.ok)
-        thumbnails = thumbnailPaths(await response.json()).map(path => atlasFileUrl(server, atlas.projectId, path, access));
+        thumbnails = thumbnailPaths(await response.json()).map(path => oversight.readPath(atlasFileUrl(server, atlas.projectId, path, access)));
     } catch { /* A missing thumbnail must never hide the mount. */ }
     finally { clearTimeout(timeout); }
     // Unchanged atlases retain their source across an in-place revalidation.
@@ -439,6 +450,7 @@ class Overview {
   clear() {
     savedData.reset();
     this.generation += 1;
+    this.source = '';
     this.state = 'idle';
     this.refreshing = false;
     this.sessionProgress = { completed: 0, total: 0 };
@@ -456,20 +468,27 @@ class Overview {
   }
 }
 
-function baseSession(session: SessionOut): SessionRow {
-  return { session, runs: session.run_count ?? null, preferred: null, latest: null,
-    kindCounts: session.kind_counts, detailsPending: true };
+function sessionFromList(session: SessionOut, previous?: SessionRow): SessionRow {
+  // List summaries omit pipeline versions and latest/completed runs. A refresh
+  // of one session already supplied them; don't discard them on returning Home.
+  if (previous?.detailsPending === false && previous.session.id === session.id
+    && previous.session.run_count === session.run_count
+    && previous.session.preferred_run?.id === session.preferred_run?.id) {
+    return { ...previous, session, kindCounts: session.spot_kinds ?? session.kind_counts ?? previous.kindCounts };
+  }
+  return baseSession(session);
 }
 
-/** Bound background detail fan-out, stopping queued work on refresh. */
-async function mapLimited<T>(items: T[], read: (item: T, index: number) => Promise<void>, current: () => boolean): Promise<void> {
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(4, items.length) }, async () => {
-    while (next < items.length && current()) {
-      const index = next++;
-      await read(items[index], index);
-    }
-  }));
+function baseSession(session: SessionOut): SessionRow {
+  const stored = session.preferred_run;
+  const preferred = stored?.id ? {
+    pipeline_name: '', pipeline_version: '', status: '', ...stored, session_id: session.id, is_preferred_for_session: true,
+    started_at: stored.started_at ?? (stored as { created_at?: string }).created_at ?? '',
+    completed_at: stored.completed_at ?? (stored as { finished_at?: string }).finished_at ?? null,
+  } as RunOut : null;
+  return { session, runs: session.run_count ?? null, preferred, latest: preferred,
+    completed: preferred?.status === 'completed' ? preferred : null,
+    kindCounts: session.spot_kinds ?? session.kind_counts ?? null };
 }
 
 export const overview = new Overview();

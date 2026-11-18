@@ -7,12 +7,13 @@
 //   web      /desk/open?url=… and module iframes posting through @lab/bridge;
 //            files dropped on the shell page (App.svelte)
 
+import { oversight } from './oversight.svelte';
 import { dispatchSpotAction } from './spot-actions';
 import { presentationFor } from './presentation';
 import { atlasSync } from './atlas-sync.svelte';
 import { atlasSyncedNotice } from './atlas-refresh';
 import { EVENTS, atlasStatus, spotSelection, isBridgeCommand, viewerInset, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
-import { createFrameHost, pushOpenFiles, pushCommand } from '@lab/bridge/host';
+import { createFrameHost, pushOpenFiles, pushCommand, pushOversight } from '@lab/bridge/host';
 import { fileUrlToPath } from './drop';
 import { identity, SIGN_OUT_EVENTS } from './identity.svelte';
 import { opener } from './opener.svelte';
@@ -128,6 +129,7 @@ export function registerFrame(tab: ModuleTab, frame: Window, loaded = true): voi
     waitingCommands.delete(tab);
     pushCommand(frame, command, '*');
   }
+  pushOversight(frame, oversight.state, '*');
   moduleReady(tab);
 }
 
@@ -188,6 +190,7 @@ export async function listenForLinks(): Promise<void> {
   createFrameHost(
     {
       open: (url, module) => shell.handleLink(url, module),
+      oversight: () => oversight.state,
       token: (module) => identity.frameToken(module),
       notify: (event, module) => onModuleEvent(event, module),
       openFiles: (module, take) => opener.takeWeb(module, take),
@@ -210,4 +213,9 @@ export async function listenForLinks(): Promise<void> {
   );
   const param = new URLSearchParams(location.search).get('url');
   if (param) void shell.handleLink(param, 'page');
+}
+
+/** Push to already mounted iframes; new frames can also read the state. */
+export function publishOversight() {
+  for (const frame of frames.values()) pushOversight(frame, oversight.state, '*');
 }

@@ -485,15 +485,25 @@ pub async fn cache_clear(
 #[tauri::command]
 pub async fn cache_prefetch(
     identity: tauri::State<'_, crate::auth::Identity>,
+    oversight: tauri::State<'_, crate::bridge::OversightState>,
     target: Target,
     paths: Vec<String>,
 ) -> Result<Prefetched, String> {
-    prefetch(&identity, &target, paths).await
+    prefetch_if(&identity, &target, paths, || oversight.writable().is_ok()).await
 }
+#[cfg(test)]
 pub async fn prefetch(
     identity: &crate::auth::Identity,
     target: &Target,
     paths: Vec<String>,
+) -> Result<Prefetched, String> {
+    prefetch_if(identity, target, paths, || true).await
+}
+async fn prefetch_if(
+    identity: &crate::auth::Identity,
+    target: &Target,
+    paths: Vec<String>,
+    current: impl Fn() -> bool,
 ) -> Result<Prefetched, String> {
     if paths.len() > 400 {
         return Err("at most 400 saved read paths are allowed".into());
@@ -513,7 +523,7 @@ pub async fn prefetch(
     let worker = || async {
         use std::sync::atomic::Ordering::SeqCst;
         let mut counts = Prefetched::default();
-        while !stopped.load(SeqCst) && epoch == identity.cache.epoch() {
+        while current() && !stopped.load(SeqCst) && epoch == identity.cache.epoch() {
             let path = queue.lock().unwrap().0.pop_front();
             let Some(path) = path else {
                 break;
@@ -609,6 +619,19 @@ mod tests {
             next_cursor: None,
             body: serde_json::json!([{"id":"invented"}]),
         }
+    }
+    #[tokio::test]
+    async fn read_cache_prefetch_stops_before_reading_an_inactive_scope() {
+        let (_dir, identity, target) = setup("https://invented.invalid".into());
+        let counts = prefetch_if(
+            &identity,
+            &target,
+            vec!["/v1/sessions?limit=500".into()],
+            || false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(counts.fetched + counts.unchanged + counts.failed, 0);
     }
     #[test]
     fn read_cache_hide_switch_and_forget_isolate_accounts_and_target_keys() {
@@ -1017,5 +1040,35 @@ mod tests {
         .unwrap();
         assert!(counts.failed <= 3);
         assert_eq!(counts.fetched, 0);
+    }
+    #[test]
+    fn read_cache_isolates_view_as_paths_under_the_viewers_account() {
+        let (_dir, identity, target) = setup("https://example.invalid".into());
+        let cache = &identity.cache;
+        cache
+            .adopt(&target, &serde_json::json!({"id":"viewer"}))
+            .unwrap();
+        for (path, name) in [
+            ("/v1/sessions?limit=500", "viewer"),
+            ("/v1/sessions?limit=500&as=cedar", "cedar"),
+        ] {
+            let mut row = entry(path);
+            row.body = serde_json::json!([{"id":name}]);
+            cache.store(&target, &row, cache.epoch());
+        }
+        assert_eq!(
+            cache.load(&target, "/v1/sessions?limit=500").unwrap().body[0]["id"],
+            "viewer"
+        );
+        assert_eq!(
+            cache
+                .load(&target, "/v1/sessions?limit=500&as=cedar")
+                .unwrap()
+                .body[0]["id"],
+            "cedar"
+        );
+        assert!(cache
+            .load(&target, "/v1/sessions?limit=500&as=moss")
+            .is_none());
     }
 }

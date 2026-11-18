@@ -119,3 +119,59 @@ rows retain list summaries and show unavailable details. Lists request
 `limit=500` and load another cursor page only on demand. Runtime logs include
 Home read count/time and prefetch fetched/unchanged/failed counts and time.
 These mocked timings do not measure a real server or disk-cache throughput.
+
+## Oversight scope (ADR-0007 step 4)
+
+`ui/tests/oversight.spec.ts` uses invented people and records with fake Tauri and
+mocked `/v1/` routes. It covers combined narrowing filters, cursor paging and
+owner labels, view-as with the caller's token, a persistent read-only banner,
+disabled write controls, Exit, late replies from the previous scope, per-operation
+on-behalf confirmation and header resend, and module oversight reads/events.
+The layout cases cover 1280 × 800 and 1440 × 900 in light and dark; the supervisor
+runs them in Chromium and WebKit.
+
+The shell's `identity.get` scopes every data read. In-memory lists and Review
+results clear when scope changes; persisted reads include the entire query
+(including `as`) in their cache key. The web cache retains per-scope ETags and
+clears on account, server and scope changes. Idle offline prefetch does not run
+in view-as. Browser data transfers use a 4 s connection timeout and a 30 s stall
+timeout that resets when bytes arrive, with no total transfer deadline.
+
+Home uses the API's batched session and atlas summaries. Missing summaries stay
+unavailable instead of triggering per-row detail requests. An explicit detail
+refresh still reads that one object. Samples, projects and directories load one
+500-row cursor page at a time and expose Show more or More controls.
+List revalidation preserves richer run details from an explicit submission
+refresh until the listed run count or preferred-run identity changes.
+
+A local mocked comparison on 2026-11-18 supplied 3000 sessions and 3000 mounts,
+returning the first 500 of each: the previous overview made 1502 reads in
+5.49 ms; the new overview made 2 reads in 0.61 ms. These are local mock times,
+not network latency, and exclude the existing idle offline-prefetch job.
+`overview.test.ts` and `records.test.ts` retain large-list request-count checks.
+
+Directory, sample and project pages use the same 60 s freshness window as Home.
+Returning to Home keeps already loaded cursor pages; explicit Refresh bypasses
+the window. Failed directories retain their diagnostic for the same window;
+Retry bypasses it. Revalidation still goes through `identity.get`, retaining ETags and
+`If-None-Match` in the desktop and web backends. Account, server or view-as changes
+clear the list scope. `identity-web.test.ts` checks a directory's 304 response
+preserves both its rows and next cursor.
+
+The round 1 directory reactivation check supplies 3000 invented rows, returns
+500 at a time and activates six Home lists twice. Without freshness caching it
+makes 12 reads; with caching it makes 6. `records.test.ts` prints elapsed mock
+times for both cases. Browser timing and Home → Review → Home request counts
+remain for the supervisor's Playwright run. `incoming.test.ts` uses real
+structured cloning to check oversight pushes on module load, change and reload.
+
+Round 1 retains summary-only Home reads. The `home-sections.spec.ts:134` atlas
+filter and `openers.spec.ts:115`, `:132`, `:194` and `:331` keep their behavior
+assertions; their shared fixtures now include the server's atlas and preferred-run
+list summaries. Fresh reduction-session fixtures explicitly have no preferred
+run. `home.spec.ts:105` now expects one list-provided thumbnail instead of a
+two-area manifest preview; `:174` waits for that one tile's failed response.
+The thumbnail fixture uses the pyramid URL returned by the list contract.
+`openers.spec.ts:177` keeps its version assertion and exercises the app fix that
+retains the submitted version when Home loads. Size, refresh-speed and oversight
+expectations are unchanged. The supervisor verifies these with Playwright.

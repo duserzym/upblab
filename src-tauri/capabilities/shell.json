@@ -47,6 +47,8 @@
     "allow-local-service-stop",
     "allow-local-service-bootstrap",
     "allow-local-service-logs",
-    "allow-local-service-open-logs"
+    "allow-local-service-open-logs",
+    "allow-module-oversight",
+    "allow-api-write"
   ]
 }

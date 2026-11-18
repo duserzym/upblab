@@ -179,6 +179,66 @@ pub fn bridge_theme(state: State<'_, ThemeState>) -> Result<String, String> {
     state.current()
 }
 
+/// v5.3: only the shell can change scope; modules may read and observe it.
+#[derive(Clone, Default, serde::Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Oversight {
+    pub view_as: Option<ViewAs>,
+    pub on_behalf: bool,
+}
+#[derive(Clone, serde::Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ViewAs {
+    pub username: String,
+    pub name: String,
+}
+#[derive(Default)]
+pub struct OversightState(Mutex<Oversight>);
+impl OversightState {
+    pub fn current(&self) -> Result<Oversight, String> {
+        self.0.lock().map(|v| v.clone()).map_err(|e| e.to_string())
+    }
+    pub fn writable(&self) -> Result<(), String> {
+        if self.current()?.view_as.is_some() {
+            Err("Viewing as another account is read-only".into())
+        } else {
+            Ok(())
+        }
+    }
+}
+pub fn oversight_script(value: &Oversight) -> Result<String, String> {
+    let json = serde_json::to_string(value).map_err(|e| e.to_string())?;
+    Ok(format!(
+        "window.dispatchEvent(new CustomEvent('lab-bridge:oversight', {{ detail: {json} }}));"
+    ))
+}
+#[tauri::command]
+pub fn bridge_oversight(state: State<'_, OversightState>) -> Result<Oversight, String> {
+    state.current()
+}
+#[tauri::command]
+pub fn module_oversight<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, OversightState>,
+    oversight: Oversight,
+) -> Result<(), String> {
+    if oversight
+        .view_as
+        .as_ref()
+        .is_some_and(|v| v.username.is_empty() || v.username.len() > 200 || v.name.len() > 500)
+    {
+        return Err("Invalid oversight account".into());
+    }
+    let script = oversight_script(&oversight)?;
+    *state.0.lock().map_err(|e| e.to_string())? = oversight;
+    for label in ["module-images", "module-sessions", "module-people"] {
+        if let Some(webview) = app.get_webview(label) {
+            webview.eval(&script).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 const COMMAND_EVENT: &str = "lab-bridge:command";
 
 /// Keep presentation independently so a tab switch cannot replace a pending focus.
@@ -973,5 +1033,27 @@ mod tests {
         assert_eq!(state.take("module-images").unwrap(), Some(latest));
         assert_eq!(state.take("module-images").unwrap(), None);
         assert_eq!(state.take("module-sessions").unwrap(), Some(first));
+    }
+    #[test]
+    fn oversight_state_is_read_only_and_serializes_the_additive_wire_fields() {
+        let state = OversightState::default();
+        assert!(state.writable().is_ok());
+        assert_eq!(
+            serde_json::to_value(state.current().unwrap()).unwrap(),
+            json!({"viewAs":null,"onBehalf":false})
+        );
+        let scope: Oversight = serde_json::from_value(
+            json!({"viewAs":{"username":"cedar","name":"Cedar Analyst"},"onBehalf":false}),
+        )
+        .unwrap();
+        *state.0.lock().unwrap() = scope.clone();
+        assert!(state.writable().is_err());
+        let script = oversight_script(&scope).unwrap();
+        assert!(script.contains("lab-bridge:oversight"));
+        assert!(script.contains("Cedar Analyst"));
+        assert!(script.contains("viewAs"));
+        assert!(
+            serde_json::from_value::<Oversight>(json!({"viewAs":null,"onBehalf":"yes"})).is_err()
+        );
     }
 }

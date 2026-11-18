@@ -4,6 +4,8 @@
 
 import {
   FRAME_NAME_PREFIX,
+  isOversightState,
+  type OversightState,
   MESSAGE_TAG,
   PROTOCOL_VERSION,
   isBridgeRequest,
@@ -18,6 +20,7 @@ import {
 
 export interface FrameHostHandlers {
   /** Route a URL; return false to refuse it. */
+  oversight?(module: string): OversightState | Promise<OversightState>;
   open(url: string, module: string): boolean | Promise<boolean>;
   token(module: string): string | null | Promise<string | null>;
   notify(event: BridgeEvent, module: string): void;
@@ -61,6 +64,12 @@ export function pushTheme(frame: Pick<Window, 'postMessage'>, theme: Theme, targ
   frame.postMessage(msg, targetOrigin);
 }
 
+export function pushOversight(frame: Pick<Window, 'postMessage'>, oversight: OversightState, targetOrigin: string): void {
+  if (!isOversightState(oversight)) return;
+  const msg: BridgePush = { tag: MESSAGE_TAG, v: PROTOCOL_VERSION, push: 'oversight', oversight };
+  frame.postMessage(msg, targetOrigin);
+}
+
 export function createFrameHost(handlers: FrameHostHandlers, opts: FrameHostOptions): () => void {
   const target = opts.target ?? window;
 
@@ -82,6 +91,9 @@ export function createFrameHost(handlers: FrameHostHandlers, opts: FrameHostOpti
       switch (req.op) {
         case 'open':
           reply({ result: typeof req.url === 'string' ? await handlers.open(req.url, module) : false });
+          break;
+        case 'oversight':
+          reply({ result: handlers.oversight ? await handlers.oversight(module) : null });
           break;
         case 'token':
           reply({ result: await handlers.token(module) });

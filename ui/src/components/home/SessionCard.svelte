@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { oversight, READ_ONLY_REASON } from '../../lib/oversight.svelte';
+  import { ownerName } from '../../lib/records.svelte';
   import { localInventory } from '../../lib/local-sessions.svelte';
   import type { LocalSession } from '../../lib/platform';
   import { openInStudio } from '../../lib/apps.svelte';
@@ -48,12 +50,13 @@
       {/each}
     </ul>
   </details>
+  {#if ownerName(s)}<p class="muted small ellipsis">Owner: {ownerName(s)}</p>{/if}
   <div class="footer">
     <p class="run small" title={status.text}><span class="dot" style:background={`var(--${status.tone})`} aria-hidden="true"></span><span class="ellipsis">{status.text}</span></p>
     <div class="controls">
       {#if row.runs && row.runs > 0}<button class="btn" onclick={(e) => { e.stopPropagation(); shell.show('review'); void review.open({ kind: 'session', id: s.id }); }}>Review</button>{/if}
-      {#if local && local.openable !== false}<button class="btn" disabled={!!localInventory.opening} onclick={() => void localInventory.open(local)}>Open in UPbRPy Studio</button>
-      {:else if !local}<button class="btn" onclick={(e) => { e.stopPropagation(); void openInStudio({ session: s.id, run: null }, 'home'); }}>Reduce</button>{/if}
+      {#if local && local.openable !== false}<button class="btn" disabled={!!localInventory.opening || !!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void localInventory.open(local)}>Open in UPbRPy Studio</button>
+      {:else if !local}<button class="btn" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={(e) => { e.stopPropagation(); void openInStudio({ session: s.id, run: null }, 'home'); }}>Reduce</button>{/if}
     </div>
   </div>
 </article>

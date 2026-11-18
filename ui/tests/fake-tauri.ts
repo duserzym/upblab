@@ -9,6 +9,8 @@ export interface FakeOptions {
   fixtures?: Record<string, unknown>;
   standards?: { warning: boolean; message: string; changed: string[] };
   signedIn?: boolean;
+  canViewAs?: boolean;
+  apiPassthrough?: boolean;
   offline?: boolean;
   offlineCopy?: string;
   peopleAllowed?: boolean;
@@ -48,6 +50,7 @@ export function installFakeTauri(opts: FakeOptions) {
   let savedReply = opts.cached;
   let offline = opts.offline ?? false;
   let theme: 'light' | 'dark' = 'light';
+  let oversight = { viewAs: null, onBehalf: false } as { viewAs: { username: string; name: string } | null; onBehalf: boolean };
   let offerSequence = 0;
   let quitSequence = 0;
   let next = 1;
@@ -75,7 +78,7 @@ export function installFakeTauri(opts: FakeOptions) {
     await Promise.all((listeners.get(event) ?? []).map(id => callbacks.get(id)?.({ event, id, payload })));
   };
   w.__emit = emit;
-  type ModuleFrame = { frame: HTMLIFrameElement; loaded: boolean };
+  type ModuleFrame = { frame: HTMLIFrameElement; loaded: boolean; scope?: string };
   const modules = new Map<string, ModuleFrame>();
   // Rust keeps presentation separately from the newest focus/visibility command,
   // including commands sent before the child webview exists.
@@ -110,6 +113,7 @@ export function installFakeTauri(opts: FakeOptions) {
       { tag: 'lab-bridge', v: 5, id: request.id, ok: true, result }, event.origin);
     switch (request.op) {
       case 'token': reply(moduleToken(module)); break;
+      case 'oversight': reply(oversight); break;
       case 'open-files': reply(null); break;
       case 'notify': void emit('lab-bridge://notify', { source: module, event: request.event }); break;
       case 'open': void emit('lab-bridge://open', { source: module, url: request.url }); reply(true); break;
@@ -172,8 +176,14 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'standards_check':
           return opts.standards ?? null;
         case 'auth_restore':
-          return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { id: 'invented-account', username: 'demo', display_name: 'Demo analyst', can_manage_people: opts.peopleAllowed ?? false } : null, offline: opts.offline ?? false, offlineCopy: opts.offlineCopy };
+          return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { id: 'invented-account', username: 'demo', display_name: 'Demo analyst', can_view_as: opts.canViewAs ?? false, can_manage_people: opts.peopleAllowed ?? false } : null, offline: opts.offline ?? false, offlineCopy: opts.offlineCopy };
         case 'auth_handoff':
+          if (opts.apiPassthrough) {
+            const res = await fetch(String((args!.target as { server: string }).server) + '/v1/auth/handoff', { method: 'POST', headers: { Authorization: 'Bearer DEMO-SCREENSHOTS-TOKEN', ...(args!.onBehalf ? { 'X-UPbDB-Oversight': 'on-behalf' } : {}) }, body: '{}' });
+            const body = await res.json();
+            if (!res.ok) throw JSON.stringify({ status: res.status, body });
+            return body.code;
+          }
           return 'ONE-TIME-FIXTURE';
         case 'grainatlas_launch': {
           if (opts.offlineCopy && args?.server) throw new Error('GrainAtlas cannot connect to a read-only copy of UPbDB');
@@ -185,10 +195,15 @@ export function installFakeTauri(opts: FakeOptions) {
           return null; // recorded in calls; the standalone app takes the files
         case 'inbox_take':
           return inbox.splice(0);
+        case 'module_oversight':
+          oversight = args!.oversight as typeof oversight;
+          for (const entry of modules.values()) if (entry.loaded) push(entry, { push: 'oversight', oversight });
+          return null;
+        case 'bridge_oversight': return oversight;
         case 'module_theme':
           if (args?.theme !== 'light' && args?.theme !== 'dark') throw new Error('invalid bridge theme');
           theme = args.theme;
-          for (const entry of modules.values()) if (entry.loaded) { markTheme(entry); push(entry, { push: 'theme', theme }); }
+          for (const entry of modules.values()) if (entry.loaded) { markTheme(entry); push(entry, { push: 'theme', theme }); push(entry, { push: 'oversight', oversight }); }
           return null;
         case 'bridge_theme':
           return theme;
@@ -196,13 +211,14 @@ export function installFakeTauri(opts: FakeOptions) {
           if (!opts.renderModules) return null;
           const module = args!.module as string;
           let entry = modules.get(module);
+          if (entry && entry.scope !== args!.scope) { entry.frame.remove(); modules.delete(module); entry = undefined; }
           if (!entry) {
             const frame = document.createElement('iframe');
             frame.name = `lab-shell:${module}`;
             frame.title = `Demo ${module} module`;
             frame.dataset.fakeModule = module;
             Object.assign(frame.style, { position: 'absolute', border: '0', zIndex: '10' });
-            entry = { frame, loaded: false };
+            entry = { frame, loaded: false, scope: args!.scope as string | undefined };
             modules.set(module, entry);
             const created = entry;
             frame.addEventListener('load', () => {
@@ -280,7 +296,12 @@ export function installFakeTauri(opts: FakeOptions) {
           opts.cacheStatus = { entries: 0, bytes: 0, newest: null, oldest: null };
           return null;
         case 'cache_prefetch': return { fetched: opts.offline ? 0 : (args!.paths as string[]).length, unchanged: 0, failed: opts.offline ? 1 : 0 };
+        case 'api_write':
         case 'api_get': {
+          if (opts.apiPassthrough) {
+            const res = await fetch(String((args!.target as { server: string }).server) + String(args!.path), { method: cmd === 'api_get' ? 'GET' : String(args!.method), headers: { 'Content-Type': 'application/json', Authorization: 'Bearer DEMO-SCREENSHOTS-TOKEN', ...(args!.onBehalf ? { 'X-UPbDB-Oversight': 'on-behalf' } : {}) }, ...(cmd === 'api_write' ? { body: JSON.stringify(args!.body) } : {}) });
+            return { status: res.status, body: await res.json(), nextCursor: res.headers.get('X-Next-Cursor') ?? undefined };
+          }
           const path = args!.path as string;
           const reply = apiReplies[path];
           if (reply) return { offlineCopy: opts.offlineCopy, ...reply };

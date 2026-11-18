@@ -1,4 +1,7 @@
 <script lang="ts">
+  import FilterBar from '../components/FilterBar.svelte';
+  import RecordLists from '../components/RecordLists.svelte';
+  import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
   import GrainAtlasLocalNotice from '../components/GrainAtlasLocalNotice.svelte';
   import { connectivity } from '../lib/connectivity.svelte';
   import { localInventory } from '../lib/local-sessions.svelte';
@@ -34,6 +37,7 @@
   const uploadCards = $state<Record<'sessions' | 'images', UploadCard | undefined>>({ sessions: undefined, images: undefined });
   // One click: the tile starts the upload itself (picker or web file input) and its card shows the progress.
   function startUpload(which: 'sessions' | 'images') {
+    if (oversight.viewAs) return;
     expandedUpload = which;
     void uploadCards[which]?.choose();
   }
@@ -157,11 +161,12 @@
       </div>
     </header>
 
+    {#if active}<FilterBar {active} />{/if}
     <div class="action-tiles" data-testid="open-panel">
-      <button class="glass panel action-tile" aria-label="Open folder…" onclick={() => void openDialog(true)}><Icon kind="folder" /><span><strong>Open folder</strong><small>Open a package or export folder</small></span></button>
-      <button class="glass panel action-tile" aria-label="Open files…" onclick={() => void openDialog(false)}><Icon kind="files" /><span><strong>Open files</strong><small>Open images or session CSVs</small></span></button>
-      <button class="glass panel action-tile" aria-label="Upload LA-ICP-MS session…" aria-controls="home-upload-sessions" onclick={() => startUpload('sessions')}><Icon kind="session" /><span><strong>Upload LA-ICP-MS session</strong><small>Import a session, then Review</small></span></button>
-      <button class="glass panel action-tile" aria-label="Upload image set…" aria-controls="home-upload-images" onclick={() => startUpload('images')}><Icon kind="images" /><span><strong>Upload image set</strong><small>Publish mount images, then Review</small></span></button>
+      <button class="glass panel action-tile" aria-label="Open folder…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void openDialog(true)}><Icon kind="folder" /><span><strong>Open folder</strong><small>Open a package or export folder</small></span></button>
+      <button class="glass panel action-tile" aria-label="Open files…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void openDialog(false)}><Icon kind="files" /><span><strong>Open files</strong><small>Open images or session CSVs</small></span></button>
+      <button class="glass panel action-tile" aria-label="Upload LA-ICP-MS session…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-controls="home-upload-sessions" onclick={() => startUpload('sessions')}><Icon kind="session" /><span><strong>Upload LA-ICP-MS session</strong><small>Import a session, then Review</small></span></button>
+      <button class="glass panel action-tile" aria-label="Upload image set…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-controls="home-upload-images" onclick={() => startUpload('images')}><Icon kind="images" /><span><strong>Upload image set</strong><small>Publish mount images, then Review</small></span></button>
     </div>
     <!-- Both cards stay mounted (their web file inputs must exist for the tile's click); a card shows while it is in use. -->
     {#each ['sessions', 'images'] as const as which (which)}
@@ -272,6 +277,8 @@
       </section>
     {/if}
 
+    <RecordLists {active} />
+
     {#if isDesktop && localInventory.rows.length > 0}
       <section class="board-section stack" aria-label="On this computer">
         <Toolbar section="On this computer" collapsed={collapsed('local')} controls="home-local-grid" toggle={() => toggleSection('local')}
@@ -288,7 +295,7 @@
                   {#if row.openable === false}
                     <p class="muted small" title={row.path}>Downloaded before the UPbDB rename. This Studio cannot open it yet.</p>
                   {:else}
-                    <button class="btn small" disabled={!!localInventory.opening} onclick={() => void localInventory.open(row)}>Open in UPbRPy Studio</button>
+                    <button class="btn small" disabled={!!localInventory.opening || !!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void localInventory.open(row)}>Open in UPbRPy Studio</button>
                   {/if}
                 </article>
               {/each}

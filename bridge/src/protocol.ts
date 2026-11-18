@@ -19,9 +19,24 @@
 //      lab.viewer.inset so the shell can store them. The viewer itself never
 //      writes storage. Without the field the inset lasts one session.
 //   5.2 review-spots may carry `groups` for sample-coloured mount inset outlines.
+//   5.3 oversight read and change event: viewAs and per-operation onBehalf.
+//       A newer module on an older shell gets null; older modules ignore the event.
 
 export const PROTOCOL_VERSION = 5;
-export const PROTOCOL_MINOR = 2;
+export const PROTOCOL_MINOR = 3;
+
+export interface OversightState {
+  viewAs: { username: string; name: string } | null;
+  onBehalf: boolean;
+}
+export function isOversightState(value: unknown): value is OversightState {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as OversightState;
+  return typeof v.onBehalf === 'boolean' && (v.viewAs === null ||
+    (!!v.viewAs && typeof v.viewAs.username === 'string' && !!v.viewAs.username &&
+      v.viewAs.username.length <= 200 && typeof v.viewAs.name === 'string' && v.viewAs.name.length <= 500));
+}
+export const OVERSIGHT_EVENT = 'lab-bridge:oversight';
 
 export type Theme = 'light' | 'dark';
 export function isTheme(value: unknown): value is Theme {
@@ -53,6 +68,8 @@ export const COMMANDS = {
   takeCommand: 'bridge_take_command',
   /** v3.1. The resolved theme, or null on an older shell. */
   theme: 'bridge_theme',
+  /** v5.3: current oversight scope, null on an older shell. */
+  oversight: 'bridge_oversight',
 } as const;
 
 /**
@@ -504,7 +521,7 @@ export function atlasSynced(event: unknown): AtlasSyncedEvent | null {
     revision: event.revision, atlasVersion: event.atlasVersion, changed, at: event.at };
 }
 
-export type BridgeOp = 'open' | 'token' | 'notify' | 'open-files';
+export type BridgeOp = 'open' | 'token' | 'notify' | 'open-files' | 'oversight';
 
 /** What the shell recognised in a drop (it never asks the user). */
 export type OpenFilesKind =
@@ -559,7 +576,8 @@ export interface OpenFilesTransfer extends Omit<OpenFilesManifest, 'files'> {
 export interface BridgePush {
   tag: typeof MESSAGE_TAG;
   v: number;
-  push: 'open-files' | 'command' | 'theme';
+  push: 'open-files' | 'command' | 'theme' | 'oversight';
+  oversight?: OversightState;
   /** v3.1: the resolved shell theme. */
   theme?: Theme;
   /** v3: a command is delivered directly, without a reply. */
@@ -599,7 +617,7 @@ export function isBridgeRequest(data: unknown): data is BridgeRequest {
   return (
     d.tag === MESSAGE_TAG &&
     typeof d.id === 'string' &&
-    (d.op === 'open' || d.op === 'token' || d.op === 'notify' || d.op === 'open-files') &&
+    (d.op === 'open' || d.op === 'token' || d.op === 'notify' || d.op === 'open-files' || d.op === 'oversight') &&
     !('ok' in d)
   );
 }
@@ -613,5 +631,5 @@ export function isBridgeResponse(data: unknown): data is BridgeResponse {
 export function isBridgePush(data: unknown): data is BridgePush {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
-  return d.tag === MESSAGE_TAG && (d.push === 'open-files' || d.push === 'command' || (d.push === 'theme' && isTheme(d.theme)));
+  return d.tag === MESSAGE_TAG && (d.push === 'open-files' || d.push === 'command' || (d.push === 'theme' && isTheme(d.theme)) || (d.push === 'oversight' && isOversightState(d.oversight)));
 }

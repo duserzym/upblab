@@ -1,3 +1,4 @@
+import { oversight } from './oversight.svelte';
 import { connectivity } from './connectivity.svelte';
 import { identity } from './identity.svelte';
 import { isDesktop, launchGrainAtlas } from './platform';
@@ -18,6 +19,7 @@ class Apps {
 export const apps = new Apps();
 let atlasSequence = 0, studioSequence = 0;
 export async function editInAtlas(target: AtlasTarget, from: string) {
+  oversight.assertWritable();
   const seq = ++atlasSequence;
   const origin = `${identity.target?.server}:${identity.revision}`;
   const current = () => origin === `${identity.target?.server}:${identity.revision}`;
@@ -59,6 +61,7 @@ export async function editInAtlas(target: AtlasTarget, from: string) {
   }
 }
 export async function openInStudio(target: StudioTarget, from: string) {
+  oversight.assertWritable();
   const seq = ++studioSequence;
   const request: AppRequest<StudioTarget> = { target, from, state: 'launching', message: '' };
   apps.studio = request;

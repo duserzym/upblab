@@ -10,6 +10,7 @@
     "allow-bridge-notify",
     "allow-bridge-open-files",
     "allow-bridge-take-command",
-    "allow-bridge-read-file"
+    "allow-bridge-read-file",
+    "allow-bridge-oversight"
   ]
 }

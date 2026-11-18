@@ -40,7 +40,12 @@ const profileData = {
 };
 export const profile = { acquisition_id: 'acq-1', label: 'Zircon_1', run: runBrief, columns: Object.keys(profileData), data: profileData };
 export const reviewFixtures: Record<string, unknown> = {
-  '/v1/sessions': [session], '/v1/mounts': [mount], [`/v1/sessions/${session.id}/reductions`]: runs,
+  // Home consumes the API's batched summaries. Detail routes remain available
+  // for Review and explicit refreshes, without a Home request for every row.
+  '/v1/sessions': [{ ...session, preferred_run: { id: runs[0].id, status: runs[0].status,
+    pipeline_name: runs[0].pipeline_name, created_at: runs[0].started_at, finished_at: runs[0].completed_at } }],
+  '/v1/mounts': [{ ...mount, atlas: { project_id: 'project-demo', version: 1, uploaded_at: '2026-11-07T10:00:00Z', thumbnail: null } }],
+  [`/v1/sessions/${session.id}/reductions`]: runs,
   [`/v1/sessions/${session.id}/results?run=preferred`]: table,
   [`/v1/sessions/${session.id}/results?run=run-preferred`]: table,
   [`/v1/sessions/${session.id}/results?run=run-newer`]: { ...table, run: { ...runBrief, run_id: 'run-newer', is_preferred: false, started_at: runs[1].started_at, pipeline_version: '0.1.1' }, rows: rows.map(r => ({ ...r, run_id: 'run-newer', preferred_date: r.preferred_date + 1 })) },

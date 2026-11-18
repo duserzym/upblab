@@ -31,8 +31,8 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 /** Desktop: native child webviews laid over the shell page (ADR-0002). */
 export const desktopModules = {
   command: (module: ModuleTab, command: BridgeCommand) => invoke<boolean>('module_command', { module, command }),
-  open(module: ModuleTab, url: string, bounds: Bounds, navigate: boolean): Promise<void> {
-    return invoke('module_open', { module, url, bounds, navigate });
+  open(module: ModuleTab, url: string, bounds: Bounds, navigate: boolean, scope?: string): Promise<void> {
+    return invoke('module_open', { module, url, bounds, navigate, ...(scope === undefined ? {} : { scope }) });
   },
   bounds(module: ModuleTab, bounds: Bounds): Promise<void> {
     return invoke('module_bounds', { module, bounds });
@@ -184,6 +184,8 @@ export interface Account {
   groups?: { id: string; name: string; description: string }[];
   is_lab_staff?: boolean;
   can_manage_people?: boolean;
+  can_view_as?: boolean;
+  can_create_lab?: boolean;
   is_admin?: boolean;
   [field: string]: unknown;
 }
@@ -231,7 +233,20 @@ export const desktopAuth = {
     invoke<AuthState>('auth_login', { target, username, password }),
   exchange: (target: AuthTarget, code: string) => invoke<AuthState>('auth_exchange', { target, code }),
   logout: (target: AuthTarget) => invoke<AuthState>('auth_logout', { target }),
-  handoff: (target: AuthTarget) => invoke<string>('auth_handoff', { target }),
+  handoff: async (target: AuthTarget, onBehalf = false) => {
+    try { return await invoke<string>('auth_handoff', { target, onBehalf }); }
+    catch (error) {
+      let rejection: ApiReply | null = null;
+      try { rejection = JSON.parse(String(error)) as ApiReply; } catch { /* ordinary host error */ }
+      if (rejection?.status === 403) {
+        const { WriteError } = await import('./oversight.svelte');
+        const { apiReplyMessage } = await import('./server-error');
+        throw new WriteError(rejection.status, rejection.body, apiReplyMessage(rejection));
+      }
+      throw error;
+    }
+  },
+  write: <T>(target: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean) => invoke<ApiReply<T>>('api_write', { target, path, method, body: body ?? null, onBehalf }),
   get: <T>(target: AuthTarget, path: string) => invoke<ApiReply<T>>('api_get', { target, path }),
 };
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
   import { identity } from '../lib/identity.svelte';
   import { overview } from '../lib/overview.svelte';
   import { shell } from '../lib/shell.svelte';
@@ -55,7 +56,7 @@
         </dl>
         <div class="row controls">
           <button class="btn" onclick={() => shell.show('settings')}>App settings</button>
-          <button class="btn" disabled={identity.state.offline} onclick={() => shell.go('sessions', '/app/account')}>Manage sign-in methods</button>
+          <button class="btn" disabled={identity.state.offline || !!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => shell.go('sessions', '/app/account')}>Manage sign-in methods</button>
         </div>
       </section>
       <section class="glass panel stack" aria-labelledby="session-access-title">
@@ -77,9 +78,9 @@
                   <tr>
                     <td><button class="session-link mono" onclick={() => void shell.handleLink(`upbdb://session/${session.id}`, 'account')}>{session.session_key}</button></td>
                     <td>{access?.role ?? 'Unavailable'}</td>
-                    <td>{access?.owner ?? '—'}</td>
+                    <td>{session.owner_name || access?.owner || 'Unknown owner'}</td>
                     <td>{#if access?.canShare}
-                      <button class="btn small" aria-label={`Manage sharing for ${session.session_key}`}
+                      <button class="btn small" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-label={`Manage sharing for ${session.session_key}`}
                         onclick={() => void shell.handleLink(`upbdb://session/${session.id}?panel=sharing`, 'account')}>Manage sharing</button>
                     {/if}</td>
                   </tr>

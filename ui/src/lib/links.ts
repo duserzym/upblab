@@ -116,6 +116,7 @@ export function resolve(input: string): Resolution {
         acquisition: 'acquisitions',
         session: 'sessions',
         sample: 'samples',
+        project: 'projects',
         mount: 'mounts',
       };
       if (parts.length === 2 && kind in routes) {
@@ -246,4 +247,18 @@ export function atlasEditorUrl(home: string, project: string, spot?: string | nu
   url.searchParams.set('project', project);
   if (spot) url.searchParams.set('spot', spot);
   return url.href;
+}
+
+/** Deliver route and oversight scope together, including a queued detail target. */
+export function withOversight(url: string, scope: { viewAs: { username: string } | null; filters: Record<string, string> }, filters = false): string {
+  if (!url) return url;
+  const [head, hash = '/timeline'] = url.split('#');
+  const [route, query] = hash.split('?');
+  const params = new URLSearchParams(query);
+  params.delete('as');
+  if (scope.viewAs) params.set('as', scope.viewAs.username);
+  if (filters) for (const [key, value] of Object.entries(scope.filters)) {
+    if (value) params.set(key, value); else params.delete(key);
+  }
+  return `${head}#${route}${params.size ? '?' + params : ''}`;
 }

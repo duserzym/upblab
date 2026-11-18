@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FilterBar from '../components/FilterBar.svelte';
   import { connectivity } from '../lib/connectivity.svelte';
   import { untrack } from 'svelte';
   import ModuleSurface from '../components/ModuleSurface.svelte';
@@ -60,6 +61,7 @@
 </script>
 
 <section class="view" class:hidden={!active}>
+  {#if active && module === 'sessions'}<FilterBar {active} />{/if}
   {#if local}
     {#if localReady}
       <ModuleSurface {module} {title} home={appUrl} target={shell.targets[module]} {active} />

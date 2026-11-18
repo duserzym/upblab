@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-bridge-oversight"
+description = "Enables the bridge_oversight command without any pre-configured scope."
+commands.allow = ["bridge_oversight"]
+
+[[permission]]
+identifier = "deny-bridge-oversight"
+description = "Denies the bridge_oversight command without any pre-configured scope."
+commands.deny = ["bridge_oversight"]

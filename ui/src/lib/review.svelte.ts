@@ -47,6 +47,13 @@ export class Review {
   private listsAt = -Infinity;
   private listsPending: Promise<void> | null = null;
   private listGeneration = 0;
+  clear() {
+    this.generation++; this.depthGeneration++; this.selectionGeneration++; this.listGeneration++;
+    this.listsPending = null; this.listsAt = -Infinity;
+    this.sessions = []; this.mounts = []; this.sessionCursor = null; this.mountCursor = null;
+    this.rows = []; this.runs = []; this.run = null; this.runInfo = {}; this.selectedKey = null;
+    this.externalSpot = null; this.depth = null; this.depthState = 'idle'; this.error = ''; this.state = 'idle';
+  }
   private currentSource() { return `${identity.target?.server ?? ''}:${identity.revision}`; }
   private loadLists() {
     if (this.listsPending) return this.listsPending;

@@ -3,7 +3,7 @@
 //! webview over it; switching tabs hides the others, so each module keeps its
 //! state and a slow module never blocks the shell.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use serde::Deserialize;
@@ -24,6 +24,7 @@ const MODULES: [&str; 3] = ["images", "sessions", "people"];
 #[derive(Default)]
 pub struct ModuleState {
     granted: Mutex<HashSet<String>>,
+    scopes: Mutex<HashMap<String, String>>,
 }
 
 /// A rectangle in CSS (logical) pixels relative to the window's content area.
@@ -126,6 +127,7 @@ fn grant_bridge<R: Runtime>(
             .remote(format!("{origin}/*"))
             .webview(label)
             .permission("allow-bridge-theme")
+            .permission("allow-bridge-oversight")
             .permission("allow-bridge-open")
             .permission("allow-bridge-token")
             .permission("allow-bridge-notify")
@@ -142,7 +144,7 @@ fn grant_bridge<R: Runtime>(
 /// Set before any page script: tells @lab/bridge it runs inside the shell.
 fn marker_script(module: &str, theme: &str) -> String {
     format!(
-        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 5, minor: 2, theme: {:?} }}), configurable: false }});{}",
+        "Object.defineProperty(window, '__LAB_SHELL__', {{ value: Object.freeze({{ module: {:?}, v: 5, minor: 3, theme: {:?} }}), configurable: false }});{}",
         module_name(&format!("module-{module}")),
         theme,
         theme_script(theme).expect("resolved theme")
@@ -176,6 +178,11 @@ fn build_webview<R: Runtime>(
                     if let Err(err) = webview.eval(script) {
                         log::warn!("could not initialise module theme: {err}");
                     }
+                }
+            }
+            if let Ok(scope) = page_app.state::<crate::bridge::OversightState>().current() {
+                if let Ok(script) = crate::bridge::oversight_script(&scope) {
+                    let _ = webview.eval(script);
                 }
             }
             if payload.event() == PageLoadEvent::Finished {
@@ -242,10 +249,23 @@ pub async fn module_open<R: Runtime>(
     url: String,
     bounds: Bounds,
     navigate: bool,
+    scope: Option<String>,
 ) -> Result<(), String> {
     let label = label(&module)?;
     let url = parse_url(&url)?;
     hide_others(&app, &label);
+    let scope = scope.unwrap_or_default();
+    let previous = state
+        .scopes
+        .lock()
+        .map_err(|e| e.to_string())?
+        .insert(label.clone(), scope.clone());
+    if previous.as_ref().is_some_and(|old| old != &scope) {
+        // A new account or view-as scope must never reveal the old document while loading.
+        if let Some(wv) = app.get_webview(&label) {
+            wv.close().map_err(|e| e.to_string())?;
+        }
+    }
     if let Some(wv) = app.get_webview(&label) {
         if navigate {
             grant_bridge(&app, &state, &label, &url)?;
@@ -343,7 +363,7 @@ mod tests {
         assert!(marker_script("sessions", "light").contains("\"upbdb\""));
         assert!(marker_script("people", "light").contains("\"upbdb\""));
         let script = marker_script("images", "dark");
-        assert!(script.contains("v: 5, minor: 2, theme: \"dark\""));
+        assert!(script.contains("v: 5, minor: 3, theme: \"dark\""));
         assert!(script.contains("new MutationObserver"));
     }
 }

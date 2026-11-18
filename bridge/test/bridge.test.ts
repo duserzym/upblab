@@ -870,3 +870,44 @@ describe('viewer inset (v5.1)', () => {
     expect(viewerInset({ type: 'lab.spot.action', width: 240, collapsed: true })).toBeNull();
   });
 });
+
+describe('oversight v5.3', () => {
+  const state = { viewAs: { username: 'cedar', name: 'Cedar Analyst' }, onBehalf: false };
+  it('reads and observes scope through the frame host, ignoring sibling pushes and supporting old hosts', async () => {
+    const { pushOversight } = await import('../src/host');
+    const { env, parentTarget, childTarget, child, origin } = framePair();
+    const stop = createFrameHost({ open: () => true, token: () => 'viewers-own-token', notify: () => {}, oversight: () => state }, {
+      allowedOrigins: () => [origin], moduleOf: source => (source as unknown) === child ? 'upbdb' : null, target: parentTarget as never,
+    });
+    const bridge = createBridge(env, { timeoutMs: 20 }), changed = vi.fn();
+    expect(await bridge.oversight()).toEqual(state); expect(await bridge.token()).toBe('viewers-own-token');
+    const unsubscribe = bridge.onOversight(changed); expect(changed).toHaveBeenCalledWith(state);
+    childTarget.dispatchEvent(msgEvent({ data: { tag: MESSAGE_TAG, v: 5, push: 'oversight', oversight: { viewAs: null, onBehalf: true } }, source: {}, origin }));
+    expect(changed).toHaveBeenCalledTimes(1);
+    pushOversight(child as unknown as Window, { viewAs: null, onBehalf: true }, origin);
+    await vi.waitFor(() => expect(changed).toHaveBeenLastCalledWith({ viewAs: null, onBehalf: true }));
+    unsubscribe(); stop(); expect(await createBridge(env, { timeoutMs: 2 }).oversight()).toBeNull();
+    const old = createFrameHost({ open: () => true, token: () => null, notify: () => {} }, { allowedOrigins: () => [origin], moduleOf: () => 'upbdb', target: parentTarget as never });
+    expect(await createBridge(env, { timeoutMs: 20 }).oversight()).toBeNull(); old();
+    expect(await createBridge(undefined).oversight()).toBeNull();
+  });
+  it('reads desktop state and receives the DOM event; newer pushes win over pending reads', async () => {
+    const { OVERSIGHT_EVENT } = await import('../src/protocol');
+    const target = new EventTarget(); let finish!: (value: unknown) => void;
+    const env: BridgeEnv = { __LAB_SHELL__: { module: 'grainatlas', v: 5, minor: 3 }, __TAURI_INTERNALS__: { invoke: vi.fn(cmd => cmd === COMMANDS.oversight ? new Promise(resolve => finish = resolve) : Promise.resolve(null)) },
+      addEventListener: (t, l) => target.addEventListener(t, l as EventListener), removeEventListener: (t, l) => target.removeEventListener(t, l as EventListener) };
+    const bridge = createBridge(env), changed = vi.fn(); const read = bridge.oversight();
+    target.dispatchEvent(Object.assign(new Event(OVERSIGHT_EVENT), { detail: state })); finish({ viewAs: null, onBehalf: false });
+    expect(await read).toEqual(state); const unsubscribe = bridge.onOversight(changed); expect(changed).toHaveBeenCalledWith(state);
+    unsubscribe(); target.dispatchEvent(Object.assign(new Event(OVERSIGHT_EVENT), { detail: { viewAs: null, onBehalf: false } })); expect(changed).toHaveBeenCalledTimes(1);
+    env.__TAURI_INTERNALS__!.invoke = vi.fn().mockRejectedValue(new Error('unknown command'));
+    expect(await createBridge(env).oversight()).toBeNull();
+  });
+  it('validates state and accepts every older request version', async () => {
+    const { isOversightState } = await import('../src/protocol');
+    expect(isOversightState(state)).toBe(true); expect(isOversightState({ viewAs: null, onBehalf: false })).toBe(true);
+    for (const value of [null, {}, { viewAs: { username: '', name: 'Cedar' }, onBehalf: false }, { viewAs: null, onBehalf: 'yes' }]) expect(isOversightState(value)).toBe(false);
+    expect(isBridgePush({ tag: MESSAGE_TAG, v: 5, push: 'oversight', oversight: state })).toBe(true);
+    for (const v of [1, 2, 3, 4, 5]) expect(isBridgeRequest({ tag: MESSAGE_TAG, v, id: '1', op: 'token' })).toBe(true);
+  });
+});

@@ -3,6 +3,7 @@
   let prompted = false;
 </script>
 <script lang="ts">
+  import { ownerName } from '../../lib/records.svelte';
   import { plural } from '../../lib/plural';
   import { tick, untrack, type Snippet } from 'svelte';
   import { review } from '../../lib/review.svelte';
@@ -20,8 +21,8 @@
   const name = $derived(session?.session_key ?? mount?.label ?? 'Choose a session or mount');
   const matching = $derived(scopeRows(review.sessions, review.mounts, query));
   const columns = $derived([
-    matching.sessions.map(s => ({ id: s.id, kind: 'session' as const, name: s.session_key, facts: `${s.material} · ${plural(s.acquisition_count, 'spot')} · ${sessionStatus(s)}` })),
-    matching.mounts.map(m => ({ id: m.id, kind: 'mount' as const, name: m.label, facts: plural(m.spot_count, 'spot') })),
+    matching.sessions.map(s => ({ id: s.id, kind: 'session' as const, name: s.session_key, facts: [ownerName(s) ? `Owner: ${ownerName(s)}` : '', s.material, plural(s.acquisition_count, 'spot'), sessionStatus(s)].filter(Boolean).join(' · ') })),
+    matching.mounts.map(m => ({ id: m.id, kind: 'mount' as const, name: m.label, facts: [ownerName(m) ? `Owner: ${ownerName(m)}` : '', plural(m.spot_count, 'spot')].filter(Boolean).join(' · ') })),
   ]);
   const runs = $derived(completeRuns(review.runs));
   const resolved = $derived(resolvedRun(runs, review.scope?.kind === 'session' ? review.scope.run : undefined));

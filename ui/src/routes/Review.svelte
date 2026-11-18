@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
   import GrainAtlasLocalNotice from '../components/GrainAtlasLocalNotice.svelte';
   import { untrack, setContext, type Snippet } from 'svelte';
   import ScopePicker from '../components/review/ScopePicker.svelte';
@@ -329,10 +330,10 @@
   <ReviewDock {active} {split} ready={review.state==='ready'} {images} bind:this={dock}>
     {#snippet headerActions(pane)}
       {#if pane === 'images'}
-        <button class="btn atlas-edit edit-action" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}
+        <button class="btn atlas-edit edit-action" aria-label="Edit in grainatlas" disabled={!!oversight.viewAs || !imageTarget.project} title={oversight.viewAs ? READ_ONLY_REASON : editTitle}
           onclick={() => void editInAtlas(imageTarget, 'review')}><span aria-hidden="true">✎</span> <span class="edit-long">Edit in grainatlas</span><span class="edit-short">Edit</span></button>
       {:else if pane === 'plots'}
-        <button class="btn atlas-edit edit-action" aria-label="Edit in UPbRPy Studio" disabled={!studio.target} title={studio.reason}
+        <button class="btn atlas-edit edit-action" aria-label="Edit in UPbRPy Studio" disabled={!!oversight.viewAs || !studio.target} title={oversight.viewAs ? READ_ONLY_REASON : studio.reason}
           onclick={() => studio.target && void openInStudio(studio.target, 'review')}><span aria-hidden="true">✎</span> <span class="edit-long">Edit in UPbRPy Studio</span><span class="edit-short">Studio</span></button>
       {/if}
     {/snippet}
@@ -341,10 +342,10 @@
         {#if selectedSpot}
           <span class="summary-name" title={selectedSpot.label}>{selectedSpot.label}</span><span aria-hidden="true">·</span>
           <span class="summary-date" title="Preferred date">{dateLabel(selectedSpot)}{selectedSpot.date ? ' Ma' : ''}</span><span aria-hidden="true">·</span>
-          <button class="btn edit-action" aria-label="Edit in grainatlas" disabled={!imageTarget.project} title={editTitle}
+          <button class="btn edit-action" aria-label="Edit in grainatlas" disabled={!!oversight.viewAs || !imageTarget.project} title={oversight.viewAs ? READ_ONLY_REASON : editTitle}
             onclick={() => void editInAtlas(imageTarget, 'review')}><span class="edit-long">Edit in grainatlas</span><span class="edit-short">✎ Edit</span></button>
-          <button class="btn edit-action" aria-label="Edit in UPbRPy Studio" disabled={!selectedSpot.runId && !selectedSpot.sessionId}
-            title={selectedSpot.runId || selectedSpot.sessionId ? 'Edit this spot\'s data reduction in UPbRPy Studio (S)' : 'Not measured yet'}
+          <button class="btn edit-action" aria-label="Edit in UPbRPy Studio" disabled={!!oversight.viewAs || !selectedSpot.runId && !selectedSpot.sessionId}
+            title={oversight.viewAs ? READ_ONLY_REASON : selectedSpot.runId || selectedSpot.sessionId ? 'Edit this spot\'s data reduction in UPbRPy Studio (S)' : 'Not measured yet'}
             onclick={() => void openInStudio({ session: selectedSpot!.sessionId, run: selectedSpot!.runId, acquisition: selectedSpot!.acquisitionId }, 'review')}><span class="edit-long">Edit in UPbRPy Studio</span><span class="edit-short"><span aria-hidden="true">✎</span> Studio</span></button>
         {:else}<span class="summary-name">Select a spot</span>{/if}
         <button class="btn" aria-label="Expand Spot metadata" title="Expand Spot metadata" onclick={expand}>⛶</button>

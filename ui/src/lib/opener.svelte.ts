@@ -10,6 +10,7 @@
 //            postMessage and gets them by structured clone (lib/incoming.ts)
 
 import { moduleLabel } from './links';
+import { oversight, READ_ONLY_REASON } from './oversight.svelte';
 import type { OpenFilesTransfer } from '@lab/bridge';
 import { classify, expandOpened, formatBytes, type FileTab, type Routed, type WebSet } from './drop';
 import { desktopFiles, openGrainAtlasPaths, isDesktop, logInfo, logWarn } from './platform';
@@ -128,9 +129,17 @@ class Opener {
     const list = expandOpened(paths);
     const what = list.length <= 1 ? (list[0] ?? '') : `${list[0]} and ${list.length - 1} more`;
     if (!list.length) return { target: null, reason: 'nothing to open' };
+    if (oversight.viewAs) {
+      this.refuse(what, from, READ_ONLY_REASON);
+      return { target: null, reason: READ_ONLY_REASON };
+    }
     this.status = { what, outcome: 'reading…', state: 'busy' };
     try {
       const scan = await desktopFiles.scan(list);
+      if (oversight.viewAs) {
+        this.refuse(what, from, READ_ONLY_REASON);
+        return { target: null, reason: READ_ONLY_REASON };
+      }
       const r = this.destination(classify(scan.roots, scan.entries), want);
       if (!r.target) {
         this.refuse(what, from, scan.missing.length ? `could not read ${scan.missing.join(', ')}` : r.reason);
@@ -166,6 +175,10 @@ class Opener {
   /** Web delivery: files dropped on the shell page or chosen in Home. */
   openWebFiles(set: WebSet, from: string, want?: FileTab): Routed {
     const what = set.roots.length <= 1 ? (set.roots[0]?.name ?? '') : `${set.roots[0].name} and ${set.roots.length - 1} more`;
+    if (oversight.viewAs) {
+      this.refuse(what || 'drop', from, READ_ONLY_REASON);
+      return { target: null, reason: READ_ONLY_REASON };
+    }
     const r = this.destination(classify(set.roots, set.entries), want);
     if (!r.target) {
       this.refuse(what || 'drop', from, r.reason);
@@ -192,6 +205,7 @@ class Opener {
 
   /** Web delivery: a module iframe asks for its files (frame host `openFiles`). */
   takeWeb(module: string, take: boolean): OpenFilesTransfer | null {
+    if (oversight.viewAs) return null;
     const tab = TAB_OF[module];
     const t = tab ? this.web[tab] : undefined;
     if (!t) return null;

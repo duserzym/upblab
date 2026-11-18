@@ -1,4 +1,5 @@
 // Home watches the handoff; the modules alone read and ingest the files.
+import { oversight } from './oversight.svelte';
 import { moduleLabel } from './links';
 import type { FileTab, WebSet } from './drop';
 import { identity } from './identity.svelte';
@@ -63,6 +64,7 @@ export class Upload {
   private fail(reason: unknown) { this.error = reason instanceof Error ? reason.message : String(reason); }
 
   private async begin(stems: string[]) {
+    if (oversight.viewAs) return false;
     this.close();
     this.open = true;
     this.account = context();

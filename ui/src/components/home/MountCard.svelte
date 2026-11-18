@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { oversight, READ_ONLY_REASON } from '../../lib/oversight.svelte';
+  import { ownerName } from '../../lib/records.svelte';
   import { editInAtlas } from '../../lib/apps.svelte';
   import AtlasGuidance from '../AtlasGuidance.svelte';
   import Thumbnail from './Thumbnail.svelte';
@@ -12,8 +14,8 @@
   const status = $derived(atlasStatus(row));
   const label = $derived(row.mount.label);
   const atlasName = $derived(atlas?.name && atlas.name !== label ? `Atlas: ${atlas.name}` : '');
-  const target = $derived(atlas ? `grainatlas://project/${atlas.projectId}` : `upbdb://mount/${row.mount.id}`);
-  const action = $derived(atlas ? `Open images for ${label}` : `Open mount details for ${label}`);
+  const target = $derived(atlas && !oversight.viewAs ? `grainatlas://project/${atlas.projectId}` : `upbdb://mount/${row.mount.id}`);
+  const action = $derived(atlas && !oversight.viewAs ? `Open images for ${label}` : `Open mount details for ${label}`);
 </script>
 <article class="glass panel mount-card" data-testid="mount-card">
   <div class="summary">
@@ -22,6 +24,7 @@
       <button class="main" title={action} aria-label={action} onclick={() => void shell.handleLink(target, 'home')}><span class="key">{label}</span></button>
       <p class="muted small ellipsis atlas-name" title={atlasName || undefined}>{atlasName}</p>
       <p class="muted small ellipsis" title={row.mount.mount_type}>{row.mount.mount_type || 'Mount'}</p>
+      {#if ownerName(row.mount)}<p class="muted small ellipsis">Owner: {ownerName(row.mount)}</p>{/if}
       <p class="small counts">{plural(row.mount.grain_count, 'grain')} · {plural(row.mount.spot_count, 'spot')}</p>
     </div>
   </div>
@@ -36,7 +39,7 @@
       {status.text}
     </span>
     <div class="controls">
-      {#if atlas}<button class="btn" onclick={(e) => { e.stopPropagation(); void editInAtlas({ project: atlas!.projectId, mount: row.mount.id }, 'home'); }}>Edit in grainatlas</button>{/if}
+      {#if atlas}<button class="btn" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={(e) => { e.stopPropagation(); void editInAtlas({ project: atlas!.projectId, mount: row.mount.id }, 'home'); }}>Edit in grainatlas</button>{/if}
       <button class="btn" onclick={(e) => { e.stopPropagation(); shell.show('review'); void review.open({ kind: 'mount', id: row.mount.id }); }}>Review</button>
     </div>
   </div>

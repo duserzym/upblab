@@ -24,6 +24,7 @@ const platform = await import('./platform');
 const { opener, TAKE_TIMEOUT_MS } = await import('./opener.svelte');
 const { shell } = await import('./shell.svelte');
 const { settings } = await import('./settings.svelte');
+const { oversight } = await import('./oversight.svelte');
 
 const PKG = '/Users/lab/grainatlas/tests/fixtures/tm4000/Mount_XS_150X';
 const QTEGRA = '/Users/lab/upbdb/tests/fixtures/qtegra/Apatite_demo';
@@ -52,10 +53,20 @@ scans[QTEGRA] = {
 describe('opener (desktop)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    oversight.reset();
     settings.serverUrl = 'http://localhost:8000';
     settings.mode = 'server';
     shell.view = 'home';
     shell.targets = { images: null, sessions: null, people: null };
+  });
+
+  it('refuses dropped and OS-opened files during view-as before handing anything to a module', async () => {
+    oversight.select({ username: 'cedar', name: 'Cedar Analyst' });
+    expect(await opener.openPaths([PKG], 'os')).toMatchObject({ target: null, reason: expect.stringContaining('read-only') });
+    expect(platform.desktopFiles.scan).not.toHaveBeenCalled();
+    expect(platform.openGrainAtlasPaths).not.toHaveBeenCalled();
+    expect(opener.openWebFiles({ roots: [], entries: [], files: [] }, 'drop')).toMatchObject({ target: null });
+    expect(opener.takeWeb('sessions', true)).toBeNull();
   });
 
   it('a TM4000 package is handed to standalone grainatlas, never asking or showing a tab', async () => {

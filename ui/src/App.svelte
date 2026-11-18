@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import Oversight from './components/Oversight.svelte';
+  import { oversight } from './lib/oversight.svelte';
+  import { clearRecords } from './lib/records.svelte';
+  import { apps } from './lib/apps.svelte';
+  import { savedData } from './lib/saved-data.svelte';
   import Home from './routes/Home.svelte';
   import Account from './routes/Account.svelte';
   import OfflineBanner from './components/OfflineBanner.svelte';
@@ -20,7 +25,7 @@
   import { identity } from './lib/identity.svelte';
   import { canShowPeopleTab } from './lib/people';
   import { localService } from './lib/localService.svelte';
-  import { listenForLinks } from './lib/incoming';
+  import { listenForLinks, publishOversight } from './lib/incoming';
   import { fromDataTransfer } from './lib/drop';
   import { opener } from './lib/opener.svelte';
   import { settings } from './lib/settings.svelte';
@@ -74,8 +79,22 @@
     if ((shell.view !== 'home' && shell.view !== 'account') || !settings.loaded) return;
     void identity.revision;
     void identity.target?.server;
+    JSON.stringify(oversight.filters);
     if (identity.checking) return;
     untrack(() => void overview.load());
+  });
+
+  // Clear old scope immediately, even if its tab is hidden. Late replies are rejected by identity.
+  $effect.pre(() => {
+    void identity.revision; void identity.target?.server;
+    untrack(() => { overview.clear(); review.clear(); clearRecords(); savedData.reset(); shell.studio = null; shell.targets.images = null; shell.targets.sessions = null; shell.targets.people = null; apps.atlas = null; apps.studio = null; });
+  });
+  let oversightUpdates: Promise<unknown> = Promise.resolve();
+  $effect(() => {
+    const state = { viewAs: oversight.viewAs ? { ...oversight.viewAs } : null, onBehalf: oversight.onBehalf };
+    publishOversight();
+    if (isDesktop) oversightUpdates = oversightUpdates.then(() => invoke('module_oversight', { oversight: state }))
+      .catch(err => logWarn(`[oversight] ${String(err)}`));
   });
 
   // Serialise updates so a rapid switch cannot leave the host on an older theme.
@@ -237,6 +256,7 @@
     {/if}
   </header>
 
+  <Oversight />
   <OfflineBanner />
   <main class="content">
     {#if firstRun}

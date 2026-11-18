@@ -78,6 +78,7 @@ pub fn run() {
         .manage(files::Files::default())
         .manage(bridge::Commands::default())
         .manage(bridge::ThemeState::default())
+        .manage(bridge::OversightState::default())
         .manage(auth::Identity::default())
         .manage(local_service::LocalService::default())
         .manage(quit::QuitState::default())
@@ -104,6 +105,7 @@ pub fn run() {
             auth::auth_logout,
             auth::auth_handoff,
             auth::api_get,
+            auth::api_write,
             read_cache::cache_status,
             read_cache::cache_clear,
             read_cache::cache_prefetch,
@@ -115,6 +117,8 @@ pub fn run() {
             bridge::module_command,
             bridge::module_theme,
             bridge::bridge_theme,
+            bridge::bridge_oversight,
+            bridge::module_oversight,
             bridge::bridge_take_command,
             files::bridge_open_files,
             files::bridge_read_file,
