@@ -67,6 +67,7 @@ for (const desktop of [true, false]) for (const [width, height] of [[1280, 800],
     await page.getByLabel('Lab', { exact: true }).selectOption('demo-lab');
     await expect(page.getByTestId('session-card')).toHaveCount(1);
     await expect.poll(() => requests.some(r => r.path === '/v1/sessions' && ['owner=cedar', 'team=Demo+team', 'project=DEMO', 'lab=demo-lab'].every(q => r.query.includes(q)))).toBe(true);
+    await page.getByRole('button', { name: 'Records · Samples and Projects', exact: true }).click();
     await expect(page.getByTestId('samples-row')).toContainText('Owner: Cedar Analyst');
     await expect(page.getByTestId('projects-row')).toContainText('Owner: Moss Analyst');
     await page.getByRole('button', { name: 'Show more samples', exact: true }).click();
@@ -77,7 +78,11 @@ for (const desktop of [true, false]) for (const [width, height] of [[1280, 800],
     await expect(page.getByRole('tab', { name: 'Sessions', exact: true })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByLabel('Person', { exact: true }).filter({ visible: true })).toHaveValue('cedar');
     await page.getByRole('tab', { name: 'Home', exact: true }).click();
+    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await expect(page.getByTestId('home-pins')).toBeVisible();
     await page.getByLabel('View as', { exact: true }).selectOption('cedar');
+    await expect(page.getByTestId('home-pins')).toHaveCount(0);
+    await expect(page.getByTestId('session-card').getByRole('button', { name: /^Pin / })).toHaveCount(0);
     await expect(page.getByTestId('view-as-banner')).toContainText('Viewing as Cedar Analyst (read-only)');
     await expect(page.getByTestId('session-card')).toHaveCount(1); await expect(page.getByTestId('session-card')).toContainText('Cedar scope session');
     await expect(page.getByTestId('samples-list')).toContainText('cedar sample');

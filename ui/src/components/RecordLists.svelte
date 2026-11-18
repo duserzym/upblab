@@ -4,7 +4,7 @@
   import { oversight } from '../lib/oversight.svelte';
   import { samples, projects, ownerName } from '../lib/records.svelte';
   import { shell } from '../lib/shell.svelte';
-  let { active }: { active: boolean } = $props();
+  let { active, layout = 'stack' }: { active: boolean; layout?: 'stack' | 'columns' } = $props();
   $effect(() => {
     if (!active) return;
     void identity.revision; void identity.target?.server; JSON.stringify(oversight.filters);
@@ -14,13 +14,14 @@
 {#if identity.signedIn}
   {#each ['samples', 'projects'] as kind (kind)}
     {@const list = kind === 'samples' ? samples : projects}
-    <section class="glass panel stack records" aria-label={kind === 'samples' ? 'Samples' : 'Projects'}>
+    <section class="glass panel stack records" class:bounded={layout === 'columns'} aria-label={kind === 'samples' ? 'Samples' : 'Projects'}>
       <div class="row"><h2>{kind === 'samples' ? 'Samples' : 'Projects'}</h2><span class="muted small">{list.rows.length} shown</span><span class="spacer"></span>
         <button class="btn small" disabled={list.loading} onclick={() => void list.load(false, { force: true })}>Refresh {kind}</button></div>
       <p class="muted small">Open in UPbDB to see details and edit.</p>
       {#if list.error}<p class="error small" role="alert">{list.error}</p>{/if}
       {#if !list.rows.length}<p class="muted small">{list.loading ? `Loading ${kind}…` : `No ${kind} match these filters.`}</p>{/if}
-      <div class="record-rows" data-testid="{kind}-list">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex (Focusable inventory supports keyboard scrolling.) -->
+      <div class="record-rows" tabindex="0" role="group" aria-label="{kind === 'samples' ? 'Samples' : 'Projects'} inventory" data-testid="{kind}-list">
         {#each list.rows as row (row.id)}
           {@const name = 'code' in row ? row.code : row.name}
           <div class="record-row" data-testid="{kind}-row">
@@ -40,4 +41,8 @@
   .record-rows { max-height: 18rem; overflow: auto; min-width: 0; }
   .record-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); padding: var(--space-1); border-bottom: 1px solid var(--glass-edge); overflow-wrap: anywhere; }
   .record-row > * { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  .bounded { margin: 0; min-height: 0; overflow: hidden; padding: var(--space-3); }
+  .bounded > .row { flex-wrap: wrap; }
+  .bounded .record-rows { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
+  .bounded > .btn { align-self: flex-start; flex: none; }
 </style>

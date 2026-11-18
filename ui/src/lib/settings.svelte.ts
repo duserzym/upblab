@@ -6,6 +6,7 @@
 import { isDesktop } from './platform';
 import { resolveServerUrl } from './server-url';
 import { readHomeSections, type HomeSection, type HomeSectionLayout, type HomeSections } from './home-sections';
+import { readHomePins, toggleHomePin, type HomePin, type HomePins } from './home-pins';
 import { viewerInset, type ViewerInset } from '@lab/bridge';
 
 /** A stored inset, checked like a bridge report; anything else is forgotten. */
@@ -36,6 +37,7 @@ export interface SettingsData {
   themeChosen: boolean;
   lastTab: string;
   homeSections: HomeSections;
+  homePins: HomePins;
   reviewScope: string;
   reviewSplit: boolean;
   reviewDataWidth: number;
@@ -65,6 +67,7 @@ export const DEFAULTS: SettingsData = {
   themeChosen: false,
   lastTab: 'home',
   homeSections: {},
+  homePins: {},
   reviewScope: '',
   reviewSplit: false,
   reviewDataWidth: 42,
@@ -160,6 +163,8 @@ export class Settings {
   themeChosen = $state(DEFAULTS.themeChosen);
   lastTab = $state(DEFAULTS.lastTab);
   homeSections = $state<HomeSections>({});
+  homePins = $state<HomePins>({});
+
   reviewScope = $state(DEFAULTS.reviewScope);
   reviewSplit = $state(DEFAULTS.reviewSplit);
   reviewDataWidth = $state(DEFAULTS.reviewDataWidth);
@@ -173,6 +178,7 @@ export class Settings {
   /** The OS asks for dark (only matters for the System choice). */
   systemDark = $state(prefersDark());
   private backend: Backend = isDesktop ? storeBackend : localBackend;
+  private saves: Promise<void> = Promise.resolve();
 
   /** Resolved theme for shell tokens, plots and live module delivery. */
   get effectiveTheme(): Theme {
@@ -181,29 +187,16 @@ export class Settings {
   }
 
   private stopMedia: (() => void) | undefined;
-  private homeSave: ReturnType<typeof setTimeout> | undefined;
-
-  /** Drag updates render immediately; persistence waits until the pointer settles. */
-  async updateHomeSection(section: HomeSection, patch: HomeSectionLayout, debounce = false) {
-    this.homeSections = { ...this.homeSections, [section]: { ...this.homeSections[section], ...patch } };
-    clearTimeout(this.homeSave);
-    this.homeSave = undefined;
-    if (debounce) {
-      this.homeSave = setTimeout(() => { void this.flushHomeSections(); }, 300);
-    } else {
-      await this.update({ homeSections: this.homeSections });
-    }
+  // Local-first preferences; future server sync joins ADR-0004's durable outbox here.
+  async toggleHomePin(account: string, item: Omit<HomePin, 'pinned_at'>) {
+    await this.update({ homePins: toggleHomePin(this.homePins, account, item) });
   }
 
-  async flushHomeSections() {
-    if (this.homeSave === undefined) return;
-    clearTimeout(this.homeSave);
-    this.homeSave = undefined;
-    await this.update({ homeSections: this.homeSections });
+  async updateHomeSection(section: HomeSection, patch: HomeSectionLayout) {
+    await this.update({ homeSections: { ...this.homeSections, [section]: { ...this.homeSections[section], ...patch } } });
   }
 
   dispose() {
-    void this.flushHomeSections();
     this.stopMedia?.();
     this.stopMedia = undefined;
   }
@@ -237,6 +230,7 @@ export class Settings {
       this.theme = this.themeChosen && (['dark', 'light', 'system'] as const).includes(data.theme) ? data.theme : 'system';
       this.lastTab = data.lastTab === 'images' ? 'home' : data.lastTab;
       this.homeSections = readHomeSections(data.homeSections, typeof window === 'undefined' ? undefined : window.innerHeight);
+      this.homePins = readHomePins(data.homePins);
       this.reviewScope = typeof data.reviewScope === 'string' ? data.reviewScope : '';
       this.reviewSplit = data.reviewSplit === true;
       this.reviewDataWidth = clampReviewDataWidth(data.reviewDataWidth);
@@ -254,14 +248,14 @@ export class Settings {
   }
 
   async update(patch: Partial<SettingsData>) {
-    if (patch.homeSections !== undefined) {
-      clearTimeout(this.homeSave);
-      this.homeSave = undefined;
-    }
     if (patch.studioOpened) patch = { ...patch, studioOpened: readStudioOpened(patch.studioOpened) };
     Object.assign(this, patch);
     if (patch.theme) applyTheme(this.effectiveTheme);
-    await this.backend.write(this.snapshot());
+    // Pin clicks and layout changes can overlap. Keep durable snapshots in edit order.
+    const snapshot = this.snapshot();
+    const saving = this.saves.catch(() => {}).then(() => this.backend.write(snapshot));
+    this.saves = saving;
+    await saving;
   }
 
   snapshot(): SettingsData {
@@ -278,6 +272,7 @@ export class Settings {
       themeChosen: this.themeChosen,
       lastTab: this.lastTab,
       homeSections: $state.snapshot(this.homeSections),
+      homePins: $state.snapshot(this.homePins),
       reviewScope: this.reviewScope,
       reviewSplit: this.reviewSplit,
       reviewDataWidth: this.reviewDataWidth,

@@ -3,30 +3,32 @@
   import { ownerName } from '../../lib/records.svelte';
   import { editInAtlas } from '../../lib/apps.svelte';
   import AtlasGuidance from '../AtlasGuidance.svelte';
+  import PinButton from './PinButton.svelte';
   import Thumbnail from './Thumbnail.svelte';
   import { plural } from '../../lib/plural';
   import { overview, type MountRow } from '../../lib/overview.svelte';
-  import { atlasStatus } from '../../lib/home';
+  import { atlasStatus, mountHomeLink } from '../../lib/home';
   import { shell } from '../../lib/shell.svelte';
   import { review } from '../../lib/review.svelte';
-  let { row }: { row: MountRow } = $props();
+  let { row, dense = false, pinned = false, togglePin }: { row: MountRow; dense?: boolean; pinned?: boolean; togglePin?: () => void } = $props();
   const atlas = $derived(row.atlas && row.atlas !== 'error' ? row.atlas : null);
   const status = $derived(atlasStatus(row));
   const label = $derived(row.mount.label);
   const atlasName = $derived(atlas?.name && atlas.name !== label ? `Atlas: ${atlas.name}` : '');
-  const target = $derived(atlas && !oversight.viewAs ? `grainatlas://project/${atlas.projectId}` : `upbdb://mount/${row.mount.id}`);
+  const target = $derived(mountHomeLink(row, !!oversight.viewAs));
   const action = $derived(atlas && !oversight.viewAs ? `Open images for ${label}` : `Open mount details for ${label}`);
 </script>
-<article class="glass panel mount-card" data-testid="mount-card">
+<article class="glass panel mount-card" class:dense data-testid="mount-card">
   <div class="summary">
     <Thumbnail sources={atlas ? row.thumbnails : []} label={label} onvisible={atlas ? () => void overview.loadThumbnails(row.mount.id) : undefined} />
     <div class="details">
       <button class="main" title={action} aria-label={action} onclick={() => void shell.handleLink(target, 'home')}><span class="key">{label}</span></button>
-      <p class="muted small ellipsis atlas-name" title={atlasName || undefined}>{atlasName}</p>
-      <p class="muted small ellipsis" title={row.mount.mount_type}>{row.mount.mount_type || 'Mount'}</p>
+      <p class="muted small ellipsis atlas-name" title={atlasName || undefined}>{atlasName || (dense ? atlas ? 'Published images' : row.detailsPending ? 'Checking images…' : row.atlas === 'error' ? 'Published images unknown' : 'No published images' : '')}</p>
+      {#if !dense}<p class="muted small ellipsis" title={row.mount.mount_type}>{row.mount.mount_type || 'Mount'}</p>{/if}
       {#if ownerName(row.mount)}<p class="muted small ellipsis">Owner: {ownerName(row.mount)}</p>{/if}
       <p class="small counts">{plural(row.mount.grain_count, 'grain')} · {plural(row.mount.spot_count, 'spot')}</p>
     </div>
+    {#if togglePin}<PinButton {label} {pinned} toggle={togglePin} />{/if}
   </div>
   <div class="footer">
     <span class="badge small" class:published={!!atlas}>
@@ -63,4 +65,8 @@
   .badge svg { width: 1rem; height: 1rem; flex: none; }
   .controls { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
   .btn { padding: 0.1rem var(--space-2); font-size: 0.74rem; }
+  .dense { border: 0; border-bottom: 1px solid var(--hairline); border-radius: 0; background: transparent; padding: var(--space-2) 0; gap: var(--space-1); }
+  .dense:hover { background: var(--row-hover); }
+  .dense .summary :global(.thumbnail) { width: 3rem; }
+  .dense .footer { min-height: 26px; }
 </style>

@@ -5,23 +5,25 @@
   import type { LocalSession } from '../../lib/platform';
   import { openInStudio } from '../../lib/apps.svelte';
   import type { SessionRow } from '../../lib/overview.svelte';
+  import PinButton from './PinButton.svelte';
   import MineralIcon from './MineralIcon.svelte';
   import { plural } from '../../lib/plural';
   import { day, kindColor, kindLabel, kindSegments, runStatus } from '../../lib/home';
   import { shell } from '../../lib/shell.svelte';
   import { review } from '../../lib/review.svelte';
-  let { row, maximum, local }: { row: SessionRow; maximum: number; local?: LocalSession } = $props();
+  let { row, maximum, local, dense = false, pinned = false, togglePin }: { row: SessionRow; maximum: number; local?: LocalSession; dense?: boolean; pinned?: boolean; togglePin?: () => void } = $props();
   const s = $derived(row.session);
   const status = $derived(runStatus(row));
   const segments = $derived(kindSegments(s.acquisition_count, maximum, row.kindCounts));
   const counts = $derived(segments.map(({ kind, count }) => `${kindLabel(kind)}: ${count}`).join(' · ') || 'No spots');
   const date = $derived(day(s.started_at));
-  const people = $derived([s.analyst, s.instrument?.name].filter(Boolean).join(' · '));
+  const people = $derived([dense && ownerName(s) ? `Owner: ${ownerName(s)}` : null, s.analyst, s.instrument?.name].filter(Boolean).join(' · '));
   const byline = $derived([date, people].filter(Boolean).join(' · ') || 'Date and analyst not recorded');
 </script>
-<article class="glass panel session-card" data-testid="session-card">
+<article class="glass panel session-card" class:dense data-testid="session-card">
   <div class="heading">
     <button class="main mono" title={`${s.session_key} · ${counts} · ${status.text}`} aria-label="Open session {s.session_key}" onclick={() => void shell.handleLink(`upbdb://session/${s.id}`, 'home')}><span class="key">{s.session_key}</span></button>
+    {#if togglePin}<PinButton label={s.session_key} {pinned} toggle={togglePin} />{/if}
     <span class="chip mineral"><MineralIcon mineral={s.material} /><span>{s.material || 'Unspecified'}</span></span>
   </div>
   <div class="byline">
@@ -50,7 +52,7 @@
       {/each}
     </ul>
   </details>
-  {#if ownerName(s)}<p class="muted small ellipsis">Owner: {ownerName(s)}</p>{/if}
+  {#if !dense && ownerName(s)}<p class="muted small ellipsis">Owner: {ownerName(s)}</p>{/if}
   <div class="footer">
     <p class="run small" title={status.text}><span class="dot" style:background={`var(--${status.tone})`} aria-hidden="true"></span><span class="ellipsis">{status.text}</span></p>
     <div class="controls">
@@ -67,7 +69,7 @@
   .main { border: 0; background: none; padding: 0; text-align: left; color: var(--accent); font-weight: 600; min-width: 0; cursor: pointer; flex: 1; }
   .key { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .main::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
-  .chip { font-size: 0.7rem; padding: 0 var(--space-1); white-space: nowrap; }
+  .chip { font-size: 0.72rem; padding: 0 var(--space-1); white-space: nowrap; }
   .mineral { display: flex; align-items: center; gap: 2px; max-width: 40%; text-transform: capitalize; }
   .mineral span { overflow: hidden; text-overflow: ellipsis; }
   .byline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); min-width: 0; }
@@ -92,4 +94,7 @@
   .dot { width: 0.45rem; height: 0.45rem; }
   .controls { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
   .btn { padding: 0.1rem var(--space-2); font-size: 0.74rem; }
+  .dense { border: 0; border-bottom: 1px solid var(--hairline); border-radius: 0; background: transparent; padding: var(--space-2) 0; gap: var(--space-1); }
+  .dense:hover { background: var(--row-hover); }
+  .dense .footer { min-height: 26px; }
 </style>

@@ -25,6 +25,11 @@ export function sessionsShown(rows: SessionRow[], query: string, sort: Sort): Se
     r => [r.session.session_key, r.session.material, r.session.analyst, r.session.instrument?.name].join(' '), r => r.session.started_at);
 }
 
+/** Unknown/pending summaries are not evidence that a reduction is needed. */
+export function notReduced(row: SessionRow): boolean {
+  return !row.detailsPending && row.runs !== null && row.preferred?.status !== 'completed';
+}
+
 export function mineralKey(material: string) {
   return material.trim().toLowerCase() || 'unspecified';
 }
@@ -70,6 +75,12 @@ export function atlasStatus(row: MountRow): { text: string; label: string } {
   if (row.detailsPending) return { text: 'checking…', label: 'Checking for a published atlas' };
   if (row.atlas === 'error') return { text: 'atlas unknown', label: 'Published atlas status unknown' };
   return { text: 'No atlas', label: 'No published atlas' };
+}
+
+/** Shared by mount titles and pins, including the read-only oversight destination. */
+export function mountHomeLink(row: MountRow, viewAs = false): string {
+  return row.atlas && row.atlas !== 'error' && !viewAs
+    ? `grainatlas://project/${row.atlas.projectId}` : `upbdb://mount/${row.mount.id}`;
 }
 
 export function runStatus(row: SessionRow): { tone: 'ok' | 'warning' | 'text-faint'; text: string } {

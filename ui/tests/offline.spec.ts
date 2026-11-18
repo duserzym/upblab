@@ -81,8 +81,11 @@ test('no saved server data leaves local sessions available', async ({ page }) =>
     signedIn: true, offline: true, localSessions: [local], cacheStatus: { entries: 0, bytes: 0, newest: null, oldest: null },
   });
   await page.goto('./');
-  await expect(page.getByText('Nothing is saved on this computer from this server yet. Local sessions are listed below.')).toBeVisible();
-  await expect(page.getByTestId('local-session-card')).toHaveCount(1);
+  await expect(page.getByText('Nothing is saved on this computer from this server yet. Open a local session in On this computer.')).toBeVisible();
+  const localCard = page.getByTestId('local-session-card');
+  await expect(localCard).toHaveCount(1);
+  await localCard.getByRole('button', { name: 'Open in UPbRPy Studio', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.some(([cmd]) => cmd === 'studio_open_local'))).toBe(true);
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 

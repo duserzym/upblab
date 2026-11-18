@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { atlasFileUrl, atlasStatus, capInventory, kindColor, kindSegments, mountsShown, newestMounts, runStatus, sessionsByMineral, sessionsShown, thumbnailPaths } from './home';
+import { atlasFileUrl, atlasStatus, capInventory, kindColor, kindSegments, mountsShown, notReduced, newestMounts, runStatus, sessionsByMineral, sessionsShown, thumbnailPaths } from './home';
 import type { MountRow, RunOut, SessionRow } from './overview.svelte';
 
 const run: RunOut = { id: 'r', session_id: 's', pipeline_name: 'UPbRPy', pipeline_version: '0.1', status: 'completed', started_at: '2026-11-05', completed_at: '2026-11-05', upbrpy_version: '0.1', is_preferred_for_session: true, run_by: null, result_count: 2 };
@@ -53,6 +53,21 @@ describe('Home filtering and sorting', () => {
     const a = mount('A', '2026-11-05'), b = mount('B', '2026-11-01');
     if (a.atlas && a.atlas !== 'error') a.atlas.name = 'Z images';
     expect(mountsShown([b, a], 'images', 'az', 'with')).toEqual([a, b]);
+  });
+});
+describe('Sessions without a preferred completed run', () => {
+  it('includes zero runs, unpreferred completed runs, and preferred runs that have not completed', () => {
+    const row = session('A', null);
+    expect(notReduced(row)).toBe(true);
+    expect(notReduced({ ...row, runs: 1, completed: run })).toBe(true);
+    for (const status of ['pending', 'queued', 'running', 'failed'])
+      expect(notReduced({ ...row, runs: 1, preferred: { ...run, status } })).toBe(true);
+    expect(notReduced({ ...row, runs: 2, preferred: run, latest: { ...run, status: 'failed' } })).toBe(false);
+  });
+  it('excludes unknown and pending summaries without treating them as reduced', () => {
+    const row = session('A', null);
+    expect(notReduced({ ...row, runs: null })).toBe(false);
+    expect(notReduced({ ...row, detailsPending: true })).toBe(false);
   });
 });
 describe('Home atlas status', () => {

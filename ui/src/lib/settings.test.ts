@@ -47,61 +47,68 @@ describe('Home section preferences', () => {
     },
   );
 
-  it('clamps heights and keeps only known sections and valid fields', async () => {
-    stored = { homeSections: { sessions: { height: 10, collapsed: false, extra: true }, mounts: { height: 9000, collapsed: true }, atlases: { height: null }, unknown: {} } };
+  it('ignores retired heights and collapse choices', async () => {
+    stored = { homeSections: { sessions: { height: 10, collapsed: false }, mounts: { height: 9000, collapsed: true, atlasFilter: 'without' }, unknown: {} } };
     await settings.load();
-    expect(settings.homeSections).toEqual({ sessions: { height: 80, collapsed: false }, mounts: { height: 4000, collapsed: true } });
+    expect(settings.homeSections).toEqual({ mounts: { atlasFilter: 'without' } });
   });
 
-  it('fits a height restored from a larger screen to 80% of this viewport', async () => {
-    vi.stubGlobal('window', { innerHeight: 640 });
-    stored = { homeSections: { mounts: { height: 4000 } } };
+  it('keeps the view and atlas filter across unrelated saves, reloads and layout reset', async () => {
     await settings.load();
-    expect(settings.homeSections.mounts?.height).toBe(512);
-  });
-
-  it('keeps each height and collapse choice across unrelated saves and loads', async () => {
+    await settings.updateHomeSection('mounts', { atlasFilter: 'with' });
+    await settings.update({ homeSections: { ...settings.homeSections, view: 'records' }, lastTab: 'review' });
     await settings.load();
-    await settings.updateHomeSection('sessions', { height: 450 });
-    await settings.updateHomeSection('mounts', { collapsed: true, atlasFilter: 'with' });
-    await settings.update({ lastTab: 'review' });
-    await settings.load();
-    expect(settings.homeSections).toEqual({ sessions: { height: 450 }, mounts: { collapsed: true, atlasFilter: 'with' } });
-    await settings.updateHomeSection('sessions', { collapsed: true });
-    await settings.updateHomeSection('sessions', { height: null });
-    expect(stored.homeSections).toMatchObject({ sessions: { height: null, collapsed: true } });
+    expect(settings.homeSections).toEqual({ view: 'records', mounts: { atlasFilter: 'with' } });
+    await settings.toggleHomePin('https://lab.example|demo', { kind: 'session', id: 's1', label: 'Demo session' });
+    expect(settings.homePins['https://lab.example|demo'][0].label).toBe('Demo session');
     await settings.update({ homeSections: {} });
     await settings.load();
     expect(settings.homeSections).toEqual({});
+    expect(settings.homePins['https://lab.example|demo'][0].id).toBe('s1');
   });
 
-  it('debounces dragging for 300 ms, with immediate collapse and reset', async () => {
-    vi.useFakeTimers();
+  it('applies pin changes immediately before persistence completes', async () => {
+    const saving = settings.toggleHomePin('server|demo', { kind: 'session', id: 's1', label: 'Session' });
+    expect(settings.homePins['server|demo'][0].id).toBe('s1');
+    await saving;
     await settings.load();
-    await settings.updateHomeSection('mounts', { height: 350 }, true);
-    await vi.advanceTimersByTimeAsync(200);
-    await settings.updateHomeSection('mounts', { height: 400 }, true);
-    expect(settings.homeSections.mounts?.height).toBe(400);
-    await vi.advanceTimersByTimeAsync(299);
-    expect(stored.homeSections).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(stored.homeSections).toEqual({ mounts: { height: 400 } });
-    await settings.updateHomeSection('mounts', { height: 500 }, true);
-    await settings.updateHomeSection('sessions', { collapsed: true });
-    expect(stored.homeSections).toEqual({ mounts: { height: 500 }, sessions: { collapsed: true } });
-    await settings.updateHomeSection('mounts', { height: 550 }, true);
-    await settings.update({ homeSections: {} });
-    await vi.advanceTimersByTimeAsync(300);
-    expect(stored.homeSections).toEqual({});
+    expect(settings.homePins['server|demo'][0].id).toBe('s1');
   });
 
-  it('flushes an unfinished drag when Home is left', async () => {
-    vi.useFakeTimers();
+  it('serializes overlapping pin and layout saves without delaying local changes', async () => {
+    const writes: ReturnType<typeof settings.snapshot>[] = [];
+    let release = () => {};
+    Object.assign(settings, { backend: {
+      read: async () => stored,
+      write: async (snapshot: ReturnType<typeof settings.snapshot>) => {
+        writes.push(snapshot);
+        if (writes.length === 1) await new Promise<void>(resolve => { release = resolve; });
+        stored = snapshot as unknown as Record<string, unknown>;
+      },
+    } });
+    const first = settings.toggleHomePin('server|demo', { kind: 'session', id: 's1', label: 'Session' });
+    const second = settings.toggleHomePin('server|demo', { kind: 'mount', id: 'm1', label: 'Mount' });
+    const third = settings.update({ homeSections: { view: 'records' } });
+    expect(settings.homePins['server|demo']).toHaveLength(2);
+    expect(settings.homeSections.view).toBe('records');
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    release();
+    await Promise.all([first, second, third]);
+    expect(writes.map(snapshot => snapshot.homePins['server|demo'].length)).toEqual([1, 2, 2]);
     await settings.load();
-    await settings.updateHomeSection('mounts', { height: 500 }, true);
-    await settings.flushHomeSections();
-    expect(stored.homeSections).toEqual({ mounts: { height: 500 } });
-    expect(vi.getTimerCount()).toBe(0);
+    expect(settings.homePins['server|demo']).toHaveLength(2);
+    expect(settings.homeSections.view).toBe('records');
+  });
+
+  it('validates restored pins and isolates sign-in preferences', async () => {
+    stored = { homePins: { bad: [{}], 'server|demo': [{ kind: 'mount', id: 'm1', label: 'Mount', pinned_at: '2026-11-18', extra: true }] } };
+    await settings.load();
+    expect(settings.homePins).toEqual({ 'server|demo': [{ kind: 'mount', id: 'm1', label: 'Mount', pinned_at: '2026-11-18' }] });
+    await settings.toggleHomePin('server|other', { kind: 'session', id: 's1', label: 'Session' });
+    await settings.update({ lastTab: 'home' });
+    await settings.load();
+    expect(settings.homePins['server|other']).toHaveLength(1);
+    expect(settings.homePins['server|demo']).toHaveLength(1);
   });
 });
 

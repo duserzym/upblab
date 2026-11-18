@@ -81,8 +81,8 @@ async function home(page: Page, desktop: boolean, inventory = fixtures, brokenTh
 }
 
 for (const desktop of [true, false]) {
-  for (const [width, height, columns] of [[1440, 900, 4], [1280, 800, 3], [1024, 640, 2]]) {
-    test(`${desktop ? 'desktop' : 'web'} board fits ${width} x ${height} with ${columns} columns`, async ({ page }) => {
+  for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
+    test(`${desktop ? 'desktop' : 'web'} board fits ${width} x ${height} with dense working columns`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await home(page, desktop);
       const filters = page.getByRole('region', { name: 'Narrow data by person, team and project', exact: true });
@@ -94,7 +94,7 @@ for (const desktop of [true, false]) {
       }));
       for (const box of filterBoxes) {
         expect(box.width).toBeGreaterThanOrEqual(192);
-        expect(box.height).toBeGreaterThanOrEqual(34);
+        expect(box.height).toBeGreaterThanOrEqual(36);
       }
       if (width >= 1280) {
         expect(Math.max(...filterBoxes.map(box => box.y)) - Math.min(...filterBoxes.map(box => box.y))).toBeLessThanOrEqual(2);
@@ -112,12 +112,12 @@ for (const desktop of [true, false]) {
       for (const sort of await sorts.all()) {
         const box = (await sort.boundingBox())!;
         expect(box.width).toBeGreaterThanOrEqual(144);
-        expect(box.height).toBeGreaterThanOrEqual(30);
+        expect(box.height).toBeGreaterThanOrEqual(32);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       await expect(page.getByTestId('open-panel').getByRole('button')).toHaveCount(4);
       const rows = await page.getByTestId('session-card').evaluateAll(cards => cards.map(c => ({ x: Math.round(c.getBoundingClientRect().x), y: Math.round(c.getBoundingClientRect().y) })));
-      expect(new Set(rows.filter(r => r.y === rows[0].y).map(r => r.x)).size).toBe(columns);
+      expect(new Set(rows.filter(r => r.y === rows[0].y).map(r => r.x)).size).toBe(1);
       await expect(page.getByTestId('mount-card')).toHaveCount(6);
       await expect(page.getByRole('img', { name: 'Has a published atlas, version 3', exact: true })).toHaveCount(3);
       await expect(page.getByRole('img', { name: 'No published atlas', exact: true })).toHaveCount(3);
