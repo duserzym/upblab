@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { Snippet } from 'svelte';
+  import { getContext, type Snippet } from 'svelte';
   import Plot from './Plot.svelte';
+  import { PLOT_VISIBILITY, plotVisibility, type PlotVisibility } from './plot-visibility';
   import { ratioMarks } from './plot-data';
   import { clusterBounds, contains, type Bounds } from './plot-viewport';
   import { ageTicks, concordia, curve, EARTH_AGE, visibleConcordiaAges, type ConcordiaMode } from '../../lib/concordia';
@@ -14,18 +15,19 @@
     onrestore: () => void;
     onselect: (s: ReviewSpot) => void;
   } = $props();
+  const visibility = getContext<PlotVisibility | undefined>(PLOT_VISIBILITY);
   let viewport = $state<Bounds | null>(null);
   let boxed = $state.raw(new Set<string>());
   let more = $state(false);
   let moreControls = $state<HTMLDivElement>();
   let ellipses = $state(true);
   const allMarks = $derived(ratioMarks(rows, mode));
-  const shown = $derived(allMarks.filter(m => !hidden.has(m.spot.key)));
+  const shown = $derived(plotVisibility({ marks: allMarks, hidden: new Set([...hidden, ...(visibility?.hidden() ?? [])]) }).marks);
   const points = $derived(shown.map(m => m.point!));
   const cluster = $derived(clusterBounds(points));
   const outside = $derived(viewport ? points.filter(p => !contains(viewport!, p)).length : 0);
   const boxedKeys = $derived(shown.filter(m => boxed.has(m.spot.key)).map(m => m.spot.key));
-  const marks = $derived(ellipses && !boxedKeys.length ? shown : shown.map(m => ({
+  const marks = $derived(ellipses && !boxedKeys.length ? allMarks : allMarks.map(m => ({
     ...m, polygon: ellipses ? m.polygon : undefined, boxed: boxed.has(m.spot.key),
   })));
   // The inverse U/Pb coordinate is unbounded as age approaches zero.
@@ -84,7 +86,7 @@
   </div>
 </div>
 {/snippet}
-<Plot {controls} {marks} {guidesForBounds} emptyBounds={mode === 'tw' ? earthView : wetherillView} {selected} {onselect} bind:viewport onbox={selectBox} ontoggle={spot => onhide([spot.key])}
+<Plot {controls} {marks} {hidden} {guidesForBounds} emptyBounds={mode === 'tw' ? earthView : wetherillView} {selected} {onselect} bind:viewport onbox={selectBox} ontoggle={spot => onhide([spot.key])}
   xLabel={mode === 'tw' ? '238U/206Pb' : '207Pb/235U'} yLabel={mode === 'tw' ? '207Pb/206Pb' : '206Pb/238U'} />
 <style>
   .controls {gap:5px;align-items:center;flex:none;min-width:0;}

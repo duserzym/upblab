@@ -300,7 +300,8 @@ test('sample toggles combine tree, concordia and image overlays; Alt solos by mo
     for (const id of ids) await expect(page.locator(`[data-spot-key="acq-${id}"]`)).toBeVisible();
     for (const name of ['Sample A', 'Sample B', 'Demo reference'])
       await expect(plot.locator(`[data-point-key][data-sample="${name}"]`)).toHaveCount(names.includes(name) ? 4 : 0);
-    await expect(page.getByLabel('Sample legend').locator('span')).toHaveText(names);
+    // Hidden samples stay in the legend (dimmed) so they can be shown again; the pressed entries are the shown ones.
+    await expect(page.getByLabel('Sample legend').locator('button[aria-pressed="true"]')).toHaveText(names);
   };
   await expectSamples(['Sample A', 'Sample B'], [1, 2, 3, 4, 5, 6, 7, 8]);
   await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();

@@ -14,6 +14,7 @@
   import { selection } from '../lib/selection.svelte';
   import { equalLayout, presetLayout, presets, readLayout } from '../lib/review-layout';
   import { settings } from '../lib/settings.svelte';
+  import { PLOT_VISIBILITY, type PlotVisibility } from '../components/review/plot-visibility';
   import { color } from '../components/review/plot-data';
   import { reviewInsetGroups } from '../lib/review-inset-groups';
   import { groupUnregistered, rangeSelection } from '../lib/review-selection';
@@ -78,6 +79,13 @@
     key: group.key, name: group.name, reference: group.reference, count: group.grains.reduce((n, g) => n + g.spots.length, 0),
   })));
   const sampleOrder = $derived(samples.map(sample => sample.key));
+  const plotHidden = $derived(new Set([...hiddenSpots, ...sampleOrder.filter(key => !samplesShown.includes(key))]));
+  setContext<PlotVisibility>(PLOT_VISIBILITY, {
+    hidden: () => plotHidden,
+    samples: () => samples.map(({ key, name }) => ({ key, name })),
+    toggle: showSample,
+    keydown: sampleKeydown,
+  });
   const scopeValue = $derived(review.scope ? `${review.scope.kind}:${review.scope.id}` : '');
   const filterScope = $derived(`${scopeValue}|${groupUnknown ? 'grouped' : 'ungrouped'}`);
   const material = $derived(review.sessions.find(s=>s.id===(review.scope?.kind==='session'?review.scope.id:review.rows.find(r=>r.sessionId)?.sessionId))?.material);
@@ -184,6 +192,7 @@
   let loadedContext = '';
   const sampleRows = $derived(filterRows(scopeRows, samplesShown));
   const groups = $derived(groupSpots(sampleRows, filter));
+  const plotRows = $derived(groupSpots(scopeRows, filter).flatMap(sample => sample.grains.flatMap(grain => grain.spots)));
   const plotted = $derived(groups.flatMap(sample => sample.grains.flatMap(grain => grain.spots)));
   const shown = $derived(plotted.filter(row => !hiddenSpots.has(row.key)));
   const shownKeys = $derived(new Set(shown.map(row => row.key)));
@@ -365,9 +374,9 @@
     {#snippet plots()}
       <div class="plots stack">
         <div class="view-switch" role="tablist" aria-label="Review plots">{#each ['Concordia','Geochemistry','Depth profile'] as tab}<button role="tab" class="chip" aria-selected={plot===tab} onclick={()=>plot=tab}><svg viewBox="0 0 20 20" aria-hidden="true"><path d={tab==='Concordia'?'M3 17V3m0 14h14M5 15c2-7 5-9 11-11':tab==='Geochemistry'?'M2 2h6v6H2zm10 0h6v6h-6zM2 12h6v6H2zm10 0h6v6h-6z':'M3 3v14h14M5 12l3-6 3 8 5-5'} /></svg><span>{tab}</span></button>{/each}</div>
-        {#if plot==='Concordia'}{#if samplesShown.length===0}<p class="muted small">No samples shown</p>{/if}{#key runContext}<ConcordiaPlot bind:mode={concordiaMode} rows={plotted} selected={review.selectedKey} onselect={selectSpot}
+        {#if plot==='Concordia'}{#if samplesShown.length===0}<p class="muted small">No samples shown</p>{/if}{#key runContext}<ConcordiaPlot bind:mode={concordiaMode} rows={plotRows} selected={review.selectedKey} onselect={selectSpot}
           hidden={hiddenSpots} onhide={hideSpots} onrestore={() => hiddenSpots = new Set()} />{/key}
-        {:else if plot==='Geochemistry'}<GeochemistryPlot {material} catalogueRows={scopeRows} rows={shown} selected={review.selectedKey} onselect={selectSpot} />
+        {:else if plot==='Geochemistry'}<GeochemistryPlot {material} catalogueRows={scopeRows} rows={plotRows} shownCount={shown.length} selected={review.selectedKey} onselect={selectSpot} />
         {:else if samplesShown.length===0}<p class="muted small">No samples shown</p>
         {:else if review.selected && shownKeys.has(review.selected.key)}<DepthPlot />
         {:else}<p class="muted small">Select a visible spot to view its depth profile.</p>{/if}

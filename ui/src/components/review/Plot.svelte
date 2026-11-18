@@ -9,13 +9,15 @@
   import { dateLabel, type ReviewSpot } from '../../lib/review-data';
   import type { Point } from '../../lib/concordia';
   import { color, isotopeLabel, type Mark, type Guide, type Band } from './plot-data';
+  import { PLOT_VISIBILITY, plotVisibility, type PlotVisibility, type DrawnCounts, type DrawnSummary } from './plot-visibility';
   import { panBounds, zoomBounds, type Bounds, type DragTool, type ZoomAxis } from './plot-viewport';
-  let { marks, guidesForBounds, emptyBounds, bands = [], selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true, viewport = $bindable(null), onbox, ontoggle, controls }: {
+  let { marks, guidesForBounds, emptyBounds, bands = [], hidden = new Set<string>(), selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true, viewport = $bindable(null), onbox, ontoggle, controls }: {
     controls?: Snippet<[Snippet]>;
     marks: Mark[];
     guidesForBounds?: (bounds: Bounds) => Guide[];
     emptyBounds?: Bounds;
     bands?: Band[];
+    hidden?: ReadonlySet<string>;
     selected: string | null;
     onselect: (spot: ReviewSpot) => void;
     xLabel: string;
@@ -29,6 +31,10 @@
     onbox?: (bounds: Bounds) => void;
     ontoggle?: (spot: ReviewSpot) => void;
   } = $props();
+  const visibility = getContext<PlotVisibility | undefined>(PLOT_VISIBILITY);
+  const hiddenKeys = $derived(new Set([...hidden, ...(visibility?.hidden() ?? [])]));
+  const data = $derived(plotVisibility({ marks, bands, samples: visibility?.samples(), hidden: hiddenKeys }));
+  const visibleKeys = $derived(new Set(data.marks.map(m => m.spot.key)));
   let menu = $state<HTMLDivElement>();
   let menuAnchor = $state<HTMLElement>();
   let menuSpot = $state<ReviewSpot | null>(null);
@@ -104,8 +110,12 @@
     hovered = null;
     if (sharedHover) review.hoveredKey = null;
   }
-  const keyboardKey = $derived(targets.some(p => p.spot.key === selected) ? selected : targets[0]?.spot.key);
-  const samples = $derived([...new Set(marks.filter(m => m.point || m.polygon?.length || m.path?.some(Boolean)).map(m => m.spot.sampleName))]);
+  const pointTargets = $derived(targets.filter(t => visibleKeys.has(t.spot.key)));
+  const keyboardKey = $derived(pointTargets.some(p => p.spot.key === selected) ? selected : pointTargets[0]?.spot.key);
+  $effect(() => {
+    if (hovered && !visibleKeys.has(hovered.key)) clearPointHover();
+    if (menuSpot && !visibleKeys.has(menuSpot.key)) { closeMenu(); menuSpot = null; }
+  });
   $effect(() => {
     if (!visible() || !host)
       return;
@@ -123,10 +133,10 @@
     // Axes follow the data: points and paths first. An ellipse widens them only
     // when it is no larger than the spread of the points (a badly measured spot
     // must not squash the others). The reference curve follows the resulting view.
-    const core = [...marks.flatMap(m => [...(m.point ? [m.point] : []), ...(m.path ?? [])]), ...bands.flatMap(b => [...b.upper, ...b.lower])].filter(valid);
+    const core = [...data.marks.flatMap(m => [...(m.point ? [m.point] : []), ...(m.path ?? [])]), ...data.bands.flatMap(b => [...b.upper, ...b.lower])].filter(valid);
     const span = (pts: Point[], d: number) => pts.length ? Math.max(...pts.map(p => p[d])) - Math.min(...pts.map(p => p[d])) : 0;
     const sx = span(core, 0), sy = span(core, 1);
-    const ellipses = marks.flatMap(m => {
+    const ellipses = data.marks.flatMap(m => {
       const poly = (m.polygon ?? []).filter(valid);
       if (!poly.length) return [];
       if (core.length > 1 && (span(poly, 0) > Math.max(sx, 1e-12) || span(poly, 1) > Math.max(sy, 1e-12))) return [];
@@ -155,7 +165,7 @@
     return { x: extent(0, logX), y: extent(1, logY) };
   });
   const bounds = $derived(viewport ?? fullBounds);
-  const guides = $derived(guidesForBounds?.(bounds) ?? []);
+  const guides = $derived(plotVisibility({ marks: [], guides: guidesForBounds?.(bounds), hidden: hiddenKeys }).guides);
   function zoom(factor: number, anchor: Point = [0.5, 0.5]) {
     viewport = zoomBounds(bounds, factor, anchor, zoomAxis);
   }
@@ -188,15 +198,22 @@
     };
     const draw = (u: uPlot) => {
       const ctx = u.ctx, dpr = u.ctx.canvas.width / u.width;
+      const drawn: DrawnSummary = Object.create(null);
+      const count = (series: string, kind: keyof DrawnCounts, n = 1) => {
+        const counts = drawn[series] ??= { points: 0, ellipses: 0, paths: 0, bands: 0, rings: 0, labels: 0 };
+        counts[kind] += n;
+      };
       ctx.save();
       ctx.beginPath();
       ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height);
       ctx.clip();
-      for (const b of bands) {
+      for (const b of data.bands) {
         // Keep null gaps: never bridge a missing stored sweep value.
         let upper: Point[] = [], lower: Point[] = [];
+        let painted = false;
         const flush = () => { if (upper.length) {
           path(u, [...upper, ...lower.reverse()], true);
+          painted = true;
           ctx.fillStyle = b.color;
           ctx.globalAlpha = 0.15;
           ctx.fill();
@@ -208,15 +225,19 @@
         else
           flush(); });
         flush();
+        if (painted) count(b.seriesKey ?? '__unowned__', 'bands');
         ctx.globalAlpha = 1;
       }
       ctx.strokeStyle = axis;
       ctx.lineWidth = dpr;
       const labels: Point[] = [];
       for (const guide of guides) {
+        const series = guide.seriesKey ?? '__reference__';
         path(u, guide.path);
         ctx.stroke();
+        if (guide.path.some(valid)) count(series, 'paths');
         if (guide.point && valid(guide.point)) {
+          count(series, 'points');
           const [x, y] = pixel(u, guide.point);
           ctx.beginPath();
           ctx.arc(x, y, 2 * dpr, 0, 2 * Math.PI);
@@ -231,40 +252,47 @@
           if (x >= u.bbox.left && x < u.bbox.left + u.bbox.width && y >= u.bbox.top && y < u.bbox.top + u.bbox.height &&
               labels.every(([px, py]) => Math.abs(labelX - px) > 58 * dpr || Math.abs(labelY - py) > 14 * dpr)) {
             ctx.fillText(label, labelX, labelY);
+            if (label) count(series, 'labels');
             labels.push([labelX, labelY]);
           }
         }
       }
       const hoverKey = sharedHover ? untrack(() => review.hoveredKey) : null;
       const priority = (m: Mark) => m.spot.key === hoverKey ? 2 : m.spot.key === selected || m.boxed ? 1 : 0;
-      const emphasis = marks.some(m => m.spot.key === selected || m.boxed);
-      for (const mark of [...marks].sort((a,b)=>priority(a)-priority(b))) {
+      const emphasis = data.marks.some(m => m.spot.key === selected || m.boxed);
+      for (const mark of [...data.marks].sort((a,b)=>priority(a)-priority(b))) {
         const active = mark.spot.key === selected || mark.boxed;
         const highlighted = mark.spot.key === hoverKey;
         ctx.globalAlpha = emphasis && !active && !highlighted ? 0.45 : 1;
         ctx.strokeStyle = color(mark.spot.sampleName);
         ctx.fillStyle = ctx.strokeStyle;
         ctx.lineWidth = (active || highlighted ? 2.5 : 1.2) * dpr;
+        const series = mark.seriesKey ?? mark.spot.sampleName;
         if (mark.path) {
+          if (mark.path.some(valid)) count(series, 'paths');
           path(u, mark.path);
           ctx.stroke();
           if (active || highlighted) {
             for (const p of mark.path.filter(valid)) {
               const [x, y] = pixel(u, p);
               ctx.beginPath(); ctx.arc(x, y, 4 * dpr, 0, 2 * Math.PI); ctx.stroke();
+              count(series, 'rings');
             }
           }
         }
         if (mark.polygon) {
+          if (mark.polygon.some(valid)) count(series, 'ellipses');
           path(u, mark.polygon, true);
           ctx.stroke();
         }
         if (valid(mark.point)) {
+          count(series, 'points');
           const [x, y] = pixel(u, mark.point);
           ctx.beginPath();
           ctx.arc(x, y, 3 * dpr, 0, 2 * Math.PI);
           ctx.fill();
           if (active || highlighted) {
+            count(series, 'rings', 2);
             ctx.beginPath();
             ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI);
             ctx.stroke();
@@ -278,6 +306,8 @@
         }
       }
       ctx.restore();
+      // Serialize once per draw, with one record per series (never per spot).
+      if (chart) chart.dataset.drawn = JSON.stringify(drawn);
     };
     // Keyboard and pointer targets over each point, placed after uPlot has laid
     // out (its first layout runs in a microtask), relative to the chart box.
@@ -289,7 +319,7 @@
     const updateTargets = (u: uPlot) => {
       if (!chart) return;
       const o = u.over.getBoundingClientRect(), c = chart.getBoundingClientRect();
-      const next = (sharedHover ? marks : []).flatMap(m => {
+      const next = (sharedHover ? data.marks : []).flatMap(m => {
         const p = m.point ?? m.path?.find(valid);
         if (!valid(p)) return [];
         const x = o.left - c.left + u.valToPos(p[0], 'x'), y = o.top - c.top + u.valToPos(p[1], 'y');
@@ -314,7 +344,7 @@
       if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
       let closest: ReviewSpot | null = null, distance = Infinity;
       const position = (p: Point): Point => [plot.valToPos(p[0], 'x'), plot.valToPos(p[1], 'y')];
-      for (const m of marks) {
+      for (const m of data.marks) {
         const pts = (m.point ? [m.point] : m.path ?? []).filter(valid);
         for (const p of pts) {
           const [px, py] = position(p), d = Math.hypot(x - px, y - py);
@@ -359,7 +389,7 @@
     const contextmenu = (e: MouseEvent) => {
       if (!sharedHover) return;
       const key = (e.target as HTMLElement | null)?.dataset.pointKey;
-      const spot = marks.find(m => m.spot.key === key)?.spot ?? hit(e, false);
+      const spot = data.marks.find(m => m.spot.key === key)?.spot ?? hit(e, false);
       if (!spot) return;
       const anchor = [...(chart?.querySelectorAll<HTMLElement>('.point-target') ?? [])].find(n => n.dataset.pointKey === spot.key);
       if (!anchor) return;
@@ -449,9 +479,8 @@
   let refreshTargets = () => {};
   $effect(() => {
     const plot = instance, { x, y } = bounds, w = width, h = height;
-    void marks;
+    void data;
     void guides;
-    void bands;
     if (!plot) return;
     untrack(() => {
       plot.batch(() => {
@@ -473,8 +502,8 @@
   </label>
 {/snippet}
 {@render controls?.(secondaryNavigation)}
-<div class="chart" class:navigable={!!onbox} class:panning={tool === 'pan'} bind:this={chart} data-testid="review-plot" data-viewport={JSON.stringify(bounds)} data-point-count={targets.length} data-hovered-key={sharedHover ? review.hoveredKey ?? '' : ''}>
-  {#each targets as t (t.spot.key)}
+<div class="chart" class:navigable={!!onbox} class:panning={tool === 'pan'} bind:this={chart} data-testid="review-plot" data-viewport={JSON.stringify(bounds)} data-drawn={'{}'} data-point-count={pointTargets.length} data-hovered-key={sharedHover ? review.hoveredKey ?? '' : ''}>
+  {#each pointTargets as t (t.spot.key)}
     <button class="point-target" aria-haspopup="menu" aria-label={`Select ${t.spot.label}`} tabindex={keyboardKey === t.spot.key ? 0 : -1} data-point-key={t.spot.key} data-sample={t.spot.sampleName} data-selected={selected===t.spot.key} data-hovered={sharedHover && review.hoveredKey === t.spot.key} style:left="{t.x}px" style:top="{t.y}px" oncontextmenu={e => { e.preventDefault(); e.stopPropagation(); openMenu(t.spot, e.currentTarget); }} onkeydown={e => { if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); e.stopPropagation(); openMenu(t.spot, e.currentTarget); } }} onclick={()=>onselect(t.spot)} onmouseenter={()=>pointHover(t)} onmouseleave={clearPointHover} onfocus={()=>pointHover(t)} onblur={clearPointHover}></button>
   {/each}
   <div class="canvas" bind:this={host}></div>
@@ -482,7 +511,7 @@
     <div class="selection-box" style:left="{Math.min(box.start[0], box.end[0])}px" style:top="{Math.min(box.start[1], box.end[1])}px"
       style:width="{Math.abs(box.start[0] - box.end[0])}px" style:height="{Math.abs(box.start[1] - box.end[1])}px"></div>
   {/if}
-  {#if hovered}<div class="tooltip small" style:left="{tooltip.x}px" style:top="{tooltip.y}px">{sharedHover ? hovered.label : hovered.sampleName}{#if sharedHover && hovered.date}<br />{dateLabel(hovered)} Ma{/if}</div>{/if}
+  {#if hovered && visibleKeys.has(hovered.key)}<div class="tooltip small" style:left="{tooltip.x}px" style:top="{tooltip.y}px">{sharedHover ? hovered.label : hovered.sampleName}{#if sharedHover && hovered.date}<br />{dateLabel(hovered)} Ma{/if}</div>{/if}
 </div>
 <div popover="manual" role="menu" tabindex="-1" aria-label="Spot actions" class="panel stack spot-menu" bind:this={menu} use:containedPopover={{ anchor: () => menuAnchor, w: 220, h: ontoggle ? 190 : 150 }} onkeydown={menuKey}>
   <button class="btn" role="menuitem" disabled={!menuSpot?.atlasProjectId} title={menuSpot?.atlasProjectId ? 'Edit in grainatlas (E)' : 'No published images'} onclick={() => act('atlas')}>Edit in grainatlas <kbd>E</kbd></button>
@@ -500,8 +529,12 @@
     <button class="chip" title="Fit all visible spots" onclick={() => viewport = null}>Fit all</button>
   </div>
 {/if}
-{#if legend}<div class="legend small" aria-label="Sample legend">{#each samples as sample}<span><i style:background={color(sample)}></i>{sample}</span>{/each}</div>{/if}
-{#if marks.length === 0}<p class="muted small">No stored values for these axes.</p>{/if}
+{#if legend}<div class="legend small" aria-label="Sample legend">{#each data.legend as sample (sample.key)}
+  <button class="chip" class:dimmed={!sample.shown} aria-pressed={sample.shown} aria-label={`${sample.shown ? 'Hide' : 'Show'} ${sample.name}`}
+    title="Click to toggle · Shift-click to toggle a range · Alt/Option-click or Alt+Enter/Space to show only this sample"
+    onclick={e => visibility?.toggle(sample.key, e)} onkeydown={e => visibility?.keydown(sample.key, e)}><i style:background={color(sample.name)}></i>{sample.name}</button>
+{/each}</div>{/if}
+{#if data.marks.length === 0}<p class="muted small">No stored values for these axes.</p>{/if}
 <style>
   .spot-menu {background:var(--plot-bg);color:var(--text);gap:4px;padding:6px;border:1px solid var(--hairline);}
   .spot-menu:not(:popover-open) {display:none;} .spot-menu .btn {white-space:normal;justify-content:space-between;text-align:left;font-size:0.78rem;}
@@ -521,7 +554,8 @@
   .zoom-axis select {font-size:0.72rem;padding:2px 4px;}
   .canvas { position:absolute; inset:0; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 12px; padding:4px; overflow-wrap:anywhere; }
-  .legend span { display:inline-flex; gap:5px; align-items:center; }
+  .legend .chip { gap:5px; padding:2px 6px; font-size:0.72rem; }
+  .legend .dimmed {opacity:0.45;}
   i { width:10px;height:10px;flex:none;border-radius:50%; }
   .tooltip { position:absolute;pointer-events:none;background:var(--plot-bg);border:1px solid var(--hairline);padding:5px;max-width:190px;overflow-wrap:anywhere; }
   @container (max-width:400px) {.navigation .chip {padding:3px 5px;font-size:0.7rem;}}

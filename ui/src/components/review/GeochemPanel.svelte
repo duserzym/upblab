@@ -31,7 +31,7 @@
     {/each}
   </div>
   {#if missing.length}<div class="empty muted" role="status">{#each missing as q}<p>{q.label} is not stored for this run</p>{/each}</div>
-  {:else}<Plot {marks} {selected} {onselect} legend={false} xLabel={panel.type==='ree'?'Element':axisLabel(x)} yLabel={panel.type==='ree'?'Stored ppm / CI':axisLabel(y)} logX={panel.type!=='ree'&&panel.logX} logY={panel.type==='ree'||panel.logY} xTicks={panel.type==='ree'?REE:[]} />{/if}
+  {:else}<Plot {marks} {selected} {onselect} xLabel={panel.type==='ree'?'Element':axisLabel(x)} yLabel={panel.type==='ree'?'Stored ppm / CI':axisLabel(y)} logX={panel.type!=='ree'&&panel.logX} logY={panel.type==='ree'||panel.logY} xTicks={panel.type==='ree'?REE:[]} />{/if}
   {#if panel.type==='ree'}<p class="small muted citation">{CI_LEGEND}</p>{/if}
 </article>
 <style>

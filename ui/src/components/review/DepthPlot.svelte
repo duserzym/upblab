@@ -32,7 +32,13 @@
     return ages.length ? ages : catalogue[0]?.keys.slice(0, 1) ?? [];
   });
   const visible = $derived((chosen ?? defaults).filter(c => columns.includes(c)));
+  const hiddenColumns = $derived.by(() => {
+    const hidden = new Set(columns);
+    for (const column of visible) hidden.delete(column);
+    return hidden;
+  });
   const marks = $derived(profile && review.selected && xKey ? visible.map(c => ({
+    seriesKey: c,
     spot: { ...review.selected!, key: c, sampleName: depthColumnLabel(c) },
     path: profile.data[xKey].map((v, i) => {
       const a = number(v), b = number(profile.data[c]?.[i]);
@@ -46,7 +52,7 @@
       const a = number(v), b = number(profile.data[c]?.[i]), e = number(profile.data[uncertainty]?.[i]);
       return a === null || b === null || e === null ? null : [a, b + sign * e] as Point;
     });
-    return [{ upper: bound(1), lower: bound(-1), color: color(depthColumnLabel(c)) }];
+    return [{ seriesKey: c, upper: bound(1), lower: bound(-1), color: color(depthColumnLabel(c)) }];
   }) : []);
   function toggle(column: string, checked: boolean) {
     const previous = chosen ?? defaults;
@@ -107,7 +113,7 @@
             {/each}
           </div>
         {/if}
-        <Plot sharedHover={false} legend={false} {marks} {bands} selected={null} onselect={()=>{}} xLabel={axisLabel(xKey)} yLabel="Stored values" />
+        <Plot sharedHover={false} legend={false} {marks} {bands} hidden={hiddenColumns} selected={null} onselect={()=>{}} xLabel={axisLabel(xKey)} yLabel="Stored values" />
       </div>
     </div>
   </div>

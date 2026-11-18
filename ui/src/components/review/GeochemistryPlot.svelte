@@ -6,8 +6,8 @@
   import { axisLabel, catalogue, resolveQuantity } from '../../lib/geochem';
   import { MINERALS, MAX_PANELS, applyPreset, gridColumns, loadBoards, saveBoards, mineralFor, preset, panel, type Mineral, type Panel } from '../../lib/geochem-board';
   import type { ReviewSpot } from '../../lib/review-data';
-  let { rows, catalogueRows = rows, selected, material, onselect }: {
-    rows: ReviewSpot[]; catalogueRows?: ReviewSpot[]; selected: string | null; material?: string; onselect: (s: ReviewSpot) => void;
+  let { rows, catalogueRows = rows, shownCount = rows.length, selected, material, onselect }: {
+    rows: ReviewSpot[]; catalogueRows?: ReviewSpot[]; shownCount?: number; selected: string | null; material?: string; onselect: (s: ReviewSpot) => void;
   } = $props();
   let mineral = $state<Mineral>('Zircon');
   let boards = $state(loadBoards());
@@ -77,7 +77,7 @@
   {/key}
 {/if}
 <div class="board" bind:this={host} data-testid="geochem-board" data-columns={columns} data-mineral={mineral} data-panel-count={panels.length}>
-  {#if !rows.length}<p class="muted empty" role="status">No samples shown</p>{/if}
+  {#if !shownCount}<p class="muted empty" role="status">No samples shown</p>{/if}
   <div class="grid" class:maximized={!!maximized} style:--columns={columns}>
     {#each shown as p (p.id)}<GeochemPanel panel={p} pickerAxis={picker?.panel===p.id?picker.axis:undefined} onchoose={(axis,anchor)=>choose(p.id,axis,anchor)} {rows} {quantities} {selected} {onselect} maximized={maximized===p.id} onchange={replace} onmaximize={()=>{picker=null;maximized=maximized===p.id?null:p.id;}} onremove={()=>remove(p.id)} />{/each}
     {#if !maximized && panels.length<MAX_PANELS}<button class="add" onclick={()=>update([...panels,panel('Th','U')])}><span aria-hidden="true">＋</span> Add panel</button>{/if}

@@ -2,17 +2,23 @@ import { number, type ReviewSpot } from '../../lib/review-data';
 import { ellipse, type Point } from '../../lib/concordia';
 export interface Mark {
   spot: ReviewSpot;
+  seriesKey?: string;
   point?: Point;
   boxed?: boolean;
   path?: (Point | null)[];
   polygon?: Point[];
 }
 export interface Guide {
+  seriesKey?: string;
+  spotKey?: string;
   path: Point[];
   label?: string;
   point?: Point;
 }
 export interface Band {
+  /** The owning sample key/name or depth column, shared with its trace. */
+  seriesKey?: string;
+  spotKey?: string;
   upper: (Point | null)[];
   lower: (Point | null)[];
   color: string;
