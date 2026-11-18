@@ -154,19 +154,25 @@ details (cursor, revision, outbox entries, raw errors) live behind the chip.
 
 ## Migration (grow, do not replace)
 
-1. **UPb Lab** (now): the read cache already has the mirror layout per account
+1. **UPb Lab tiles** (first heavy-file item, found 2026-11-18): Review's SEM
+   images come from the built-in GrainAtlas viewer and are not saved, so they
+   are blank whenever the server is unreachable even though Home and Review
+   data show. Save `atlas.json`, `project.json` and the viewed tiles by
+   SHA-256 with the metadata, and bundle a GrainAtlas module that has the
+   image cache (`f0f2dba` or later).
+2. **UPb Lab** (now): the read cache already has the mirror layout per account
    and server; it becomes the metadata tier when the change feed exists (the
    prefetch list becomes "follow the feed"). Add heavy files through a local
    file store keyed by SHA-256, shared with the Images tab.
-2. **GrainAtlas**: drafts and quiet sync are the outbox; the IndexedDB image
+3. **GrainAtlas**: drafts and quiet sync are the outbox; the IndexedDB image
    cache (keyed by atlas.json SHA-256) becomes the heavy-file tier; add keeping
    atlas.json and project.json so published atlases open offline.
-3. **Studio**: the session cache (`~/UPbRPy/sessions`) is the heavy tier for
+4. **Studio**: the session cache (`~/UPbRPy/sessions`) is the heavy tier for
    sessions; submit retry (calibration-panel session) becomes an outbox with
    a stored body and key; `upbr://session/<id>` falls back to the cached bundle
    when the server is unreachable (`find_cached_session` exists, unused).
-4. **UPbDB**: ADR-0011 (section 5).
-5. A shared spec (`docs/mirror-contract.md` in UPb Lab, next to WORKFLOW.md)
+5. **UPbDB**: ADR-0011 (section 5).
+6. A shared spec (`docs/mirror-contract.md` in UPb Lab, next to WORKFLOW.md)
    with the outbox entry format, status words and conflict prompts, so the
    three apps behave the same.
 
