@@ -9,7 +9,7 @@ async function home(page: Page, store: Record<string, unknown> = {}, desktop = t
   await page.route('**/v1/**', route => {
     const url = new URL(route.request().url());
     const body = url.pathname === '/v1/accounts/me' ? { username: 'demo', display_name: 'Demo analyst' }
-      : largeHomeFixtures[url.pathname + url.search];
+      : largeHomeFixtures[url.pathname + url.search] ?? (url.searchParams.get('limit') && !url.searchParams.has('cursor') ? largeHomeFixtures[url.pathname] : undefined);
     return route.fulfill({ status: body === undefined ? 404 : 200, json: body ?? {},
       headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Accept' } });
   });
