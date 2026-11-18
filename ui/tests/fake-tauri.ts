@@ -14,7 +14,7 @@ export interface FakeOptions {
   peopleAllowed?: boolean;
   cached?: { asOf: string; reason: 'unreachable' | 'server_error'; detail?: string };
   apiReplies?: Record<string, { offlineCopy?: string; status: number; body: unknown; cached?: { asOf: string; reason: 'unreachable' | 'server_error'; detail?: string }; nextCursor?: string }>;
-  localSessions?: { path: string; key: string; id: string | null; material: string | null; kind: string | null; started_at: string | null; acquisitions: number; has_project: boolean; modified: string }[];
+  localSessions?: { path: string; key: string; format?: string | null; openable?: boolean; id: string | null; material: string | null; kind: string | null; started_at: string | null; acquisitions: number; has_project: boolean; modified: string }[];
   cacheStatus?: { entries: number; bytes: number; newest: string | null; oldest: string | null };
   grainatlasLaunchErrors?: string[];
   studioFound?: boolean;

@@ -5,28 +5,41 @@ import { reviewFixtures, session } from './fixtures/review';
 
 const asOf = '2026-11-17T21:49:00Z';
 const local = { path: '/Users/lab/UPbRPy/sessions/invented-local', key: 'Invented local zircon', id: session.id,
+  format: 'upbdb-session-bundle', openable: true,
   material: 'zircon', kind: 'sample', started_at: asOf, acquisitions: 12, has_project: true, modified: asOf };
+const oldLocal = { ...local, path: '/Users/lab/UPbRPy/sessions/invented-old', key: 'Invented pre-rename zircon',
+  id: 'invented-old-session', format: 'laicpmsdb-session-bundle', openable: false };
 for (const [width, height] of [[1440,900], [1280,800]]) {
   test(`saved data and local sessions fit ${width} x ${height}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
     await page.addInitScript(installFakeTauri, {
       store: { mode: 'server', serverUrl: 'https://invented.invalid', lastTab: 'home', theme: 'light', themeChosen: true },
       signedIn: true, offline: true, peopleAllowed: true, cached: { asOf, reason: 'unreachable' as const, detail: 'server unreachable: connection failed' },
-      fixtures: reviewFixtures, localSessions: [local], cacheStatus: { entries: 10, bytes: 12345, newest: asOf, oldest: asOf },
+      fixtures: reviewFixtures, localSessions: width === 1440 ? [local, oldLocal] : [local], cacheStatus: { entries: 10, bytes: 12345, newest: asOf, oldest: asOf },
     });
     await page.goto('./');
     const banner = page.getByTestId('offline-banner');
     await expect(banner).toContainText('Offline: showing data saved on this computer');
     await expect(page.getByTestId('session-card')).toHaveCount(1);
     await expect(page.getByTestId('session-card')).toContainText('Local copy');
-    await expect(page.getByTestId('local-session-card')).toContainText('Invented local zircon');
+    const localCard = page.getByTestId('local-session-card').filter({ hasText: local.key });
+    await expect(localCard).toContainText('Invented local zircon');
+    if (width === 1440) {
+      const oldCard = page.getByTestId('local-session-card').filter({ hasText: oldLocal.key });
+      const note = oldCard.getByText('Downloaded before the UPbDB rename. This Studio cannot open it yet.', { exact: true });
+      await expect(note).toBeVisible();
+      await expect(note).toHaveAttribute('title', oldLocal.path);
+      await expect(oldCard.getByRole('button', { name: 'Open in UPbRPy Studio' })).toHaveCount(0);
+      const localSection = page.getByRole('region', { name: 'On this computer', exact: true });
+      await expect(localSection.locator('.count')).toHaveText('2');
+    }
     await expect(page.getByTestId('status-pills')).toContainText('Offline · saved data');
     await expect(page.getByRole('button', { name: 'Demo analyst', exact: true })).toBeVisible();
     await banner.getByRole('button', { name: 'Retry now' }).click();
     await expect(banner).toContainText('Retrying in 30 s');
     expect(await problems(page, 'Offline Home')).toEqual([]);
     await page.screenshot({ path: testInfo.outputPath(`offline-home-${width}x${height}.png`) });
-    await page.getByTestId('local-session-card').getByRole('button', { name: 'Open in UPbRPy Studio' }).click();
+    await localCard.getByRole('button', { name: 'Open in UPbRPy Studio' }).click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.some(([cmd]) => cmd === 'studio_open_local'))).toBe(true);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     const saved = page.getByTestId('saved-data-settings');

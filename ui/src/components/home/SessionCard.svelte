@@ -52,8 +52,8 @@
     <p class="run small" title={status.text}><span class="dot" style:background={`var(--${status.tone})`} aria-hidden="true"></span><span class="ellipsis">{status.text}</span></p>
     <div class="controls">
       {#if row.runs && row.runs > 0}<button class="btn" onclick={(e) => { e.stopPropagation(); shell.show('review'); void review.open({ kind: 'session', id: s.id }); }}>Review</button>{/if}
-      {#if local}<button class="btn" disabled={!!localInventory.opening} onclick={() => void localInventory.open(local)}>Open in UPbRPy Studio</button>
-      {:else}<button class="btn" onclick={(e) => { e.stopPropagation(); void openInStudio({ session: s.id, run: null }, 'home'); }}>Reduce</button>{/if}
+      {#if local && local.openable !== false}<button class="btn" disabled={!!localInventory.opening} onclick={() => void localInventory.open(local)}>Open in UPbRPy Studio</button>
+      {:else if !local}<button class="btn" onclick={(e) => { e.stopPropagation(); void openInStudio({ session: s.id, run: null }, 'home'); }}>Reduce</button>{/if}
     </div>
   </div>
 </article>

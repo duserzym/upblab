@@ -216,6 +216,7 @@ export const savedReads = {
   prefetch: (target: AuthTarget, paths: string[]) => invoke<Prefetched>('cache_prefetch', { target, paths }),
 };
 export interface LocalSession {
+  format: string | null; openable: boolean;
   path: string; key: string; id: string | null; material: string | null; kind: string | null;
   started_at: string | null; acquisitions: number; has_project: boolean; modified: string;
 }

@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Serialize)]
 pub struct LocalSession {
     pub path: String,
+    pub format: Option<String>,
+    pub openable: bool,
     pub key: String,
     pub id: Option<String>,
     pub material: Option<String>,
@@ -72,13 +74,13 @@ fn inspect(root: &Path, folder: &Path) -> Option<LocalSession> {
         }
     }
     let doc: toml::Value = toml::from_str(&header).ok()?;
-    // Studio also reads the older UPbDB spelling, and its earliest manifests
-    // omitted the format marker. Keep those local bundles visible as well.
-    if let Some(format) = doc.get("format") {
-        if !matches!(
-            format.as_str()?,
-            "laicpmsdb-session-bundle" | "upbdb-session-bundle"
-        ) {
+    let format = match doc.get("format") {
+        Some(value) => Some(value.as_str()?.chars().take(100).collect::<String>()),
+        None => None,
+    };
+    // Keep pre-rename bundles visible, although installed Studio cannot open them.
+    if let Some(format) = format.as_deref() {
+        if !matches!(format, "laicpmsdb-session-bundle" | "upbdb-session-bundle") {
             return None;
         }
     }
@@ -97,6 +99,10 @@ fn inspect(root: &Path, folder: &Path) -> Option<LocalSession> {
         .is_some_and(|p| p.parent() == Some(folder.as_path()) && p.is_file());
     Some(LocalSession {
         path: folder.to_string_lossy().into_owned(),
+        openable: format
+            .as_deref()
+            .is_none_or(|f| f == "upbdb-session-bundle"),
+        format,
         key,
         id: str_field("id"),
         material: str_field("material"),
@@ -111,6 +117,13 @@ fn inspect(root: &Path, folder: &Path) -> Option<LocalSession> {
         has_project,
         modified: modified.to_rfc3339_opts(SecondsFormat::Secs, true),
     })
+}
+pub(crate) fn studio_folder(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    let folder = validated(root, path)?;
+    if !inspect(root, &folder).is_some_and(|session| session.openable) {
+        return Err("This session was downloaded before the UPbDB rename; this version of UPbRPy Studio cannot open it yet.".into());
+    }
+    Ok(folder)
 }
 fn list(root: &Path) -> Result<Vec<LocalSession>, String> {
     let entries = match fs::read_dir(root) {
@@ -163,29 +176,46 @@ mod tests {
         assert_eq!(rows[0].id.as_deref(), Some("invented-id"));
     }
     #[test]
-    fn local_sessions_supports_studios_older_manifest_format() {
+    fn local_sessions_reports_format_and_studio_compatibility() {
         let dir = tempfile::tempdir().unwrap();
         let folder = bundle(dir.path(), "older");
         let manifest = folder.join("session_manifest.toml");
         let source = fs::read_to_string(&manifest).unwrap();
+        let rows = list(dir.path()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].format.as_deref(), Some("laicpmsdb-session-bundle"));
+        assert!(!rows[0].openable);
+        assert_eq!(studio_folder(dir.path(), &folder).unwrap_err(), "This session was downloaded before the UPbDB rename; this version of UPbRPy Studio cannot open it yet.");
         fs::write(
             &manifest,
             source.replace("laicpmsdb-session-bundle", "upbdb-session-bundle"),
         )
         .unwrap();
-        assert_eq!(list(dir.path()).unwrap().len(), 1);
+        let rows = list(dir.path()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].format.as_deref(), Some("upbdb-session-bundle"));
+        assert!(rows[0].openable);
+        assert_eq!(
+            studio_folder(dir.path(), &folder).unwrap(),
+            folder.canonicalize().unwrap()
+        );
         fs::write(
             &manifest,
             source.lines().skip(1).collect::<Vec<_>>().join("\n"),
         )
         .unwrap();
-        assert_eq!(list(dir.path()).unwrap().len(), 1);
+        let rows = list(dir.path()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].format, None);
+        assert!(rows[0].openable);
+        assert!(studio_folder(dir.path(), &folder).is_ok());
         fs::write(
             &manifest,
             source.replace("laicpmsdb-session-bundle", "unrelated-format"),
         )
         .unwrap();
         assert!(list(dir.path()).unwrap().is_empty());
+        assert!(studio_folder(dir.path(), &folder).is_err());
     }
     #[test]
     fn local_sessions_caps_folders_and_rejects_outside_and_nested_paths() {

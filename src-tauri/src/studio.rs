@@ -433,7 +433,7 @@ pub async fn studio_open_local(
 ) -> Result<Launched, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let folder =
-            crate::local_sessions::validated(&crate::local_sessions::root()?, Path::new(&path))?;
+            crate::local_sessions::studio_folder(&crate::local_sessions::root()?, Path::new(&path))?;
         let launcher = find(&config.unwrap_or_default())?;
         let folder = folder.to_string_lossy();
         let shown = launcher.describe(Some(&folder));

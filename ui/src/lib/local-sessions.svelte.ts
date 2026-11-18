@@ -16,6 +16,7 @@ export class LocalSessions {
     finally { this.loading = false; }
   }
   async open(row: LocalSession) {
+    if (row.openable === false) return;
     this.opening = row.path; this.error = '';
     try { await openLocalSession(row.path, shell.studioConfig); }
     catch (err) { this.error = `Could not open ${row.key}: ${String(err)}`; }

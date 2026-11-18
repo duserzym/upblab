@@ -283,7 +283,11 @@
                 <article class="glass panel stack local-session-card" data-testid="local-session-card">
                   <div class="row"><strong class="mono">{row.key}</strong><span class="chip">{row.material ?? 'Unspecified'}</span></div>
                   <p class="muted small">{day(row.started_at ?? row.modified)} · {row.acquisitions} analyses</p>
-                  <button class="btn small" disabled={!!localInventory.opening} onclick={() => void localInventory.open(row)}>Open in UPbRPy Studio</button>
+                  {#if row.openable === false}
+                    <p class="muted small" title={row.path}>Downloaded before the UPbDB rename. This Studio cannot open it yet.</p>
+                  {:else}
+                    <button class="btn small" disabled={!!localInventory.opening} onclick={() => void localInventory.open(row)}>Open in UPbRPy Studio</button>
+                  {/if}
                 </article>
               {/each}
             </SectionGrid>

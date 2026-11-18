@@ -17,3 +17,19 @@ it('opens local folders directly and surfaces launch failures inline', async () 
   await local.open(row); expect(mocks.open).toHaveBeenCalledWith('/invented/local', { path: '', checkout: '' });
   expect(local.error).toContain('Studio is missing'); expect(local.opening).toBe('');
 });
+it('preserves manifest compatibility fields and never opens old-format bundles', async () => {
+  const old = { path: '/invented/old', key: 'old', format: 'laicpmsdb-session-bundle', openable: false };
+  const current = { path: '/invented/current', key: 'current', format: 'upbdb-session-bundle', openable: true };
+  const earliest = { path: '/invented/earliest', key: 'earliest', format: null, openable: true };
+  mocks.list.mockResolvedValue([old, current, earliest]);
+  mocks.open.mockResolvedValue(undefined);
+  const local = new LocalSessions(); await local.load();
+  expect(local.rows).toEqual([old, current, earliest]);
+  await local.open(local.rows[0]);
+  expect(mocks.open).not.toHaveBeenCalled();
+  expect(local.opening).toBe(''); expect(local.error).toBe('');
+  await local.open(local.rows[1]); await local.open(local.rows[2]);
+  expect(mocks.open).toHaveBeenCalledTimes(2);
+  expect(mocks.open).toHaveBeenNthCalledWith(1, current.path, { path: '', checkout: '' });
+  expect(mocks.open).toHaveBeenNthCalledWith(2, earliest.path, { path: '', checkout: '' });
+});
