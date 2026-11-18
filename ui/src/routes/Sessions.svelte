@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { connectivity } from '../lib/connectivity.svelte';
   import { untrack } from 'svelte';
   import ModuleSurface from '../components/ModuleSurface.svelte';
   import LocalStatusPanel from '../components/LocalStatusPanel.svelte';
@@ -39,7 +40,7 @@
 
   $effect(() => {
     const url = appUrl;
-    if (!active || !settings.loaded || local || !shell.serverUrl) return;
+    if (!active || !settings.loaded || local || !shell.serverUrl || connectivity.state === 'offline' || connectivity.state === 'server-error') return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     // Retry quickly while down; re-check slowly while up so a stopped server is noticed.
@@ -69,6 +70,8 @@
     <div class="center">
       <p class="glass panel muted">No UPbDB server configured.</p>
     </div>
+  {:else if connectivity.state === 'offline' || connectivity.state === 'server-error'}
+    <div class="center"><p class="glass panel muted">This tab is UPbDB's own page and needs the server. Home and Review show the data saved on this computer.</p></div>
   {:else if status === 'reachable'}
     <ModuleSurface {module} {title} home={appUrl} target={shell.targets[module]} {active} />
   {:else}
@@ -80,7 +83,7 @@
         {:else}
           <div class="row"><span class="dot" style="background: var(--danger)"></span><h2>UPbDB server unreachable</h2></div>
           <p class="muted">
-            {unreachable} <code>{appUrl}</code>, but nothing answered there.
+            {unreachable} <code>{appUrl}</code>, but nothing answered there. This tab is UPbDB's own page and needs the server. Home and Review show the data saved on this computer.
           </p>
           {#if error}<p class="faint small mono">{error}</p>{/if}
           <ul class="muted small">

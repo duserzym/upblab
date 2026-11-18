@@ -7,9 +7,10 @@ const { editInAtlas, openInStudio, apps } = await import('./apps.svelte');
 const platform = await import('./platform');
 const { identity } = await import('./identity.svelte');
 const { shell } = await import('./shell.svelte');
+const { connectivity } = await import('./connectivity.svelte');
 const { appWatch } = await import('./app-watch.svelte');
 const target = { project: 'p', mount: 'm', spot: 's' };
-beforeEach(() => { vi.clearAllMocks(); apps.atlas = null; apps.studio = null; });
+beforeEach(() => { connectivity.reset(); vi.clearAllMocks(); apps.atlas = null; apps.studio = null; });
 it('hands off context and watches a successful atlas opener', async () => {
   await editInAtlas(target, 'review');
   expect(platform.launchGrainAtlas).toHaveBeenCalledWith('p', 'https://lab', 'CODE', undefined, 's', undefined);
@@ -53,6 +54,17 @@ it('prefers run context, retains acquisition and always marks the sender', async
   expect(shell.handleLink).toHaveBeenLastCalledWith('upbr://session/s?via=upblab', 'home');
   await openInStudio({ session: null, run: null }, 'review');
   expect(apps.studio?.state).toBe('failed');
+});
+it('opens GrainAtlas locally without minting a handoff for a read-only copy, and leaves Studio available', async () => {
+  connectivity.offlineCopy = 'invented copy';
+  await editInAtlas(target, 'review');
+  expect(identity.handoff).not.toHaveBeenCalled();
+  expect(platform.launchGrainAtlas).toHaveBeenCalledWith('p', undefined, undefined, undefined, 's', undefined);
+  expect(apps.atlas?.state).toBe('launched');
+  expect(connectivity.grainAtlasLocal).toBe(true);
+  expect(appWatch.atlas).not.toHaveBeenCalled();
+  await openInStudio({ session: 's', run: null }, 'review');
+  expect(shell.handleLink).toHaveBeenCalledWith('upbr://session/s?via=upblab', 'review');
 });
 it('opens the hosted build in a new window on web without minting a code', async () => {
   vi.resetModules();

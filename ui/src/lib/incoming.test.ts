@@ -1,3 +1,4 @@
+import { connectivity } from './connectivity.svelte';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { atlasStatusFixture } from '../../tests/fixtures/atlas-sync';
 import { atlasSync } from './atlas-sync.svelte';
@@ -26,6 +27,7 @@ const command: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 's', vi
 const types = (frame: { postMessage: ReturnType<typeof vi.fn> }) => frame.postMessage.mock.calls.map(call => call[0].command.type);
 
 beforeEach(() => {
+  connectivity.reset();
   atlasSync.v4 = false;
   atlasSync.status = null;
   frames.clear();
@@ -99,6 +101,17 @@ describe('sendCommand', () => {
     expect(await sendCommand('images', { type: 'set-presentation', presentation: 'viewer' })).toBe(true);
     expect(types(frame)).toEqual(['open-project', 'set-presentation']);
   });
+});
+
+it('strips copy server URLs from direct and previously queued Images commands', async () => {
+  const command: BridgeCommand = { type: 'focus-spot', project: 'p', spot: 's', server: 'https://copy.invalid' };
+  await sendCommand('images', command);
+  connectivity.offlineCopy = 'invented copy';
+  const frame = { postMessage: vi.fn() };
+  registerFrame('images', frame as unknown as Window);
+  expect(frame.postMessage.mock.calls[0][0].command).not.toHaveProperty('server');
+  await sendCommand('images', command);
+  expect(frame.postMessage.mock.calls.at(-1)![0].command).not.toHaveProperty('server');
 });
 
 describe('module selections', () => {

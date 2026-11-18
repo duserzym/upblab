@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Account, AuthState } from './platform';
-import { canManagePeople } from './people';
+import { canManagePeople, canShowPeopleTab } from './people';
 
 const signedIn = (account: Account | null, overrides: Partial<AuthState> = {}): AuthState => ({
   signedIn: true, offline: false, account, ...overrides,
@@ -30,4 +30,9 @@ describe('canManagePeople', () => {
     expect(canManagePeople(signedIn(account, { offline: true }))).toBe(false);
     expect(canManagePeople(signedIn(null))).toBe(false);
   });
+});
+
+it('keeps a retained staff tab visible offline, where the shell shows a server-required note', () => {
+  expect(canShowPeopleTab(signedIn({ username: 'demo', can_manage_people: true }, { offline: true }))).toBe(true);
+  expect(canShowPeopleTab(signedIn({ username: 'demo', can_manage_people: false }, { offline: true }))).toBe(false);
 });

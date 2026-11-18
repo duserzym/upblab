@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { localInventory } from '../../lib/local-sessions.svelte';
+  import type { LocalSession } from '../../lib/platform';
   import { openInStudio } from '../../lib/apps.svelte';
   import type { SessionRow } from '../../lib/overview.svelte';
   import MineralIcon from './MineralIcon.svelte';
@@ -6,7 +8,7 @@
   import { day, kindColor, kindLabel, kindSegments, runStatus } from '../../lib/home';
   import { shell } from '../../lib/shell.svelte';
   import { review } from '../../lib/review.svelte';
-  let { row, maximum }: { row: SessionRow; maximum: number } = $props();
+  let { row, maximum, local }: { row: SessionRow; maximum: number; local?: LocalSession } = $props();
   const s = $derived(row.session);
   const status = $derived(runStatus(row));
   const segments = $derived(kindSegments(s.acquisition_count, maximum, row.kindCounts));
@@ -22,6 +24,7 @@
   </div>
   <div class="byline">
     <p class="muted small byline-text" title={byline}>{#if date || people}{#if date}<span class="date">{date}</span>{/if}{#if date && people}<span aria-hidden="true">·</span>{/if}{#if people}<span class="ellipsis">{people}</span>{/if}{:else}<span class="ellipsis">{byline}</span>{/if}</p>
+    {#if local}<span class="chip">Local copy</span>{/if}
     {#if row.access}<span class="chip access" title={row.access.owner ? `Session owner: ${row.access.owner}` : 'Your session access'}>{row.access.role}</span>{/if}
   </div>
   <details class="spot-details">
@@ -49,7 +52,8 @@
     <p class="run small" title={status.text}><span class="dot" style:background={`var(--${status.tone})`} aria-hidden="true"></span><span class="ellipsis">{status.text}</span></p>
     <div class="controls">
       {#if row.runs && row.runs > 0}<button class="btn" onclick={(e) => { e.stopPropagation(); shell.show('review'); void review.open({ kind: 'session', id: s.id }); }}>Review</button>{/if}
-      <button class="btn" onclick={(e) => { e.stopPropagation(); void openInStudio({ session: s.id, run: null }, 'home'); }}>Reduce</button>
+      {#if local}<button class="btn" disabled={!!localInventory.opening} onclick={() => void localInventory.open(local)}>Open in UPbRPy Studio</button>
+      {:else}<button class="btn" onclick={(e) => { e.stopPropagation(); void openInStudio({ session: s.id, run: null }, 'home'); }}>Reduce</button>{/if}
     </div>
   </div>
 </article>
@@ -83,6 +87,6 @@
   .footer { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
   .run { display: flex; align-items: center; gap: var(--space-1); min-width: 0; flex: 1 1 0; font-size: 0.74rem; }
   .dot { width: 0.45rem; height: 0.45rem; }
-  .controls { position: relative; z-index: 1; display: flex; gap: var(--space-1); margin-left: auto; }
+  .controls { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
   .btn { padding: 0.1rem var(--space-2); font-size: 0.74rem; }
 </style>

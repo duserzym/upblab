@@ -2,6 +2,7 @@
 // desktop, and as a plain page served by UPbDB at /desk/. Everything that
 // differs between them goes through this file.
 
+import { connectivity } from './connectivity.svelte';
 import type { BridgeCommand } from '@lab/bridge';
 import type { ModuleTab } from './links';
 
@@ -189,6 +190,7 @@ export interface Account {
 
 /** Mirrors `AuthState` in src-tauri/src/auth.rs. */
 export interface AuthState {
+  offlineCopy?: string;
   signedIn: boolean;
   account: Account | null;
   /** A stored token, but the server could not confirm it (unreachable). */
@@ -197,11 +199,29 @@ export interface AuthState {
 }
 
 export interface ApiReply<T = unknown> {
+  offlineCopy?: string;
   status: number;
   body: T;
   /** A non-JSON response, with status and a short, credential-free excerpt. */
   error?: string;
+  cached?: { asOf: string; reason: 'unreachable' | 'server_error'; detail?: string };
+  nextCursor?: string;
 }
+
+export interface CacheStatus { entries: number; bytes: number; newest: string | null; oldest: string | null }
+export interface Prefetched { fetched: number; unchanged: number; failed: number }
+export const savedReads = {
+  status: (target: AuthTarget) => invoke<CacheStatus>('cache_status', { target }),
+  clear: (target: AuthTarget) => invoke<void>('cache_clear', { target }),
+  prefetch: (target: AuthTarget, paths: string[]) => invoke<Prefetched>('cache_prefetch', { target, paths }),
+};
+export interface LocalSession {
+  path: string; key: string; id: string | null; material: string | null; kind: string | null;
+  started_at: string | null; acquisitions: number; has_project: boolean; modified: string;
+}
+export const localSessions = () => isDesktop ? invoke<LocalSession[]>('local_sessions') : Promise.resolve([]);
+export const openLocalSession = (path: string, config: StudioConfig) =>
+  invoke<{ command: string }>('studio_open_local', { path, config: studioArgs(config) });
 
 /** Desktop: the token stays in Rust and the OS keychain (src-tauri/src/auth.rs). */
 export const desktopAuth = {
@@ -275,6 +295,7 @@ export function pickSessionPaths(): Promise<string[]> {
 
 /** Hand local images and project paths to the standalone application. */
 export async function openGrainAtlasPaths(paths: string[]): Promise<void> {
+  if (connectivity.offlineCopy) connectivity.grainAtlasLocal = true;
   await invoke('grainatlas_open_paths', { paths });
 }
 
@@ -290,7 +311,8 @@ export async function takeInbox(): Promise<InboxNotice[]> {
 
 /** One-time code is passed only through IPC, never logged or retained. */
 
-export async function launchGrainAtlas(project: string, server: string, code: string, revision?: number, spot?: string | null, grain?: string | null): Promise<void> {
+export async function launchGrainAtlas(project: string, server: string | undefined, code: string | undefined, revision?: number, spot?: string | null, grain?: string | null): Promise<void> {
   if (!isDesktop) throw new Error('GrainAtlas can only be launched from the desktop app.');
-  await invoke('grainatlas_launch', { project, server, code, ...(revision === undefined ? {} : { revision }), ...(spot ? { spot } : grain ? { grain } : {}) });
+  if (connectivity.offlineCopy) { server = undefined; code = undefined; connectivity.grainAtlasLocal = true; }
+  await invoke('grainatlas_launch', { project, ...(server ? { server, code } : {}), ...(revision === undefined ? {} : { revision }), ...(spot ? { spot } : grain ? { grain } : {}) });
 }

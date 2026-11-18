@@ -1,3 +1,4 @@
+import { connectivity } from './connectivity.svelte';
 import { identity } from './identity.svelte';
 import { isDesktop, launchGrainAtlas } from './platform';
 import { atlasEditorUrl } from './links';
@@ -24,6 +25,17 @@ export async function editInAtlas(target: AtlasTarget, from: string) {
   apps.atlas = request;
   try {
     if (!target.project) throw new Error('No grainatlas project is available for this mount.');
+    if (connectivity.offlineCopy) {
+      connectivity.grainAtlasLocal = true;
+      if (isDesktop) await launchGrainAtlas(target.project, undefined, undefined, target.revision, target.spot, target.grain);
+      else {
+        const url = new URL(atlasEditorUrl(shell.homeUrl('images'), target.project, target.spot), location.href);
+        url.searchParams.delete('server'); url.searchParams.delete('code');
+        window.open(url.href, '_blank', 'noopener');
+      }
+      if (seq === atlasSequence) apps.atlas = { ...request, state: isDesktop ? 'launched' : 'fallback' };
+      return;
+    }
     if (!isDesktop) {
       window.open(atlasEditorUrl(shell.homeUrl('images'), target.project, target.spot), '_blank', 'noopener');
       if (seq === atlasSequence) apps.atlas = { ...request, state: 'fallback' };

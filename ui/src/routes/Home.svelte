@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { connectivity } from '../lib/connectivity.svelte';
+  import { localInventory } from '../lib/local-sessions.svelte';
+  import { day, capInventory } from '../lib/home';
   import UploadCard from '../components/UploadCard.svelte';
   import { upload } from '../lib/upload.svelte';
   import { identity } from '../lib/identity.svelte';
@@ -33,6 +36,12 @@
     expandedUpload = which;
     void uploadCards[which]?.choose();
   }
+  let localQuery = $state('');
+  let localSort = $state<Sort>('newest');
+  const localById = $derived(new Map(localInventory.rows.filter(row => row.id).map(row => [row.id!, row])));
+  const localRows = $derived(capInventory(localInventory.rows.filter(row => `${row.key} ${row.material ?? ''}`.toLowerCase().includes(localQuery.toLowerCase())).sort((a,b) => localSort === 'az' || localSort === 'za' ? a.key.localeCompare(b.key) * (localSort === 'az' ? 1 : -1) : (a.started_at ?? a.modified).localeCompare(b.started_at ?? b.modified) * (localSort === 'oldest' ? 1 : -1))));
+  $effect(() => { if (active) void localInventory.load(); });
+
   let sessionQuery = $state(''), mountQuery = $state('');
   let sessionSort = $state<Sort>('newest'), mountSort = $state<Sort>('newest');
   const sessions = $derived(sessionsShown(overview.sessions, sessionQuery, sessionSort));
@@ -46,8 +55,8 @@
     ? `loading ${overview.sessionProgress.completed} of ${overview.sessionProgress.total}` : undefined);
   const mountProgress = $derived(overview.mountProgress.completed < overview.mountProgress.total
     ? `checking ${overview.mountProgress.completed} of ${overview.mountProgress.total} mounts for atlases` : undefined);
-  const sessionCap = $derived({ shown: overview.sessions.length, total: overview.totalSessions, loadRest: () => void overview.loadRest('sessions') });
-  const mountCap = $derived({ shown: overview.mounts.length, total: overview.totalMounts, loadRest: () => void overview.loadRest('mounts') });
+  const sessionCap = $derived({ shown: overview.sessions.length, total: overview.totalSessions, hasMore: !!overview.sessionCursor, loadRest: () => void overview.loadRest('sessions') });
+  const mountCap = $derived({ shown: overview.mounts.length, total: overview.totalMounts, hasMore: !!overview.mountCursor, loadRest: () => void overview.loadRest('mounts') });
   const refresh = () => void overview.load({ force: true });
   const collapsed = (section: HomeSection) => settings.homeSections[section]?.collapsed ?? false;
   const toggleSection = (section: HomeSection) => void settings.updateHomeSection(section, { collapsed: !collapsed(section) });
@@ -110,15 +119,15 @@
     const sessionsPill: Pill = shell.local
       ? {
           tab: 'sessions', name: 'Sessions', module: 'UPbDB', ok: localOk,
-          state: local?.phase === 'ready' ? 'This computer' : `This computer · ${localLine}`,
+          state: connectivity.offlineCopy && connectivity.state === 'online' ? 'Read-only copy' : local?.phase === 'ready' ? 'This computer' : `This computer · ${localLine}`,
           detail: [
             `PostgreSQL ${local?.postgres.running ? `running on 127.0.0.1:${local.postgres.port}` : 'stopped'}${local?.postgres.source ? ` (${local.postgres.source})` : ''}`,
             `Service ${local?.service.running ? `${local.phase === 'ready' ? 'ready' : 'starting'} on 127.0.0.1:${local.service.port}` : 'stopped'}${local?.service.source ? ` (${local.service.source === 'dev' ? 'development checkout' : `bundle ${local.service.version ?? ''}`})` : ''}`,
           ].join(' · '),
         }
       : {
-          tab: 'sessions', name: 'Sessions', module: 'UPbDB', ok: server,
-          state: server === false ? `${host(settings.serverUrl)} unreachable` : host(settings.serverUrl) || 'no server',
+          tab: 'sessions', name: 'Sessions', module: 'UPbDB', ok: connectivity.asOf && connectivity.state !== 'online' ? null : server,
+          state: connectivity.asOf && connectivity.state !== 'online' ? 'Offline · saved data' : connectivity.offlineCopy ? 'Read-only copy' : server === false ? `${host(settings.serverUrl)} unreachable` : host(settings.serverUrl) || 'no server',
           detail: `${settings.serverUrl} · ${server === null ? 'checking…' : server ? 'server reachable' : 'server unreachable'}`,
         };
     const studioState = !isDesktop ? 'desktop app only' : studio === null ? 'checking…' : studio.found ? (studio.kind === 'checkout' ? 'development checkout' : 'installed') : 'not found';
@@ -199,6 +208,7 @@
         {:else if overview.state === 'unreachable'}
           <div class="row"><span class="dot" style="background: var(--danger)"></span><span class="small">UPbDB is not answering at <code>{identity.target?.server}</code>.</span></div>
           <p class="faint small mono">{overview.error}</p>
+          {#if overview.savedEntries === 0}<p class="muted small">Nothing is saved on this computer from this server yet. Local sessions are listed below.</p>{/if}
         {:else if overview.state === 'error'}
           <p class="error small">Could not read sessions: {overview.error}</p>
         {:else if overview.sessions.length === 0}
@@ -218,13 +228,13 @@
                   <section class="stack mineral-group" aria-label={mineral}>
                     <h3 class="row"><MineralIcon {mineral} /><span>{mineral}</span><span class="muted small">{rows.length}</span></h3>
                     <div class="tile-grid">
-                      {#each rows as row (row.session.id)}<SessionCard {row} {maximum} />{/each}
+                      {#each rows as row (row.session.id)}<SessionCard {row} {maximum} local={localById.get(row.session.id)} />{/each}
                     </div>
                   </section>
                 {/each}
               {:else}
                 <div class="tile-grid">
-                  {#each sessions as row (row.session.id)}<SessionCard {row} {maximum} />{/each}
+                  {#each sessions as row (row.session.id)}<SessionCard {row} {maximum} local={localById.get(row.session.id)} />{/each}
                 </div>
               {/if}
             </SectionGrid>
@@ -235,7 +245,7 @@
       </div>
     </section>
 
-    {#if overview.state === 'ready'}
+    {#if overview.state === 'ready' || overview.mounts.length > 0}
       <section class="board-section stack" aria-label="Mounts">
         <Toolbar section="Mounts" collapsed={collapsed('mounts')} controls="home-mounts-grid" toggle={() => toggleSection('mounts')} bind:query={mountQuery} bind:sort={mountSort} count={mounts.length} total={overview.totalMounts} summary={`${withAtlasCount} with atlas`} filtered={atlasFilter !== 'all'} progress={mountProgress} cap={mountCap} refresh={refresh} busy={overview.refreshing}>
           {#snippet options()}
@@ -259,6 +269,30 @@
         </div>
       </section>
     {/if}
+
+    {#if isDesktop && localInventory.rows.length > 0}
+      <section class="board-section stack" aria-label="On this computer">
+        <Toolbar section="On this computer" collapsed={collapsed('local')} controls="home-local-grid" toggle={() => toggleSection('local')}
+          bind:query={localQuery} bind:sort={localSort} count={localRows.length} total={localInventory.rows.length}
+          refresh={() => void localInventory.load(true)} busy={localInventory.loading} />
+        <div class="section-body" hidden={collapsed('local')}>
+          {#if localInventory.error}<p class="error small" role="status">{localInventory.error}</p>{/if}
+          {#if localRows.length}
+            <SectionGrid section="local" label="On this computer" testId="local-session-grid">
+              {#each localRows as row (row.path)}
+                <article class="glass panel stack local-session-card" data-testid="local-session-card">
+                  <div class="row"><strong class="mono">{row.key}</strong><span class="chip">{row.material ?? 'Unspecified'}</span></div>
+                  <p class="muted small">{day(row.started_at ?? row.modified)} · {row.acquisitions} analyses</p>
+                  <button class="btn small" disabled={!!localInventory.opening} onclick={() => void localInventory.open(row)}>Open in UPbRPy Studio</button>
+                </article>
+              {/each}
+            </SectionGrid>
+          {:else}<p class="muted small">{localInventory.loading ? 'Reading local sessions…' : localQuery ? 'No local sessions match this search.' : 'No local LA-ICP-MS sessions found.'}</p>{/if}
+          {#if localInventory.rows.length >= 500}<p class="faint small">Up to 500 local session folders are listed.</p>{/if}
+        </div>
+      </section>
+    {/if}
+
 
     <div class="glass panel stack">
       <h2>Links</h2>
@@ -294,6 +328,9 @@
 </section>
 
 <style>
+  .local-session-card { min-width: 0; overflow-wrap: anywhere; gap: var(--space-2); padding: var(--space-3); }
+  .local-session-card .btn { align-self: flex-start; padding: 0.1rem var(--space-2); font-size: 0.74rem; }
+  .local-session-card .mono { min-width: 0; }
   .board { width: 100%; max-width: none; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-6); }
   .intro { display: flex; align-items: center; gap: var(--space-1) var(--space-3); flex-wrap: wrap; min-width: 0; }
   h1 { font-size: 1.25rem; }

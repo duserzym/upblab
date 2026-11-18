@@ -12,6 +12,7 @@
   import { desktopModules, isDesktop, type Bounds } from '../lib/platform';
   import { shell, type ModuleTarget } from '../lib/shell.svelte';
   import { registerFrame, unregisterFrame, moduleSurfaces } from '../lib/incoming';
+  import { connectivity } from '../lib/connectivity.svelte';
   import { identity } from '../lib/identity.svelte';
 
   interface Props {
@@ -46,15 +47,22 @@
     return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), viewportHeight: window.innerHeight };
   }
 
+  function localModuleUrl(url: string) {
+    if (module !== 'images' || !connectivity.offlineCopy) return url;
+    const local = new URL(url, location.href);
+    local.searchParams.delete('server'); local.searchParams.delete('code');
+    return local.href;
+  }
   let lastSeq = -1;
   let lastHome = '';
+  let lastCopy = false;
   let shown = false;
 
   $effect(() => {
     if (!isDesktop || !el) return;
     const visible = active && !shell.overlay;
     const t = target;
-    const h = home;
+    const h = localModuleUrl(home);
     if (!visible) {
       if (shown) queue(() => desktopModules.hide(module));
       shown = false;
@@ -63,8 +71,10 @@
     // A new link wins; a changed home (server URL edited) goes home; otherwise
     // Rust just re-shows the existing webview where the user left it.
     const newTarget = t !== null && t.seq !== lastSeq;
-    const navigate = newTarget || withoutTheme(h) !== lastHome;
-    const url = withTheme(newTarget ? t.url : h, untrack(() => settings.effectiveTheme));
+    const copy = module === 'images' && !!connectivity.offlineCopy;
+    const navigate = newTarget || withoutTheme(h) !== lastHome || copy !== lastCopy;
+    lastCopy = copy;
+    const url = withTheme(localModuleUrl(newTarget ? t.url : h), untrack(() => settings.effectiveTheme));
     if (t) lastSeq = t.seq;
     lastHome = withoutTheme(h);
     shown = true;
@@ -100,6 +110,8 @@
   let seenRevision = identity.revision;
   $effect(() => {
     const r = identity.revision;
+    const copy = connectivity.offlineCopy;
+    if (module === 'images' && copy && active) connectivity.grainAtlasLocal = true;
     if (r === seenRevision) return;
     seenRevision = r;
     if (isDesktop) queue(() => desktopModules.reload(module));
@@ -114,18 +126,21 @@
 
   // Keep navigation separate from live theme delivery. Read the latest theme
   // for each new load, including a previously queued target.
-  let src = $state(untrack(() => withTheme(target?.url ?? home, settings.effectiveTheme)));
+  let src = $state(untrack(() => withTheme(localModuleUrl(target?.url ?? home), settings.effectiveTheme)));
   let webHome = '';
   let webSeq = -1;
+  let webCopy = false;
   $effect(() => {
     if (isDesktop) return;
-    const h = withoutTheme(home);
+    const h = withoutTheme(localModuleUrl(home));
     const t = target;
-    if (h === webHome && (t?.seq ?? -1) === webSeq) return;
+    const copy = module === 'images' && !!connectivity.offlineCopy;
+    if (h === webHome && (t?.seq ?? -1) === webSeq && copy === webCopy) return;
+    webCopy = copy;
     const newTarget = t !== null && t.seq !== webSeq;
     webHome = h;
     webSeq = t?.seq ?? -1;
-    src = withTheme(newTarget ? t.url : home, untrack(() => settings.effectiveTheme));
+    src = withTheme(localModuleUrl(newTarget ? t.url : home), untrack(() => settings.effectiveTheme));
   });
 
   function publishTheme() {

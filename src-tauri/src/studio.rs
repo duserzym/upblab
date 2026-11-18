@@ -425,6 +425,31 @@ pub async fn studio_launch(config: Option<StudioConfig>, url: Option<String>) ->
     .map_err(|e| e.to_string())?
 }
 
+/// Local bundles use Studio's existing --open folder CLI, without a server handoff.
+#[tauri::command]
+pub async fn studio_open_local(
+    path: String,
+    config: Option<StudioConfig>,
+) -> Result<Launched, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let folder =
+            crate::local_sessions::validated(&crate::local_sessions::root()?, Path::new(&path))?;
+        let launcher = find(&config.unwrap_or_default())?;
+        let folder = folder.to_string_lossy();
+        let shown = launcher.describe(Some(&folder));
+        let mut child = launcher
+            .command(Some(&folder))
+            .spawn()
+            .map_err(|e| format!("could not run Studio: {e}"))?;
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+        Ok(Launched { command: shown })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

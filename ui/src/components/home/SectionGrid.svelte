@@ -87,7 +87,7 @@
 </script>
 
 <div bind:this={grid} id="home-{section}-grid" data-testid={testId} data-section={section}
-  role="group" aria-label="{section === 'sessions' ? 'Session' : 'Mount'} cards"
+  role="group" aria-label="{section === 'sessions' ? 'Session' : section === 'local' ? 'Local session' : 'Mount'} cards"
   class:tile-grid={!grouped} class:stack={grouped} class="section-grid"
   style:max-height={limit === undefined ? undefined : `${limit}px`} style:--row-min={`${minimum}px`}>
   {@render children()}

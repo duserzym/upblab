@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
   import type { Sort } from '../../lib/home';
   let { section, query = $bindable(''), sort = $bindable<Sort>('newest'), count, total, summary, filtered = false, progress, cap, refresh, busy = false, options, collapsed = false, controls, toggle }:
-    { section: string; query?: string; sort?: Sort; count: number; total: number; summary?: string; filtered?: boolean; progress?: string; cap?: { shown: number; total: number; loadRest: () => void }; refresh?: () => void; busy?: boolean; options?: Snippet; collapsed?: boolean; controls?: string; toggle?: () => void } = $props();
+    { section: string; query?: string; sort?: Sort; count: number; total: number; summary?: string; filtered?: boolean; progress?: string; cap?: { shown: number; total: number; hasMore?: boolean; loadRest: () => void }; refresh?: () => void; busy?: boolean; options?: Snippet; collapsed?: boolean; controls?: string; toggle?: () => void } = $props();
 </script>
 <div class="toolbar row">
   {#if toggle}
@@ -24,8 +24,8 @@
   {@render options?.()}
   {#if refresh}<button class="btn small" disabled={busy} onclick={refresh}>{busy ? 'Refreshing…' : 'Refresh'}</button>{/if}
 </div>
-{#if cap && cap.shown < cap.total}
-  <p class="muted small scope">Showing {cap.shown} of {cap.total} · <button class="btn small" disabled={busy} onclick={cap.loadRest}>Load the rest</button></p>
+{#if cap && (cap.shown < cap.total || cap.hasMore)}
+  <p class="muted small scope">Showing {cap.shown}{cap.hasMore ? ' · More available' : ` of ${cap.total}`} · <button class="btn small" disabled={busy} onclick={cap.loadRest}>{cap.hasMore ? 'Load more' : 'Load the rest'}</button></p>
 {/if}
 <style>
   .toolbar { flex-wrap: wrap; gap: var(--space-2); min-width: 0; }

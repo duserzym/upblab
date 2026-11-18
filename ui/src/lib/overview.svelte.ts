@@ -8,6 +8,10 @@
 //   GET /v1/mounts/{id}/atlas            {current: {...} | null, versions, …}; current null = none published
 
 import { atlasFileUrl, capInventory, newestMounts, thumbnailPaths } from './home';
+import { listPath } from './api-list';
+import { savedData } from './saved-data.svelte';
+import { connectivity } from './connectivity.svelte';
+import { isDesktop, savedReads, logInfo } from './platform';
 import { identity } from './identity.svelte';
 import type { ApiReply } from './platform';
 import { apiReplyMessage } from './server-error';
@@ -134,8 +138,11 @@ function detail(r: ApiReply<unknown>): string {
 class Overview {
   state = $state<OverviewState>('idle');
   error = $state('');
+  savedEntries = $state<number | null>(null);
   sessions = $state<SessionRow[]>([]);
   mounts = $state<MountRow[]>([]);
+  sessionCursor = $state<string | null>(null);
+  mountCursor = $state<string | null>(null);
   totalSessions = $state(0);
   totalMounts = $state(0);
   loadedAt = $state<Date | null>(null);
@@ -148,6 +155,8 @@ class Overview {
   private generation = 0;
 
   private source = '';
+  private requestCount = 0;
+  private get<T = unknown>(path: string) { this.requestCount++; return identity.get<T>(path); }
 
   async load({ force = false } = {}) {
     const source = `${identity.target?.server ?? ''}:${identity.revision}`;
@@ -171,15 +180,33 @@ class Overview {
     }
     if (this.state !== 'ready') this.state = 'loading';
     this.refreshing = true;
+    const started = performance.now();
+    const requestBaseline = this.requestCount;
     try {
-      const [sessions, mounts] = await Promise.all([identity.get('/v1/sessions'), identity.get('/v1/mounts')]);
+      const reads = await Promise.allSettled([this.get(listPath('/v1/sessions')), this.get(listPath('/v1/mounts'))]);
+      const reply = (read: PromiseSettledResult<ApiReply>): ApiReply => read.status === 'fulfilled' ? read.value
+        : { status: 0, body: null, error: read.reason instanceof Error ? read.reason.message : String(read.reason) };
+      const [sessions, mounts] = reads.map(reply);
       if (gen !== this.generation) return;
       if (sessions.status === 401) {
         this.clear();
         this.state = 'signed-out';
         return;
       }
-      if (!isList<SessionOut>(sessions)) throw new Error(`sessions: ${detail(sessions)}`);
+      if (!isList<SessionOut>(sessions)) {
+        // An unsaved session list must not hide mounts that are already saved.
+        if (isList<MountOut>(mounts)) {
+          this.mountList = newestMounts(mounts.body); this.mountCursor = mounts.nextCursor ?? null;
+          const shown = capInventory(this.mountList);
+          this.mounts = shown.map(mount => ({ mount, atlas: null, detailsPending: true }));
+          this.totalMounts = this.mountList.length;
+          this.mountProgress = { completed: 0, total: shown.length };
+          void this.fillMounts(shown, 0, gen);
+        }
+        throw new Error(`sessions: ${detail(sessions)}`);
+      }
+      this.sessionCursor = sessions.nextCursor ?? null;
+      this.mountCursor = mounts.nextCursor ?? null;
       this.sessionList = sessions.body;
       this.mountList = isList<MountOut>(mounts) ? newestMounts(mounts.body) : [];
       const shown = capInventory(this.sessionList);
@@ -202,14 +229,24 @@ class Overview {
         this.fillSessions(shown, 0, gen, !inPlace),
         this.fillMounts(shownMounts, 0, gen, !inPlace),
       ]);
-      if (gen === this.generation) this.loadedAt = new Date(Date.now());
+      if (gen === this.generation) {
+        this.loadedAt = new Date(Date.now());
+        if (!sessions.cached && !mounts.cached && connectivity.state !== 'offline' && connectivity.state !== 'server-error')
+          savedData.schedule(this.sessionList, this.mountList);
+      }
     } catch (err) {
       if (gen !== this.generation) return;
       const msg = err instanceof Error ? err.message : String(err);
       this.state = /unreachable|connect|fetch|network/i.test(msg) ? 'unreachable' : 'error';
       this.error = msg;
+      if (this.state === 'unreachable' && isDesktop && identity.target) {
+        void savedReads.status(identity.target).then(status => {
+          if (gen === this.generation) this.savedEntries = status.entries;
+        }).catch(() => {});
+      }
     } finally {
       if (gen === this.generation) this.refreshing = false;
+      void logInfo(`[overview] ${this.requestCount - requestBaseline} reads in ${Math.round(performance.now() - started)} ms`);
     }
   }
 
@@ -218,7 +255,7 @@ class Overview {
     if (!identity.target || !identity.signedIn) return;
     const gen = this.generation, source = `${identity.target.server}:${identity.revision}`;
     try {
-      const reply = await identity.get<SessionOut>(`/v1/sessions/${encodeURIComponent(id)}`);
+      const reply = await this.get<SessionOut>(`/v1/sessions/${encodeURIComponent(id)}`);
       const existing = this.sessions.find(row => row.session.id === id)?.session;
       const session = reply.status === 200 && reply.body?.id === id ? reply.body : existing;
       if (!session) { if (strict) throw new Error('Session unavailable'); return; }
@@ -240,7 +277,7 @@ class Overview {
     const gen = this.generation, server = identity.target.server, access = identity.revision;
     const current = () => gen === this.generation && server === identity.target?.server && access === identity.revision;
     try {
-      const reply = await identity.get<MountOut>(`/v1/mounts/${encodeURIComponent(id)}`);
+      const reply = await this.get<MountOut>(`/v1/mounts/${encodeURIComponent(id)}`);
       if (!current()) return;
       let mount: MountOut | undefined;
       if (reply.status === 200 && reply.body?.id === id) {
@@ -248,7 +285,7 @@ class Overview {
         const { id, label, mount_type, grain_count, spot_count } = reply.body;
         mount = { id, label, mount_type, grain_count, spot_count };
       } else if (reply.status === 404 || reply.status === 405) {
-        const list = await identity.get<MountOut[]>('/v1/mounts');
+        const list = await this.get<MountOut[]>(listPath('/v1/mounts'));
         if (!current() || !isList<MountOut>(list)) return;
         mount = list.body.find(m => m.id === id);
       }
@@ -276,6 +313,23 @@ class Overview {
     const gen = this.generation;
     this.refreshing = true;
     try {
+      const cursor = section === 'sessions' ? this.sessionCursor : this.mountCursor;
+      if (cursor) {
+        const reply = await this.get(listPath(section === 'sessions' ? '/v1/sessions' : '/v1/mounts', cursor));
+        if (gen !== this.generation) return;
+        if (!isList(reply)) throw new Error(detail(reply));
+        if (section === 'sessions') {
+          const known = new Set(this.sessionList.map(s => s.id));
+          this.sessionList = [...this.sessionList, ...(reply.body as SessionOut[]).filter(s => !known.has(s.id))];
+          this.sessionCursor = reply.nextCursor ?? null;
+          this.totalSessions = this.sessionList.length;
+        } else {
+          const known = new Set(this.mountList.map(m => m.id));
+          this.mountList = [...this.mountList, ...(reply.body as MountOut[]).filter(m => !known.has(m.id))];
+          this.mountCursor = reply.nextCursor ?? null;
+          this.totalMounts = this.mountList.length;
+        }
+      }
       if (section === 'sessions') {
         const offset = this.sessions.length;
         const rest = this.sessionList.slice(offset);
@@ -289,11 +343,15 @@ class Overview {
         this.mountProgress.total = this.mounts.length;
         await this.fillMounts(rest, offset, gen);
       }
+    } catch (err) {
+      if (gen === this.generation) this.error = err instanceof Error ? err.message : String(err);
     } finally {
       if (gen === this.generation) this.refreshing = false;
     }
   }
 
+  // Extra Home details stay within the same 20-item background scope as prefetch.
+  // Larger inventories retain list summaries and explicit unknowns without row fan-out.
   private async fillSessions(items: SessionOut[], offset: number, gen: number, progress = true) {
     await mapLimited(items, async (session, index) => {
       const row = await this.sessionRow(session);
@@ -307,7 +365,7 @@ class Overview {
     await mapLimited(items, async (mount, index) => {
       const reloadThumbnails = this.thumbnailSources.get(mount.id)?.started === true
         || this.mounts.find(row => row.mount.id === mount.id)?.thumbnails !== undefined;
-      const row = await this.mountRow(mount, gen);
+      const row: MountRow = await this.mountRow(mount, gen);
       if (gen !== this.generation) return;
       this.mounts[offset + index] = row;
       if (reloadThumbnails) void this.loadThumbnails(mount.id);
@@ -317,7 +375,7 @@ class Overview {
 
   private async sessionRow(session: SessionOut): Promise<SessionRow> {
     const path = `/v1/sessions/${encodeURIComponent(session.id)}`;
-    const [runs, detail] = await Promise.allSettled([identity.get(path + '/reductions'), identity.get<SessionDetail>(path)]);
+    const [runs, detail] = await Promise.allSettled([this.get(path + '/reductions'), this.get<SessionDetail>(path)]);
     const info = detail.status === 'fulfilled' && detail.value.status === 200 ? detail.value.body : null;
     const access: SessionRow['access'] = typeof info?.is_owner === 'boolean'
       ? {
@@ -335,7 +393,7 @@ class Overview {
   private async mountRow(mount: MountOut, gen: number, preserve = true): Promise<MountRow> {
     const server = identity.target?.server;
     try {
-      const r = await identity.get(`/v1/mounts/${encodeURIComponent(mount.id)}/atlas`);
+      const r = await this.get(`/v1/mounts/${encodeURIComponent(mount.id)}/atlas`);
       if (r.status === 200) {
         const atlas = parseAtlas(r.body);
         const access = (r.body as { access?: unknown } | null)?.access;
@@ -356,6 +414,7 @@ class Overview {
 
   /** Called on intersection; remounted cards reuse the same manifest request. */
   async loadThumbnails(mountId: string) {
+    if (connectivity.state === 'offline' || connectivity.state === 'server-error') return;
     const source = this.thumbnailSources.get(mountId);
     if (!source || source.started) return;
     source.started = true;
@@ -378,6 +437,7 @@ class Overview {
   }
 
   clear() {
+    savedData.reset();
     this.generation += 1;
     this.state = 'idle';
     this.refreshing = false;
@@ -386,7 +446,8 @@ class Overview {
     this.sessionList = [];
     this.mountList = [];
     this.thumbnailSources.clear();
-    this.error = '';
+    this.error = ''; this.savedEntries = null;
+    this.sessionCursor = null; this.mountCursor = null;
     this.totalSessions = 0;
     this.totalMounts = 0;
     this.loadedAt = null;

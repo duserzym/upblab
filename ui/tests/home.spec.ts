@@ -21,7 +21,9 @@ for (const [i, m] of mounts.entries()) fixtures[`/v1/mounts/${m.id}/atlas`] = {
   current: i < 3 ? { project_id: `project-${i}`, name: `Demo atlas ${i + 1}`, version: 3, uploaded_at: `2026-11-0${4 + i}T12:00:00Z` } : null,
   access: i < 3 ? `read-only-${i}` : null,
 };
-const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
+const thumbnail = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"></svg>';
+// Keep optional screenshot configuration typed without Node globals in the UI tsconfig.
+const screenshotEnv = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env;
 type Call = [string, Record<string, unknown> | undefined];
 const calls = (page: Page) => page.evaluate(() => (window as unknown as { __fake: { calls: Call[] } }).__fake.calls);
 
@@ -41,12 +43,12 @@ async function home(page: Page, desktop: boolean, inventory = fixtures, brokenTh
     if (url.pathname.endsWith('/atlas.json')) return r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, json: { areas: [{ id: 'area1' }], files: {
       'pyramid/area1/0/0_0.png': 'invented', 'pyramid/area1/3/0_0.png': 'invented', 'pyramid/area2/2/0_0.png': 'invented',
     } } });
-    return brokenThumbnail ? r.fulfill({ status: 404 }) : r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, contentType: 'image/png', body: png });
+    return brokenThumbnail ? r.fulfill({ status: 404 }) : r.fulfill({ headers: { 'Access-Control-Allow-Origin': '*' }, contentType: 'image/svg+xml', body: thumbnail });
   });
   await page.route('**/v1/**', async r => {
     const url = new URL(r.request().url());
     if (/^\/v1\/(sessions|mounts)\//.test(url.pathname)) await detailsReady;
-    const body = url.pathname === '/v1/accounts/me' ? { username: 'demo', display_name: 'Demo analyst' } : inventory[url.pathname + url.search];
+    const body = url.pathname === '/v1/accounts/me' ? { username: 'demo', display_name: 'Demo analyst' } : inventory[url.pathname + url.search] ?? (url.search === '?limit=500' ? inventory[url.pathname] : undefined);
     return r.fulfill({ status: body === undefined ? 404 : 200, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Authorization, Accept' }, json: body ?? {} });
   });
   await page.route('**/app/**', r => r.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Sessions fixture</title>' }));
@@ -285,10 +287,10 @@ test('thumbnail manifests wait for a card to approach the viewport and survive f
 });
 
 // SCREENSHOTS=1: the Home board with the demo inventory, for docs/screenshots.
-if (process.env.SCREENSHOTS) for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
+if (screenshotEnv.SCREENSHOTS) for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
   test(`screenshot home ${width}`, async ({ page }, info) => {
     await page.setViewportSize({ width, height });
     await home(page, true);
-    await page.screenshot({ path: `${process.env.SCREENSHOTS_DIR ?? 'test-results'}/home-${width}-${info.project.name}.png` });
+    await page.screenshot({ path: `${screenshotEnv.SCREENSHOTS_DIR ?? 'test-results'}/home-${width}-${info.project.name}.png` });
   });
 }

@@ -9,6 +9,13 @@ export interface FakeOptions {
   fixtures?: Record<string, unknown>;
   standards?: { warning: boolean; message: string; changed: string[] };
   signedIn?: boolean;
+  offline?: boolean;
+  offlineCopy?: string;
+  peopleAllowed?: boolean;
+  cached?: { asOf: string; reason: 'unreachable' | 'server_error'; detail?: string };
+  apiReplies?: Record<string, { offlineCopy?: string; status: number; body: unknown; cached?: { asOf: string; reason: 'unreachable' | 'server_error'; detail?: string }; nextCursor?: string }>;
+  localSessions?: { path: string; key: string; id: string | null; material: string | null; kind: string | null; started_at: string | null; acquisitions: number; has_project: boolean; modified: string }[];
+  cacheStatus?: { entries: number; bytes: number; newest: string | null; oldest: string | null };
   grainatlasLaunchErrors?: string[];
   studioFound?: boolean;
   studioLaunchErrors?: string[];
@@ -31,6 +38,9 @@ export function installFakeTauri(opts: FakeOptions) {
   const calls: [string, Record<string, unknown> | undefined][] = [];
   const store = { ...opts.store };
   const fixtures = { ...opts.fixtures };
+  const apiReplies = { ...opts.apiReplies };
+  let savedReply = opts.cached;
+  let offline = opts.offline ?? false;
   let theme: 'light' | 'dark' = 'light';
   let offerSequence = 0;
   let quitSequence = 0;
@@ -54,7 +64,7 @@ export function installFakeTauri(opts: FakeOptions) {
   // pushes onto window.__inbox and the next `inbox_take` empties it.
   const inbox: unknown[] = [];
   w.__inbox = inbox;
-  w.__fake = { calls, store, listeners, fixtures };
+  w.__fake = { calls, store, listeners, fixtures, apiReplies, goOnline: () => { savedReply = undefined; offline = false; } };
   const emit = async (event: string, payload: unknown) => {
     await Promise.all((listeners.get(event) ?? []).map(id => callbacks.get(id)?.({ event, id, payload })));
   };
@@ -146,6 +156,8 @@ export function installFakeTauri(opts: FakeOptions) {
           return { reachable: true };
         case 'studio_status':
           return opts.studioFound ? { found: true, path: '/Applications/UPbRPy Studio.app', kind: 'installed' } : { found: false, path: null, error: 'UPbRPy Studio is not installed' };
+        case 'local_sessions': return opts.localSessions ?? [];
+        case 'studio_open_local':
         case 'studio_launch': {
           const error = studioErrors.shift();
           if (error) throw new Error(error);
@@ -154,7 +166,7 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'standards_check':
           return opts.standards ?? null;
         case 'auth_restore':
-          return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { username: 'demo', display_name: 'Demo analyst' } : null, offline: false };
+          return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { id: 'invented-account', username: 'demo', display_name: 'Demo analyst', can_manage_people: opts.peopleAllowed ?? false } : null, offline: opts.offline ?? false, offlineCopy: opts.offlineCopy };
         case 'auth_handoff':
           return 'ONE-TIME-FIXTURE';
         case 'grainatlas_launch': {
@@ -256,9 +268,20 @@ export function installFakeTauri(opts: FakeOptions) {
           } else latestCommands.set(module, command);
           return true;
         }
-        case 'api_get':
-          if (Object.prototype.hasOwnProperty.call(fixtures, args!.path as string)) return { status: 200, body: fixtures[args!.path as string] };
-          return args!.path === '/v1/auth/providers' ? { status: 200, body: { orcid: true, google: true } } : { status: 401, body: {} };
+        case 'cache_status': return opts.cacheStatus ?? { entries: Object.keys(fixtures).length, bytes: 4096, newest: opts.cached?.asOf ?? null, oldest: opts.cached?.asOf ?? null };
+        case 'cache_clear':
+          opts.cacheStatus = { entries: 0, bytes: 0, newest: null, oldest: null };
+          return null;
+        case 'cache_prefetch': return { fetched: opts.offline ? 0 : (args!.paths as string[]).length, unchanged: 0, failed: opts.offline ? 1 : 0 };
+        case 'api_get': {
+          const path = args!.path as string;
+          const reply = apiReplies[path];
+          if (reply) return { offlineCopy: opts.offlineCopy, ...reply };
+          const key = Object.prototype.hasOwnProperty.call(fixtures, path) ? path : path.replace('?limit=500', '');
+          if (Object.prototype.hasOwnProperty.call(fixtures, key)) return { offlineCopy: opts.offlineCopy, status: 200, body: fixtures[key], ...(savedReply ? { cached: savedReply } : {}) };
+          if (offline) throw new Error('server unreachable: connection failed');
+          return args!.path === '/v1/auth/providers' ? { offlineCopy: opts.offlineCopy, status: 200, body: { orcid: true, google: true } } : { offlineCopy: opts.offlineCopy, status: 401, body: {} };
+        }
         case 'files_pick_session':
           return opts.sessionPaths ?? [];
         case 'plugin:dialog|open':

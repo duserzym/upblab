@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SavedDataPanel from '../components/SavedDataPanel.svelte';
   import UpdatesPanel from '../components/UpdatesPanel.svelte';
   import { normaliseServerUrl } from '../lib/links';
   import { localService } from '../lib/localService.svelte';
@@ -199,6 +200,7 @@
           </div>
         {/if}
       </form>
+      <SavedDataPanel {active} />
     {:else}
       <div class="glass panel stack">
         <h3>UPbDB</h3>

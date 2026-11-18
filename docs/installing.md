@@ -197,3 +197,29 @@ See the quick start in [Developing UPb Lab](developing.md#quick-start):
 `make setup`, then `make build`. The command prints the installer directory.
 Local macOS builds use a shared release target; other builds use
 `src-tauri/target/release/bundle/` ([build details](testing.md#release-build)).
+
+## When the server is down
+
+The desktop app keeps a copy of server JSON you viewed, separated by server
+and account. Home and Review show those saved sessions, stored results and
+mount information when the server cannot answer. A small bar gives the oldest
+saved time currently shown, in local time, and retries while the window is
+visible. Your stored sign-in and account name remain available. Sessions and
+People & access need UPbDB's own page, so they show an inline note while down.
+Atlas images still need their server files; the saved copy covers JSON, not
+image tiles or raw files. Results and depth profiles you never viewed may be
+unavailable offline; recent-session saving includes results, not depth profiles.
+
+After a live Home load, UPb Lab saves reads for the 20 newest sessions and
+20 newest mounts in the background, plus the last Review scope, at most once
+per 10 minutes. Settings → Saved on this computer shows the size and dates,
+**Save recent data now**, and **Forget saved data**. Signing out or a revoked
+sign-in removes that server/account's saved copy. The copy is limited to
+1 GB, with individual bodies above 64 MB skipped and least recently used
+entries removed first. The token stays in the system keychain.
+
+Home also lists local LA-ICP-MS bundles from `~/UPbRPy/sessions/` (or
+`UPBRPY_SESSION_CACHE`). **Open in UPbRPy Studio** opens the bundle directly,
+without the server. Matching server sessions carry a **Local copy** mark.
+Only manifest headers and acquisition counts are read; raw files are not read.
+Up to 500 folders are listed; superseded copies and external symlinks are skipped.

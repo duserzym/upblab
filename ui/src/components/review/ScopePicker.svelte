@@ -89,6 +89,7 @@
 <div class="picker-header">
   <div class="scope-row">
     <h1>Review</h1>
+    {#if review.sessionCursor || review.mountCursor}<button class="btn small" disabled={review.listsLoading} onclick={() => void review.loadMoreLists()}>{review.listsLoading ? 'Loading…' : 'Load more sessions and mounts'}</button>{/if}
     <div class="fields">
       <button class="btn picker-field session-field" class:primary={!review.scope} class:open={open === 'scope'}
         aria-label="Choose review scope" aria-expanded={open === 'scope'} aria-controls="review-picker-drawer"

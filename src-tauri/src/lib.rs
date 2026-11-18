@@ -15,10 +15,12 @@ mod geometry;
 mod grainatlas_app;
 mod inbox;
 pub mod local_service;
+mod local_sessions;
 mod menu;
 mod modules;
 mod probe;
 mod quit;
+mod read_cache;
 mod standards;
 mod studio;
 mod updater;
@@ -102,6 +104,11 @@ pub fn run() {
             auth::auth_logout,
             auth::auth_handoff,
             auth::api_get,
+            read_cache::cache_status,
+            read_cache::cache_clear,
+            read_cache::cache_prefetch,
+            local_sessions::local_sessions,
+            studio::studio_open_local,
             bridge::bridge_open,
             bridge::bridge_token,
             bridge::bridge_notify,
@@ -129,6 +136,9 @@ pub fn run() {
         ])
         .on_webview_event(files::on_webview_event)
         .setup(|app| {
+            app.state::<auth::Identity>()
+                .cache
+                .configure(app.path().app_data_dir()?);
             // macOS registers schemes from the bundle's Info.plist; Windows and
             // Linux installers write the registry / .desktop entries. In a dev
             // build on Windows or Linux, register at runtime so links work too.

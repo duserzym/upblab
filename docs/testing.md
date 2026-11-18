@@ -100,3 +100,22 @@ records the commit it was copied from).
   both browsers, and `sizes.spec.ts` walks the same tabs at the same sizes.
   The theme walk checks theme delivery, the size walk checks fit; they overlap
   only in the overflow check.
+
+## Offline mode checks
+
+The focused host tests are `cargo test --manifest-path src-tauri/Cargo.toml
+read_cache --jobs 1` and the same command with `local_sessions`. HTTP tests use
+the auth fake-server helper and need permission to bind localhost; disk-only
+cache and manifest tests do not. The UI modules have adjacent Vitest tests.
+`ui/tests/offline.spec.ts` covers saved Home rows, retries, Settings, local
+Studio opens and the Sessions/People note, with screenshots at 1440 × 900 and
+1280 × 800 in each configured browser. The supervisor runs Playwright.
+
+A comparison with the previous Home loader used 5000 invented sessions and
+5000 invented mounts, 500 cards per inventory, and 1 ms mocked latency per
+read. Before: 1502 reads, 149 ms. After: 62 reads, 8 ms, before idle prefetch.
+The new loader bounds its detail scope to 20 sessions and 20 mounts; other
+rows retain list summaries and show unavailable details. Lists request
+`limit=500` and load another cursor page only on demand. Runtime logs include
+Home read count/time and prefetch fetched/unchanged/failed counts and time.
+These mocked timings do not measure a real server or disk-cache throughput.

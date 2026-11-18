@@ -3,6 +3,9 @@
   import { invoke } from '@tauri-apps/api/core';
   import Home from './routes/Home.svelte';
   import Account from './routes/Account.svelte';
+  import OfflineBanner from './components/OfflineBanner.svelte';
+  import { connectivity } from './lib/connectivity.svelte';
+  import { review } from './lib/review.svelte';
   import { overview } from './lib/overview.svelte';
   import AtlasViewer from './components/AtlasViewer.svelte';
   import Sessions from './routes/Sessions.svelte';
@@ -15,7 +18,7 @@
   import { appWatch } from './lib/app-watch.svelte';
   import AccountDialog from './components/AccountDialog.svelte';
   import { identity } from './lib/identity.svelte';
-  import { canManagePeople } from './lib/people';
+  import { canShowPeopleTab } from './lib/people';
   import { localService } from './lib/localService.svelte';
   import { listenForLinks } from './lib/incoming';
   import { fromDataTransfer } from './lib/drop';
@@ -32,7 +35,7 @@
   ];
 
   // Never carry rights from an old server while the new sign-in is being read.
-  const peopleAllowed = $derived(canManagePeople(identity.state) &&
+  const peopleAllowed = $derived(canShowPeopleTab(identity.state) &&
     !!shell.identityTarget && identity.target?.key === shell.identityTarget.key &&
     identity.target?.server === shell.identityTarget.server);
   const tabs = $derived(peopleAllowed
@@ -58,6 +61,12 @@
   });
 
   $effect(() => { void identity.revision; void identity.target?.server; untrack(() => appWatch.syncSource()); });
+  onMount(() => connectivity.start(() => identity.get('/v1/accounts/me'), () => {
+    queueMicrotask(() => {
+      void overview.load({ force: true });
+      if (shell.view === 'review') void review.load({ quiet: true });
+    });
+  }));
   onMount(() => { appWatch.start(); return () => appWatch.clear(); });
 
   // Home and Account use the same session inventory, scoped to the active sign-in.
@@ -207,7 +216,7 @@
         title={identity.signedIn ? 'Open your account' : `Sign in to ${identity.target.server}`}
         onclick={() => identity.signedIn ? shell.show('account') : (identity.dialog = true)}
       >
-        {#if identity.signedIn}<span class="dot" style="background: {identity.state.offline ? 'var(--warning)' : 'var(--ok)'}"></span><span class="account-name" title={identity.label}>{identity.label}</span>{:else}Sign in{/if}
+        {#if identity.signedIn}<span class="dot" style="background: {connectivity.state === 'offline' || connectivity.state === 'server-error' ? 'var(--warning)' : 'var(--ok)'}"></span><span class="account-name" title={identity.label}>{identity.label}</span>{:else}Sign in{/if}
       </button>
     {/if}
     <button
@@ -228,6 +237,7 @@
     {/if}
   </header>
 
+  <OfflineBanner />
   <main class="content">
     {#if firstRun}
       <FirstRun />

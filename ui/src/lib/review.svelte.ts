@@ -1,3 +1,4 @@
+import { listPath } from './api-list';
 import type { SpotSelectedEvent, BridgeCommand } from '@lab/bridge';
 import { identity } from './identity.svelte';
 import { logWarn } from './platform';
@@ -23,6 +24,9 @@ export class Review {
   error = $state('');
   sessions = $state<SessionOut[]>([]);
   mounts = $state<MountOut[]>([]);
+  sessionCursor = $state<string | null>(null);
+  mountCursor = $state<string | null>(null);
+  listsLoading = $state(false);
   rows = $state<ReviewSpot[]>([]);
   runs = $state<RunOut[]>([]);
   run = $state<RunBrief | null>(null);
@@ -48,17 +52,38 @@ export class Review {
     if (this.listsPending) return this.listsPending;
     if (Date.now() - this.listsAt < 60_000) return Promise.resolve();
     const source = this.source, gen = ++this.listGeneration;
-    const pending = Promise.all([this.get<SessionOut[]>('/v1/sessions'), this.get<MountOut[]>('/v1/mounts')])
+    const pending = Promise.all([identity.get<SessionOut[]>(listPath('/v1/sessions')), identity.get<MountOut[]>(listPath('/v1/mounts'))])
       .then(([sessions, mounts]) => {
         if (gen !== this.listGeneration || source !== this.currentSource()) return;
-        this.sessions = sessions;
-        this.mounts = mounts;
+        if (sessions.status !== 200 || !Array.isArray(sessions.body)) throw new Error(apiReplyMessage(sessions));
+        if (mounts.status !== 200 || !Array.isArray(mounts.body)) throw new Error(apiReplyMessage(mounts));
+        this.sessions = sessions.body; this.sessionCursor = sessions.nextCursor ?? null;
+        this.mounts = mounts.body; this.mountCursor = mounts.nextCursor ?? null;
         this.listsAt = Date.now();
       }).finally(() => {
         if (gen === this.listGeneration) this.listsPending = null;
       });
     this.listsPending = pending;
     return pending;
+  }
+  async loadMoreLists() {
+    if (this.listsLoading) return;
+    this.listsLoading = true;
+    const source = this.currentSource(), gen = this.listGeneration;
+    try {
+      await Promise.all((['sessions', 'mounts'] as const).map(async kind => {
+        const cursor = kind === 'sessions' ? this.sessionCursor : this.mountCursor;
+        if (!cursor) return;
+        const reply = await identity.get<(SessionOut | MountOut)[]>(listPath(kind === 'sessions' ? '/v1/sessions' : '/v1/mounts', cursor));
+        if (source !== this.currentSource() || gen !== this.listGeneration) return;
+        if (reply.status !== 200 || !Array.isArray(reply.body)) throw new Error(apiReplyMessage(reply));
+        const known = new Set((kind === 'sessions' ? this.sessions : this.mounts).map(row => row.id));
+        const rows = reply.body.filter(row => !known.has(row.id));
+        if (kind === 'sessions') { this.sessions = [...this.sessions, ...rows as SessionOut[]]; this.sessionCursor = reply.nextCursor ?? null; }
+        else { this.mounts = [...this.mounts, ...rows as MountOut[]]; this.mountCursor = reply.nextCursor ?? null; }
+      }));
+    } catch (err) { if (source === this.currentSource()) this.error = String(err); }
+    finally { this.listsLoading = false; }
   }
   get selected(): ReviewSpot | null { return this.rows.find(r => r.key === this.selectedKey) ?? this.externalSpot; }
   private async get<T>(path: string): Promise<T> {
@@ -108,6 +133,7 @@ export class Review {
       this.listsAt = -Infinity;
       this.sessions = [];
       this.mounts = [];
+      this.sessionCursor = null; this.mountCursor = null;
       quiet = false;
     }
     quiet = quiet && this.state === 'ready';
@@ -129,6 +155,7 @@ export class Review {
       this.state = identity.target ? 'signed-out' : 'idle';
       this.sessions = [];
       this.mounts = [];
+      this.sessionCursor = null; this.mountCursor = null;
       this.selectedKey = null;
       return;
     }

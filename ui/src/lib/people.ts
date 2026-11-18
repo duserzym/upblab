@@ -7,3 +7,8 @@ export function canManagePeople(state: AuthState): boolean {
   return account.can_manage_people === true ||
     (account.can_manage_people === undefined && account.is_lab_staff === true);
 }
+
+/** A retained profile may keep the tab visible; its offline surface has no management page. */
+export function canShowPeopleTab(state: AuthState): boolean {
+  return canManagePeople({ ...state, offline: false });
+}

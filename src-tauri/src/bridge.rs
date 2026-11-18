@@ -439,10 +439,14 @@ pub fn module_command<R: Runtime>(
 /// Module only: callers can take only their own webview's command, once.
 #[tauri::command]
 pub fn bridge_take_command<R: Runtime>(
+    identity: State<'_, Identity>,
     state: State<'_, Commands>,
     webview: Webview<R>,
 ) -> Result<Option<Value>, String> {
-    let command = state.take(webview.label())?;
+    let mut command = state.take(webview.label())?;
+    if let Some(command) = &mut command {
+        identity.filter_module_command(webview.label(), command);
+    }
     if state.has_waiting(webview.label())? {
         // The bridge serialises pulls. This nudge queues the second kind after
         // this reply, even for an older module that ignores presentation.

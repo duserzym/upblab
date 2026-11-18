@@ -35,10 +35,17 @@ pub struct Target {
 }
 
 impl Target {
-    fn base(&self) -> Result<Url, String> {
-        let url: Url = self.server.trim().parse().map_err(|e| format!("invalid server URL {:?}: {e}", self.server))?;
+    pub(crate) fn base(&self) -> Result<Url, String> {
+        let url: Url = self
+            .server
+            .trim()
+            .parse()
+            .map_err(|e| format!("invalid server URL {:?}: {e}", self.server))?;
         if !matches!(url.scheme(), "http" | "https") {
-            return Err(format!("server URL must be http or https, not {}", url.scheme()));
+            return Err(format!(
+                "server URL must be http or https, not {}",
+                url.scheme()
+            ));
         }
         if self.key.trim().is_empty() || self.key.len() > 512 {
             return Err("invalid keychain key".into());
@@ -80,7 +87,9 @@ impl Vault for KeychainVault {
     }
     fn set(&self, key: &str, token: &str) -> Result<(), String> {
         let entry = keyring::Entry::new(KEYCHAIN_SERVICE, key).map_err(|e| e.to_string())?;
-        entry.set_password(token).map_err(|e| format!("keychain write failed: {e}"))
+        entry
+            .set_password(token)
+            .map_err(|e| format!("keychain write failed: {e}"))
     }
     fn delete(&self, key: &str) -> Result<(), String> {
         let entry = keyring::Entry::new(KEYCHAIN_SERVICE, key).map_err(|e| e.to_string())?;
@@ -99,7 +108,10 @@ impl Vault for MemoryVault {
         Ok(self.0.lock().map_err(|e| e.to_string())?.get(key).cloned())
     }
     fn set(&self, key: &str, token: &str) -> Result<(), String> {
-        self.0.lock().map_err(|e| e.to_string())?.insert(key.into(), token.into());
+        self.0
+            .lock()
+            .map_err(|e| e.to_string())?
+            .insert(key.into(), token.into());
         Ok(())
     }
     fn delete(&self, key: &str) -> Result<(), String> {
@@ -110,7 +122,9 @@ impl Vault for MemoryVault {
 
 pub struct Identity {
     vault: Box<dyn Vault>,
+    pub(crate) cache: crate::read_cache::ReadCache,
     http: reqwest::Client,
+    offline_copies: Mutex<HashMap<String, String>>,
     /// The server the shell currently uses, with its token if signed in.
     active: watch::Sender<Option<(Target, Option<String>)>>,
 }
@@ -137,12 +151,20 @@ pub struct AuthState {
     /// Signed in with a stored token, but the server could not be asked who we are.
     offline: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    offline_copy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
 }
 
 impl AuthState {
     fn signed_out() -> Self {
-        Self { signed_in: false, account: None, offline: false, error: None }
+        Self {
+            signed_in: false,
+            account: None,
+            offline: false,
+            offline_copy: None,
+            error: None,
+        }
     }
 }
 
@@ -150,10 +172,28 @@ impl AuthState {
 /// diagnostic in `error`, including when a proxy answers with status 200.
 #[derive(Debug, Serialize)]
 pub struct ApiReply {
-    status: u16,
-    body: Value,
+    #[serde(rename = "offlineCopy", skip_serializing_if = "Option::is_none")]
+    pub(crate) offline_copy: Option<String>,
+    pub(crate) status: u16,
+    pub(crate) body: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
+    pub(crate) cached: Option<CachedInfo>,
+    #[serde(skip)]
+    etag: Option<String>,
+    #[serde(rename = "nextCursor", skip_serializing_if = "Option::is_none")]
+    next_cursor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) error: Option<String>,
+    #[serde(skip)]
+    pub(crate) revalidated: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedInfo {
+    pub as_of: String,
+    pub reason: String,
+    pub detail: String,
 }
 
 impl ApiReply {
@@ -162,6 +202,11 @@ impl ApiReply {
             Ok(body) => Self {
                 status,
                 body,
+                offline_copy: None,
+                cached: None,
+                etag: None,
+                next_cursor: None,
+                revalidated: false,
                 error: None,
             },
             Err(_) => {
@@ -170,6 +215,11 @@ impl ApiReply {
                 Self {
                     status,
                     body: Value::Null,
+                    offline_copy: None,
+                    cached: None,
+                    etag: None,
+                    next_cursor: None,
+                    revalidated: false,
                     error: Some(error),
                 }
             }
@@ -307,7 +357,7 @@ fn detail(body: &Value, status: u16) -> String {
 }
 
 /// Only read endpoints under /v1/, with no tricks in the path.
-fn valid_api_path(path: &str) -> bool {
+pub(crate) fn valid_api_path(path: &str) -> bool {
     path.starts_with("/v1/")
         && path.len() < 1024
         && !path.contains("..")
@@ -319,7 +369,6 @@ fn valid_api_path(path: &str) -> bool {
 impl Identity {
     pub fn with_vault(vault: Box<dyn Vault>) -> Self {
         let http = reqwest::Client::builder()
-            .timeout(Duration::from_secs(300))
             .read_timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(4))
             .user_agent(concat!("UPbLab/", env!("CARGO_PKG_VERSION")))
@@ -327,7 +376,9 @@ impl Identity {
             .expect("HTTP client");
         Self {
             vault,
+            cache: crate::read_cache::ReadCache::default(),
             http,
+            offline_copies: Mutex::new(HashMap::new()),
             active: watch::Sender::new(None),
         }
     }
@@ -352,7 +403,58 @@ impl Identity {
         let _ = tokio::time::timeout(timeout, rx.wait_for(|a| a.is_some())).await;
     }
 
-    async fn send_json(&self, req: reqwest::RequestBuilder) -> Result<ApiReply, String> {
+    pub(crate) fn offline_copy(&self, server: &str) -> Option<String> {
+        let normalized = normalized_server(server)?;
+        self.offline_copies.lock().ok()?.get(&normalized).cloned()
+    }
+    fn remember_copy(&self, target: &Target, value: Option<String>) {
+        let Some(server) = normalized_server(&target.server) else {
+            return;
+        };
+        let mut copies = self.offline_copies.lock().unwrap();
+        if let Some(value) = value {
+            if copies.len() >= 32 && !copies.contains_key(&server) {
+                if let Some(old) = copies.keys().next().cloned() {
+                    copies.remove(&old);
+                }
+            }
+            copies.insert(server, value);
+        } else {
+            copies.remove(&server);
+        }
+    }
+    pub(crate) fn guard_grainatlas(&self, server: &str) -> Result<(), String> {
+        if self.offline_copy(server).is_some() {
+            Err("GrainAtlas cannot connect to a read-only copy of UPbDB".into())
+        } else {
+            Ok(())
+        }
+    }
+    /// Check at delivery too: a queued focus may predate discovery of the copy.
+    pub(crate) fn filter_module_command(&self, label: &str, command: &mut Value) {
+        if label != "module-images" {
+            return;
+        }
+        let copy = self
+            .current_server()
+            .is_some_and(|s| self.offline_copy(&s).is_some())
+            || command
+                .get("server")
+                .and_then(Value::as_str)
+                .is_some_and(|s| self.offline_copy(s).is_some());
+        if copy {
+            if let Some(object) = command.as_object_mut() {
+                object.remove("server");
+                object.remove("token");
+                object.remove("code");
+            }
+        }
+    }
+    async fn send_json(
+        &self,
+        target: &Target,
+        req: reqwest::RequestBuilder,
+    ) -> Result<ApiReply, String> {
         let req = req
             .build()
             .map_err(|_| "Could not prepare the server request.".to_string())?;
@@ -386,6 +488,23 @@ impl Identity {
                 "Could not send the server request.".to_string()
             }
         })?;
+        let offline_copy = res
+            .headers()
+            .get("X-UPbDB-Offline-Copy")
+            .and_then(|h| h.to_str().ok())
+            .and_then(clean_offline_copy);
+        self.remember_copy(target, offline_copy.clone());
+        let next_cursor = res
+            .headers()
+            .get("X-Next-Cursor")
+            .and_then(|h| h.to_str().ok())
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned);
+        let etag = res
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|h| h.to_str().ok())
+            .map(str::to_owned);
         let status = res.status().as_u16();
         let url = res.url().clone();
         // Gzip removes Content-Length because the decoded size is unknown.
@@ -394,23 +513,56 @@ impl Identity {
             .text()
             .await
             .map_err(|e| body_read_error(&url, started.elapsed(), status, expected, &e))?;
-        Ok(ApiReply::from_text(status, &text, &secrets))
+        let mut reply = ApiReply::from_text(status, &text, &secrets);
+        reply.offline_copy = offline_copy;
+        reply.etag = etag;
+        reply.next_cursor = next_cursor;
+        Ok(reply)
     }
 
     /// Store a token from login or exchange; returns the account it came with.
-    fn adopt(&self, target: &Target, body: Value) -> Result<AuthState, String> {
-        let token = body.get("token").and_then(Value::as_str).filter(|t| !t.is_empty()).ok_or("no token in the reply")?;
+    pub(crate) fn adopt(&self, target: &Target, body: Value) -> Result<AuthState, String> {
+        let token = body
+            .get("token")
+            .and_then(Value::as_str)
+            .filter(|t| !t.is_empty())
+            .ok_or("no token in the reply")?;
+        // An unsuccessful keychain write must not associate its old token with
+        // the newly signed-in account's mirror.
+        self.cache.hide(target)?;
         self.vault.set(&target.key, token)?;
+        if let Some(account) = body.get("account") {
+            self.cache
+                .adopt_with_copy(target, account, self.offline_copy(&target.server))
+                .map_err(|e| format!("Could not prepare saved data for this account: {e}"))?;
+        }
         self.set_active(target, Some(token.to_string()));
-        Ok(AuthState { signed_in: true, account: body.get("account").cloned(), offline: false, error: None })
+        Ok(AuthState {
+            signed_in: true,
+            account: body.get("account").cloned(),
+            offline: false,
+            offline_copy: self.offline_copy(&target.server),
+            error: None,
+        })
+    }
+
+    fn save_account(&self, target: &Target, account: &Value) {
+        if let Err(e) =
+            self.cache
+                .adopt_with_copy(target, account, self.offline_copy(&target.server))
+        {
+            let _ = self.cache.hide(target);
+            log::warn!("could not save account: {e}");
+        }
     }
 
     pub async fn restore(&self, target: &Target) -> Result<AuthState, String> {
         target.base()?;
         let stored = self.vault.get(&target.key)?;
-        // Make the token available to module webviews before validating it.
-        self.set_active(target, stored.clone());
+        // Withhold credentials until this target has been checked for copy marking.
+        self.set_active(target, None);
         let Some(token) = stored else {
+            self.cache.hide(target)?;
             return Ok(AuthState::signed_out());
         };
         let req = self
@@ -418,15 +570,34 @@ impl Identity {
             .get(target.endpoint("/v1/accounts/me")?)
             .bearer_auth(&token)
             .timeout(AUTH_TIMEOUT);
-        match self.send_json(req).await {
-            Ok(reply) if reply.status == 200 && reply.error.is_none() => Ok(AuthState {
-                signed_in: true,
-                account: Some(reply.body),
-                offline: false,
-                error: None,
-            }),
+        match self.send_json(target, req).await {
+            Ok(reply) if reply.status == 200 && reply.error.is_none() => {
+                self.save_account(target, &reply.body);
+                self.cache.store(
+                    target,
+                    &crate::read_cache::Entry {
+                        path: "/v1/accounts/me".into(),
+                        body: reply.body.clone(),
+                        stored_at: crate::read_cache::now(),
+                        checked_at: None,
+                        etag: reply.etag.clone(),
+                        next_cursor: None,
+                        offline_copy: reply.offline_copy.clone(),
+                    },
+                    self.cache.epoch(),
+                );
+                self.set_active(target, Some(token.clone()));
+                Ok(AuthState {
+                    signed_in: true,
+                    account: Some(reply.body),
+                    offline: false,
+                    offline_copy: reply.offline_copy,
+                    error: None,
+                })
+            }
             Ok(reply) if reply.status == 401 => {
                 // Revoked or expired, or a different database at this address.
+                self.cache.hide(target)?;
                 self.vault.delete(&target.key)?;
                 self.set_active(target, None);
                 Ok(AuthState {
@@ -434,18 +605,34 @@ impl Identity {
                     ..AuthState::signed_out()
                 })
             }
-            Ok(reply) => Ok(AuthState {
-                signed_in: true,
-                account: None,
-                offline: true,
-                error: Some(reply.message()),
-            }),
-            Err(e) => Ok(AuthState {
-                signed_in: true,
-                account: None,
-                offline: true,
-                error: Some(e),
-            }),
+            Ok(reply) => {
+                self.set_active(target, Some(token.clone()));
+                Ok(AuthState {
+                    offline_copy: reply.offline_copy.clone(),
+                    signed_in: true,
+                    account: self.cache.account(target),
+                    offline: true,
+                    error: Some(reply.message()),
+                })
+            }
+            Err(e) => {
+                let offline_copy = self.cache.account_copy(target).or_else(|| {
+                    self.cache
+                        .load(target, "/v1/accounts/me")
+                        .and_then(|e| e.offline_copy)
+                });
+                if offline_copy.is_some() {
+                    self.remember_copy(target, offline_copy.clone());
+                }
+                self.set_active(target, Some(token.clone()));
+                Ok(AuthState {
+                    offline_copy,
+                    signed_in: true,
+                    account: self.cache.account(target),
+                    offline: true,
+                    error: Some(e),
+                })
+            }
         }
     }
 
@@ -458,6 +645,7 @@ impl Identity {
         let body = serde_json::json!({ "username": username, "password": password });
         let reply = self
             .send_json(
+                target,
                 self.http
                     .post(target.endpoint("/v1/auth/login")?)
                     .json(&body)
@@ -475,6 +663,7 @@ impl Identity {
         let body = serde_json::json!({ "code": code });
         let reply = self
             .send_json(
+                target,
                 self.http
                     .post(target.endpoint("/v1/auth/exchange")?)
                     .json(&body)
@@ -491,11 +680,13 @@ impl Identity {
     pub async fn logout(&self, target: &Target) -> Result<AuthState, String> {
         target.base()?;
         let token = self.vault.get(&target.key)?;
+        self.cache.hide(target)?;
         self.vault.delete(&target.key)?;
         self.set_active(target, None);
         if let Some(token) = token {
             if let Err(e) = self
                 .send_json(
+                    target,
                     self.http
                         .post(target.endpoint("/v1/auth/logout")?)
                         .bearer_auth(token)
@@ -514,6 +705,7 @@ impl Identity {
         let token = self.vault.get(&target.key)?.ok_or("not signed in")?;
         let reply = self
             .send_json(
+                target,
                 self.http
                     .post(target.endpoint("/v1/auth/handoff")?)
                     .bearer_auth(token)
@@ -544,12 +736,130 @@ impl Identity {
         if !query.is_empty() {
             url.set_query(Some(query));
         }
+        let epoch = self.cache.epoch();
+        let token = self.vault.get(&target.key)?;
+        let saved = if token.is_some() {
+            self.cache.load(target, path_and_query)
+        } else {
+            None
+        };
         let mut req = self.http.get(url).header("Accept", "application/json");
-        if let Some(token) = self.vault.get(&target.key)? {
+        if let Some(token) = &token {
             req = req.bearer_auth(token);
         }
-        self.send_json(req).await
+        if let Some(etag) = saved.as_ref().and_then(|e| e.etag.as_ref()) {
+            req = req.header(reqwest::header::IF_NONE_MATCH, etag);
+        }
+        let fallback = |entry: crate::read_cache::Entry, reason: &str, detail: String| {
+            if entry.offline_copy.is_some() {
+                self.remember_copy(target, entry.offline_copy.clone());
+            }
+            ApiReply {
+                offline_copy: entry.offline_copy.clone(),
+                status: 200,
+                cached: Some(CachedInfo {
+                    as_of: entry.as_of(),
+                    reason: reason.into(),
+                    detail,
+                }),
+                body: entry.body,
+                error: None,
+                etag: None,
+                next_cursor: entry.next_cursor,
+                revalidated: false,
+            }
+        };
+        let response = self.send_json(target, req).await;
+        if self.cache.epoch() != epoch || self.vault.get(&target.key)? != token {
+            return Err("The account or saved data changed during the request. Try again.".into());
+        }
+        match response {
+            Ok(reply) if reply.status == 304 && saved.is_some() => {
+                let mut entry = saved.unwrap();
+                entry.checked_at = Some(crate::read_cache::now());
+                entry.offline_copy = reply.offline_copy;
+                self.cache.revalidate(target, &entry, epoch);
+                Ok(ApiReply {
+                    offline_copy: entry.offline_copy,
+                    status: 200,
+                    body: entry.body,
+                    cached: None,
+                    error: None,
+                    etag: entry.etag,
+                    next_cursor: entry.next_cursor,
+                    revalidated: true,
+                })
+            }
+            Ok(reply)
+                if matches!(reply.status, 502..=504)
+                    || (reply.status >= 500 && reply.error.is_some()) =>
+            {
+                if let Some(entry) = saved {
+                    Ok(fallback(
+                        entry,
+                        "server_error",
+                        format!("Server returned {}: {}", reply.status, reply.message()),
+                    ))
+                } else {
+                    Ok(reply)
+                }
+            }
+            Ok(reply) => {
+                if reply.status == 401 {
+                    self.cache.hide(target)?;
+                    self.vault.delete(&target.key)?;
+                    self.set_active(target, None);
+                }
+                if reply.status == 200 && reply.error.is_none() && token.is_some() {
+                    if path == "/v1/accounts/me" {
+                        self.save_account(target, &reply.body);
+                    }
+                    self.cache.store(
+                        target,
+                        &crate::read_cache::Entry {
+                            offline_copy: reply.offline_copy.clone(),
+                            path: path_and_query.into(),
+                            etag: reply.etag.clone(),
+                            stored_at: crate::read_cache::now(),
+                            checked_at: None,
+                            body: reply.body.clone(),
+                            next_cursor: reply.next_cursor.clone(),
+                        },
+                        epoch,
+                    );
+                }
+                Ok(reply)
+            }
+            Err(error) => match saved {
+                Some(entry) => Ok(fallback(entry, "unreachable", error)),
+                None => Err(error),
+            },
+        }
     }
+}
+
+fn normalized_server(server: &str) -> Option<String> {
+    let mut url: Url = server.trim().parse().ok()?;
+    url.set_query(None);
+    url.set_fragment(None);
+    Some(url.as_str().trim_end_matches('/').to_owned())
+}
+fn clean_offline_copy(text: &str) -> Option<String> {
+    let clean: String = text.chars().filter(|c| !c.is_control()).collect();
+    let clean: String = clean.trim().chars().take(200).collect();
+    if clean.is_empty() {
+        None
+    } else {
+        Some(clean)
+    }
+}
+fn module_may_receive_token(identity: &Identity, module: &str, page: &Url, server: &str) -> bool {
+    if (module == "module-images" || page.path().contains("/grainatlas/"))
+        && identity.offline_copy(server).is_some()
+    {
+        return false;
+    }
+    may_receive_token(page, server)
 }
 
 /// Origin of a URL as `scheme://host[:port]`.
@@ -562,7 +872,9 @@ fn origin(url: &Url) -> String {
 pub fn may_receive_token(page: &Url, server: &str) -> bool {
     let local = page.scheme() == "tauri"
         || page.host_str() == Some("tauri.localhost")
-        || (cfg!(debug_assertions) && page.host_str() == Some("localhost") && page.port() == Some(1420));
+        || (cfg!(debug_assertions)
+            && page.host_str() == Some("localhost")
+            && page.port() == Some(1420));
     if local {
         return true;
     }
@@ -575,7 +887,10 @@ pub fn may_receive_token(page: &Url, server: &str) -> bool {
 // ------------------------------------------------------------------ commands
 
 #[tauri::command]
-pub async fn auth_restore(identity: State<'_, Identity>, target: Target) -> Result<AuthState, String> {
+pub async fn auth_restore(
+    identity: State<'_, Identity>,
+    target: Target,
+) -> Result<AuthState, String> {
     identity.restore(&target).await
 }
 
@@ -592,7 +907,11 @@ pub async fn auth_login(
 }
 
 #[tauri::command]
-pub async fn auth_exchange(identity: State<'_, Identity>, target: Target, code: String) -> Result<AuthState, String> {
+pub async fn auth_exchange(
+    identity: State<'_, Identity>,
+    target: Target,
+    code: String,
+) -> Result<AuthState, String> {
     if code.is_empty() || code.len() > 512 {
         return Err("invalid sign-in code".into());
     }
@@ -602,7 +921,10 @@ pub async fn auth_exchange(identity: State<'_, Identity>, target: Target, code: 
 }
 
 #[tauri::command]
-pub async fn auth_logout(identity: State<'_, Identity>, target: Target) -> Result<AuthState, String> {
+pub async fn auth_logout(
+    identity: State<'_, Identity>,
+    target: Target,
+) -> Result<AuthState, String> {
     let state = identity.logout(&target).await?;
     log::info!("signed out of {}", target.server);
     Ok(state)
@@ -614,7 +936,11 @@ pub async fn auth_handoff(identity: State<'_, Identity>, target: Target) -> Resu
 }
 
 #[tauri::command]
-pub async fn api_get(identity: State<'_, Identity>, target: Target, path: String) -> Result<ApiReply, String> {
+pub async fn api_get(
+    identity: State<'_, Identity>,
+    target: Target,
+    path: String,
+) -> Result<ApiReply, String> {
     identity.get(&target, &path).await
 }
 
@@ -624,15 +950,19 @@ pub async fn token_for<R: Runtime>(identity: &Identity, webview: &Webview<R>) ->
     identity.wait_for_active(Duration::from_secs(3)).await;
     let server = identity.current_server()?;
     let page = webview.url().ok()?;
-    if !may_receive_token(&page, &server) {
-        log::warn!("withheld the token from {} ({})", webview.label(), origin(&page));
+    if !module_may_receive_token(identity, webview.label(), &page, &server) {
+        log::warn!(
+            "withheld the token from {} ({})",
+            webview.label(),
+            origin(&page)
+        );
         return None;
     }
     identity.current_token()
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::io::{Read, Write};
     use std::net::TcpListener;
@@ -643,7 +973,7 @@ mod tests {
     }
 
     /// A one-route-per-request fake UPbDB: answers `n` requests from `routes`.
-    fn fake_server(n: usize, routes: fn(&str, &str, &str) -> (u16, String)) -> String {
+    pub(crate) fn fake_server(n: usize, routes: fn(&str, &str, &str) -> (u16, String)) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         thread::spawn(move || {
@@ -659,7 +989,11 @@ mod tests {
                     if let Some(end) = text.find("\r\n\r\n") {
                         let len = text
                             .lines()
-                            .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length: ").map(|v| v.trim().parse::<usize>().unwrap()))
+                            .find_map(|l| {
+                                l.to_ascii_lowercase()
+                                    .strip_prefix("content-length: ")
+                                    .map(|v| v.trim().parse::<usize>().unwrap())
+                            })
                             .unwrap_or(0);
                         if got >= end + 4 + len || k == 0 {
                             break;
@@ -673,7 +1007,10 @@ mod tests {
                 let first = text.lines().next().unwrap_or("").to_string();
                 let auth = text
                     .lines()
-                    .find_map(|l| l.strip_prefix("authorization: ").or_else(|| l.strip_prefix("Authorization: ")))
+                    .find_map(|l| {
+                        l.strip_prefix("authorization: ")
+                            .or_else(|| l.strip_prefix("Authorization: "))
+                    })
                     .unwrap_or("")
                     .to_string();
                 let body = text.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
@@ -689,15 +1026,23 @@ mod tests {
     }
 
     fn target(server: &str) -> Target {
-        Target { server: server.into(), key: server.into() }
+        Target {
+            server: server.into(),
+            key: server.into(),
+        }
     }
 
     fn rt() -> tokio::runtime::Runtime {
-        tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap()
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
     }
 
     /// GET-only server for partial, stalled or encoded response bodies.
-    fn raw_server(reply: impl FnOnce(std::net::TcpStream, String) + Send + 'static) -> String {
+    pub(crate) fn raw_server(
+        reply: impl FnOnce(std::net::TcpStream, String) + Send + 'static,
+    ) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
         thread::spawn(move || {
@@ -716,6 +1061,148 @@ mod tests {
             reply(stream, String::from_utf8(request).unwrap());
         });
         format!("http://{addr}")
+    }
+
+    #[test]
+    fn offline_copy_guard_normalizes_targets_and_preserves_other_module_access() {
+        let id = identity();
+        let target = target("https://copy.invalid/");
+        id.remember_copy(&target, clean_offline_copy("  invented\t copy\u{7f}  "));
+        assert_eq!(
+            id.offline_copy("https://copy.invalid").as_deref(),
+            Some("invented copy")
+        );
+        assert!(id.guard_grainatlas("https://copy.invalid").is_err());
+        assert!(id.guard_grainatlas("https://another.invalid").is_ok());
+        let page = "tauri://localhost/modules/grainatlas/index.html"
+            .parse()
+            .unwrap();
+        assert!(!module_may_receive_token(
+            &id,
+            "module-images",
+            &page,
+            &target.server
+        ));
+        let page = "https://copy.invalid/app/".parse().unwrap();
+        assert!(module_may_receive_token(
+            &id,
+            "module-sessions",
+            &page,
+            &target.server
+        ));
+        assert_eq!(
+            clean_offline_copy(&"é".repeat(210))
+                .unwrap()
+                .chars()
+                .count(),
+            200
+        );
+        assert!(clean_offline_copy(" \t ").is_none());
+        let mut command = serde_json::json!({"type":"focus-spot", "project":"p", "spot":"s", "server":"https://copy.invalid"});
+        let mut sessions_command = command.clone();
+        id.filter_module_command("module-images", &mut command);
+        assert!(command.get("server").is_none());
+        id.filter_module_command("module-sessions", &mut sessions_command);
+        assert!(sessions_command.get("server").is_some());
+        id.remember_copy(&target, None);
+        assert!(id.guard_grainatlas("https://copy.invalid").is_ok());
+    }
+
+    #[test]
+    fn offline_copy_header_restores_caches_and_guards_only_grainatlas() {
+        const MARKER: &str = "offline copy as of 2026-11-17 21:49 UTC, read-only";
+        let server = raw_server(|mut stream, _| {
+            let body = r#"{"id":"invented","username":"analyst"}"#;
+            write!(stream, "HTTP/1.1 200 OK\r\nX-UPbDB-Offline-Copy:  {MARKER}  \r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+        });
+        let dir = tempfile::tempdir().unwrap();
+        let id = identity();
+        id.cache.configure(dir.path().into());
+        let t = target(&server);
+        id.vault.set(&t.key, "invented-token").unwrap();
+        let state = rt().block_on(id.restore(&t)).unwrap();
+        assert_eq!(state.offline_copy.as_deref(), Some(MARKER));
+        assert_eq!(serde_json::to_value(state).unwrap()["offlineCopy"], MARKER);
+        assert!(id.guard_grainatlas(&format!("{server}/")).is_err());
+        assert!(id.guard_grainatlas("https://other.invalid").is_ok());
+        let page = "tauri://localhost/modules/grainatlas/index.html"
+            .parse()
+            .unwrap();
+        assert!(!module_may_receive_token(
+            &id,
+            "module-images",
+            &page,
+            &server
+        ));
+        let page = "tauri://localhost/app/index.html".parse().unwrap();
+        assert!(module_may_receive_token(
+            &id,
+            "module-sessions",
+            &page,
+            &server
+        ));
+        let reply = rt().block_on(id.get(&t, "/v1/accounts/me")).unwrap();
+        assert_eq!(reply.offline_copy.as_deref(), Some(MARKER));
+        assert!(reply.cached.is_some());
+        assert_eq!(serde_json::to_value(reply).unwrap()["offlineCopy"], MARKER);
+        // A fresh process restores the copy marker before giving modules credentials.
+        let fresh = identity();
+        fresh.cache.configure(dir.path().into());
+        fresh.vault.set(&t.key, "invented-token").unwrap();
+        assert_eq!(
+            rt().block_on(fresh.restore(&t))
+                .unwrap()
+                .offline_copy
+                .as_deref(),
+            Some(MARKER)
+        );
+        assert!(fresh.guard_grainatlas(&server).is_err());
+        assert_eq!(
+            clean_offline_copy("  a\tb\u{7f}c  ").as_deref(),
+            Some("abc")
+        );
+        assert_eq!(
+            clean_offline_copy(&"é".repeat(210))
+                .unwrap()
+                .chars()
+                .count(),
+            200
+        );
+        assert!(serde_json::to_value(ApiReply::from_text(200, "{}", &[]))
+            .unwrap()
+            .get("offlineCopy")
+            .is_none());
+    }
+
+    #[test]
+    fn offline_copy_get_header_is_saved_and_live_reply_clears_guard() {
+        let server = raw_server(|mut stream, _| {
+            write!(stream, "HTTP/1.1 200 OK\r\nX-UPbDB-Offline-Copy: invented read-only\r\nContent-Length: 2\r\nConnection: close\r\n\r\n[]").unwrap();
+        });
+        let id = identity();
+        let dir = tempfile::tempdir().unwrap();
+        id.cache.configure(dir.path().into());
+        let t = target(&server);
+        id.adopt(
+            &t,
+            serde_json::json!({"token":"invented", "account":{"id":"one"}}),
+        )
+        .unwrap();
+        assert_eq!(
+            rt().block_on(id.get(&t, "/v1/sessions"))
+                .unwrap()
+                .offline_copy
+                .as_deref(),
+            Some("invented read-only")
+        );
+        assert!(id
+            .cache
+            .load(&t, "/v1/sessions")
+            .unwrap()
+            .offline_copy
+            .is_some());
+        id.remember_copy(&t, None);
+        assert!(id.guard_grainatlas(&server).is_ok());
     }
 
     #[test]
@@ -887,7 +1374,11 @@ mod tests {
         let server = fake_server(1, |first, _, body| {
             assert!(first.starts_with("POST /v1/auth/login "), "{first}");
             assert!(body.contains("\"username\":\"analyst\""));
-            (200, r#"{"token":"tok-1","account":{"username":"analyst","display_name":"Analyst"}}"#.into())
+            (
+                200,
+                r#"{"token":"tok-1","account":{"username":"analyst","display_name":"Analyst"}}"#
+                    .into(),
+            )
         });
         let id = identity();
         let t = target(&server);
@@ -923,8 +1414,12 @@ mod tests {
 
     #[test]
     fn failed_login_reports_the_server_detail() {
-        let server = fake_server(1, |_, _, _| (401, r#"{"detail":"Invalid username or password"}"#.into()));
-        let err = rt().block_on(identity().login(&target(&server), "x", "y")).unwrap_err();
+        let server = fake_server(1, |_, _, _| {
+            (401, r#"{"detail":"Invalid username or password"}"#.into())
+        });
+        let err = rt()
+            .block_on(identity().login(&target(&server), "x", "y"))
+            .unwrap_err();
         assert_eq!(err, "Invalid username or password");
     }
 
@@ -946,7 +1441,11 @@ mod tests {
 
     #[test]
     fn restore_keeps_the_token_when_the_server_is_down() {
-        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
         let t = target(&format!("http://127.0.0.1:{port}"));
         let id = identity();
         id.vault.set(&t.key, "kept").unwrap();
@@ -975,7 +1474,10 @@ mod tests {
         let server = fake_server(1, |first, auth, _| {
             assert!(first.starts_with("POST /v1/auth/handoff "));
             assert_eq!(auth, "Bearer tok");
-            (200, r#"{"code":"abc123","expires_at":"2026-11-03T12:05:00Z"}"#.into())
+            (
+                200,
+                r#"{"code":"abc123","expires_at":"2026-11-03T12:05:00Z"}"#.into(),
+            )
         });
         let id = identity();
         let t = target(&server);
@@ -985,18 +1487,25 @@ mod tests {
 
     #[test]
     fn handoff_needs_a_sign_in() {
-        let err = rt().block_on(identity().handoff(&target("http://127.0.0.1:9"))).unwrap_err();
+        let err = rt()
+            .block_on(identity().handoff(&target("http://127.0.0.1:9")))
+            .unwrap_err();
         assert!(err.contains("not signed in"));
     }
 
     #[test]
     fn api_get_keeps_query_and_server_prefix() {
         let server = fake_server(1, |first, _, _| {
-            assert!(first.starts_with("GET /lab/v1/sessions?material=zircon "), "{first}");
+            assert!(
+                first.starts_with("GET /lab/v1/sessions?material=zircon "),
+                "{first}"
+            );
             (200, "[]".into())
         });
         let t = target(&format!("{server}/lab"));
-        let r = rt().block_on(identity().get(&t, "/v1/sessions?material=zircon")).unwrap();
+        let r = rt()
+            .block_on(identity().get(&t, "/v1/sessions?material=zircon"))
+            .unwrap();
         assert_eq!(r.status, 200);
         assert_eq!(r.body, serde_json::json!([]));
     }
@@ -1014,11 +1523,30 @@ mod tests {
     #[test]
     fn token_goes_only_to_the_app_origin_and_the_server() {
         let server = "http://127.0.0.1:8000";
-        assert!(may_receive_token(&"tauri://localhost/modules/grainatlas/index.html".parse().unwrap(), server));
-        assert!(may_receive_token(&"http://tauri.localhost/modules/grainatlas/index.html".parse().unwrap(), server));
-        assert!(may_receive_token(&"http://127.0.0.1:8000/app/#/sessions".parse().unwrap(), server));
-        assert!(!may_receive_token(&"http://127.0.0.1:8001/app/".parse().unwrap(), server));
-        assert!(!may_receive_token(&"https://example.com/".parse().unwrap(), server));
+        assert!(may_receive_token(
+            &"tauri://localhost/modules/grainatlas/index.html"
+                .parse()
+                .unwrap(),
+            server
+        ));
+        assert!(may_receive_token(
+            &"http://tauri.localhost/modules/grainatlas/index.html"
+                .parse()
+                .unwrap(),
+            server
+        ));
+        assert!(may_receive_token(
+            &"http://127.0.0.1:8000/app/#/sessions".parse().unwrap(),
+            server
+        ));
+        assert!(!may_receive_token(
+            &"http://127.0.0.1:8001/app/".parse().unwrap(),
+            server
+        ));
+        assert!(!may_receive_token(
+            &"https://example.com/".parse().unwrap(),
+            server
+        ));
     }
 
     /// Against a real UPbDB with the demo data, and the real OS keychain:
@@ -1027,11 +1555,16 @@ mod tests {
     #[test]
     #[ignore]
     fn live_sign_in_handoff_and_keychain() {
-        let Ok(server) = std::env::var("UPBSTUDIO_LIVE_SERVER") else { return };
+        let Ok(server) = std::env::var("UPBSTUDIO_LIVE_SERVER") else {
+            return;
+        };
         let user = std::env::var("UPBSTUDIO_LIVE_USER").unwrap_or_else(|_| "analyst".into());
         let pw = std::env::var("UPBSTUDIO_LIVE_PASSWORD").unwrap_or_else(|_| "upbdb-demo".into());
         let id = Identity::with_vault(Box::new(KeychainVault));
-        let t = Target { server: server.clone(), key: format!("{server} (upbstudio live test)") };
+        let t = Target {
+            server: server.clone(),
+            key: format!("{server} (upbstudio live test)"),
+        };
         let rt = rt();
         let s = rt.block_on(id.login(&t, &user, &pw)).unwrap();
         assert_eq!(s.account.as_ref().unwrap()["username"], user.as_str());
@@ -1043,21 +1576,31 @@ mod tests {
         let sessions = rt.block_on(fresh.get(&t, "/v1/sessions")).unwrap();
         assert_eq!(sessions.status, 200);
         let first = sessions.body[0]["id"].as_str().unwrap().to_string();
-        let runs = rt.block_on(fresh.get(&t, &format!("/v1/sessions/{first}/reductions"))).unwrap();
+        let runs = rt
+            .block_on(fresh.get(&t, &format!("/v1/sessions/{first}/reductions")))
+            .unwrap();
         assert_eq!(runs.status, 200);
         let mounts = rt.block_on(fresh.get(&t, "/v1/mounts")).unwrap();
         assert_eq!(mounts.status, 200);
         if let Some(m) = mounts.body.get(0).and_then(|m| m["id"].as_str()) {
-            let atlas = rt.block_on(fresh.get(&t, &format!("/v1/mounts/{m}/atlas"))).unwrap();
+            let atlas = rt
+                .block_on(fresh.get(&t, &format!("/v1/mounts/{m}/atlas")))
+                .unwrap();
             eprintln!("GET /v1/mounts/{m}/atlas -> {}", atlas.status);
         }
         // The handoff code is what Studio exchanges for its own token.
         let code = rt.block_on(fresh.handoff(&t)).unwrap();
         let studio = Identity::with_vault(Box::new(MemoryVault::default()));
-        let st = Target { server: server.clone(), key: "studio".into() };
+        let st = Target {
+            server: server.clone(),
+            key: "studio".into(),
+        };
         let ex = rt.block_on(studio.exchange(&st, &code)).unwrap();
         assert_eq!(ex.account.unwrap()["username"], user.as_str());
-        assert!(rt.block_on(studio.exchange(&st, &code)).is_err(), "a handoff code is single-use");
+        assert!(
+            rt.block_on(studio.exchange(&st, &code)).is_err(),
+            "a handoff code is single-use"
+        );
         rt.block_on(studio.logout(&st)).unwrap();
         // Sign-out revokes the token on the server and clears the keychain entry.
         let token = KeychainVault.get(&t.key).unwrap().unwrap();
@@ -1067,14 +1610,30 @@ mod tests {
         other.vault.set(&t.key, &token).unwrap();
         let after = rt.block_on(other.restore(&t)).unwrap();
         assert!(!after.signed_in, "revoked token must be refused: {after:?}");
-        eprintln!("live: signed in as {user}, {} sessions, handoff exchanged once, signed out", sessions.body.as_array().unwrap().len());
+        eprintln!(
+            "live: signed in as {user}, {} sessions, handoff exchanged once, signed out",
+            sessions.body.as_array().unwrap().len()
+        );
     }
 
     #[test]
     fn targets_are_checked() {
-        assert!(Target { server: "file:///x".into(), key: "k".into() }.base().is_err());
-        assert!(Target { server: "http://x".into(), key: "".into() }.base().is_err());
-        let t = Target { server: "http://h:1/p/".into(), key: "k".into() };
+        assert!(Target {
+            server: "file:///x".into(),
+            key: "k".into()
+        }
+        .base()
+        .is_err());
+        assert!(Target {
+            server: "http://x".into(),
+            key: "".into()
+        }
+        .base()
+        .is_err());
+        let t = Target {
+            server: "http://h:1/p/".into(),
+            key: "k".into(),
+        };
         assert_eq!(t.endpoint("/v1/x").unwrap().as_str(), "http://h:1/p/v1/x");
     }
 }

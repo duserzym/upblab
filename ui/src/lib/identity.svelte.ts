@@ -16,6 +16,7 @@
 // Module tabs reload when the account changes (`revision`), so they pick up
 // the new token, or their own sign-in screen after a sign-out.
 
+import { connectivity } from './connectivity.svelte';
 import { SHELL_EVENTS } from '@lab/bridge';
 import { serverMessage, statusSentence } from './server-error';
 import {
@@ -107,6 +108,9 @@ function detail(body: unknown, status: number): string {
   return serverMessage(body, status);
 }
 
+function offlineCopy(res: Response): string | undefined {
+  return res.headers.get('X-UPbDB-Offline-Copy')?.replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 200) || undefined;
+}
 const memory = new Map<string, string>();
 
 /** Web delivery: fetch from the shell page, same origin as UPbDB at /desk/. */
@@ -121,7 +125,7 @@ const webBackend: Backend = {
         return { ...SIGNED_OUT, error: 'Your sign-in expired; please sign in again' };
       }
       if (!res.ok) return { signedIn: true, account: null, offline: true, error: statusSentence(res.status) };
-      return { signedIn: true, account: (await res.json()) as Account, offline: false };
+      return { signedIn: true, account: (await res.json()) as Account, offline: false, offlineCopy: offlineCopy(res) };
     } catch (err) {
       return { signedIn: true, account: null, offline: true, error: String(err) };
     }
@@ -156,7 +160,7 @@ const webBackend: Backend = {
     const res = await fetch(endpoint(t, path), {
       headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     });
-    return { status: res.status, body: (await json(res)) as T };
+    return { offlineCopy: offlineCopy(res), status: res.status, body: (await json(res)) as T, nextCursor: res.headers.get('X-Next-Cursor') ?? undefined };
   },
   token: (t) => readToken(t) ?? memory.get(t.key) ?? null,
 };
@@ -170,7 +174,7 @@ async function adopt(t: AuthTarget, res: Response): Promise<AuthState> {
   if (!res.ok || !body?.token) throw new Error(detail(body, res.status));
   writeToken(t, body.token);
   memory.set(t.key, body.token);
-  return { signedIn: true, account: body.account ?? null, offline: false };
+  return { signedIn: true, account: body.account ?? null, offline: false, offlineCopy: offlineCopy(res) };
 }
 
 const desktopBackend: Backend = { ...desktopAuth, token: () => null };
@@ -235,7 +239,12 @@ class Identity {
     const before = this.state;
     this.state = next;
     const who = (s: AuthState) => (s.signedIn ? (s.account?.username ?? '?') : '');
-    if (before.signedIn !== next.signedIn || (next.account && who(before) !== who(next))) this.revision += 1;
+    if (before.signedIn !== next.signedIn || (next.account && who(before) !== who(next))) {
+      const copy = connectivity.offlineCopy;
+      connectivity.reset(); connectivity.offlineCopy = copy; this.revision += 1;
+    }
+    if (next.signedIn && !next.offline) connectivity.offlineCopy = next.offlineCopy ?? null;
+    else if (next.offlineCopy) connectivity.offlineCopy = next.offlineCopy;
   }
 
   /** Read the stored sign-in for `target` (called when the server changes). */
@@ -244,13 +253,16 @@ class Identity {
     if (this.restoring === id) return;
     this.restoring = id;
     const switched = this.target?.key !== target.key || this.target?.server !== target.server;
-    if (switched) this.changed(SIGNED_OUT);
+    if (switched) { connectivity.reset(); this.changed(SIGNED_OUT); }
     this.target = target;
     this.checking = true;
     try {
       const next = await this.backend.restore(target);
       if (this.restoring !== id) return; // superseded
       this.changed(next);
+      if (next.offlineCopy) connectivity.offlineCopy = next.offlineCopy;
+      if (next.offline) connectivity.unavailable(next.error);
+      else if (next.signedIn) connectivity.report({ status: 200, body: next.account, offlineCopy: next.offlineCopy });
       if (next.error && !next.signedIn) this.error = next.error;
     } catch (err) {
       await logWarn(`[identity] restore failed: ${message(err)}`);
@@ -269,6 +281,7 @@ class Identity {
     this.error = '';
     try {
       const next = await this.backend.login(target, username.trim(), password);
+      if (this.target?.server !== target.server || this.target?.key !== target.key) connectivity.reset();
       this.target = target;
       this.changed(next);
       await logInfo(`[identity] signed in to ${target.server} as ${next.account?.username ?? username.trim()}`);
@@ -371,7 +384,19 @@ class Identity {
   /** GET a UPbDB read endpoint as the signed-in account. */
   async get<T>(path: string): Promise<ApiReply<T>> {
     if (!this.target) throw new Error('No UPbDB server is configured yet.');
-    const reply = await this.backend.get<T>(this.target, path);
+    const target = this.target, revision = this.revision;
+    let reply: ApiReply<T>;
+    try { reply = await this.backend.get<T>(target, path); }
+    catch (err) {
+      if (this.target?.server === target.server && this.target?.key === target.key && revision === this.revision)
+        connectivity.unavailable(message(err));
+      throw err;
+    }
+    if (this.target?.server === target.server && this.target?.key === target.key && revision === this.revision) {
+      connectivity.report(reply);
+      if (!reply.cached && reply.status === 200 && path === '/v1/accounts/me')
+        this.changed({ signedIn: this.signedIn, account: reply.body as Account, offline: false, offlineCopy: reply.offlineCopy });
+    }
     // A proxy can return HTML even with status 200. All read consumers must
     // see that diagnostic before treating the body as endpoint data.
     if (reply.error) throw new Error(reply.error);
@@ -379,7 +404,8 @@ class Identity {
   }
 
   /** Web delivery: what the frame host gives module iframes for `token()`. */
-  frameToken(): string | null {
+  frameToken(module?: string): string | null {
+    if ((module === 'images' || module === 'grainatlas') && connectivity.offlineCopy) return null;
     return this.target && this.state.signedIn ? this.backend.token(this.target) : null;
   }
 }

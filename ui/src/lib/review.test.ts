@@ -25,7 +25,7 @@ beforeEach(() => {
   settings.reviewSplit = false;
   settings.reviewScope = '';
   review = new Review();
-  get.mockImplementation(async (path) => ({ status: path in reviewFixtures ? 200 : 404, body: reviewFixtures[path] }) as never);
+  get.mockImplementation(async (path) => { const key = path.replace('?limit=500', ''); return { status: key in reviewFixtures ? 200 : 404, body: reviewFixtures[key] } as never; });
   vi.mocked(sendCommand).mockResolvedValue(true);
   moduleSurfaces.clear(); shell.view = 'review';
 });
@@ -251,12 +251,12 @@ describe('Review refresh speed', () => {
       ? new Promise(resolve => { finish = resolve; }) : previous(request));
     const pending = review.open({ kind, id: kind === 'session' ? session.id : 'mount-demo' });
     expect(get).toHaveBeenCalledWith(path);
-    expect(get).not.toHaveBeenCalledWith('/v1/sessions');
-    expect(get).not.toHaveBeenCalledWith('/v1/mounts');
+    expect(get).not.toHaveBeenCalledWith('/v1/sessions?limit=500');
+    expect(get).not.toHaveBeenCalledWith('/v1/mounts?limit=500');
     finish({ status: 200, body: reviewFixtures[path] });
     await pending;
-    expect(get).toHaveBeenCalledWith('/v1/sessions');
-    expect(get).toHaveBeenCalledWith('/v1/mounts');
+    expect(get).toHaveBeenCalledWith('/v1/sessions?limit=500');
+    expect(get).toHaveBeenCalledWith('/v1/mounts?limit=500');
   });
 
   it('starts picker lists after results fail without awaiting the lists', async () => {
@@ -264,15 +264,15 @@ describe('Review refresh speed', () => {
     const previous = get.getMockImplementation()!;
     get.mockImplementation(path => path.includes('/results?run=')
       ? new Promise((_resolve, reject) => { fail = reject; })
-      : path === '/v1/sessions' || path === '/v1/mounts' ? new Promise(() => {}) : previous(path));
+      : path === '/v1/sessions?limit=500' || path === '/v1/mounts?limit=500' ? new Promise(() => {}) : previous(path));
     const pending = review.open({ kind: 'session', id: session.id });
-    expect(get).not.toHaveBeenCalledWith('/v1/sessions');
-    expect(get).not.toHaveBeenCalledWith('/v1/mounts');
+    expect(get).not.toHaveBeenCalledWith('/v1/sessions?limit=500');
+    expect(get).not.toHaveBeenCalledWith('/v1/mounts?limit=500');
     fail(new Error('offline'));
     await pending;
     expect(review.state).toBe('error');
-    expect(get).toHaveBeenCalledWith('/v1/sessions');
-    expect(get).toHaveBeenCalledWith('/v1/mounts');
+    expect(get).toHaveBeenCalledWith('/v1/sessions?limit=500');
+    expect(get).toHaveBeenCalledWith('/v1/mounts?limit=500');
   });
 
   it.each([true, false])('preserves an external Images selection only on quiet loads (quiet=%s)', async quiet => {
@@ -298,7 +298,7 @@ describe('Review refresh speed', () => {
   it('finishes results before slow picker lists resolve, including a scope switch', async () => {
     const pending = new Map<string, (reply: ApiReply<unknown>) => void>();
     const previous = get.getMockImplementation()!;
-    get.mockImplementation(path => path === '/v1/sessions' || path === '/v1/mounts'
+    get.mockImplementation(path => path === '/v1/sessions?limit=500' || path === '/v1/mounts?limit=500'
       ? new Promise(resolve => pending.set(path, resolve)) : previous(path));
     await review.open({ kind: 'session', id: session.id });
     expect(review.state).toBe('ready');
@@ -306,9 +306,9 @@ describe('Review refresh speed', () => {
     expect(get.mock.calls[0][0]).toContain('/results?run=preferred');
     await review.open({ kind: 'mount', id: 'mount-demo' });
     expect(review.rows).toHaveLength(mountResults.spots.length);
-    expect(get.mock.calls.filter(([path]) => path === '/v1/mounts')).toHaveLength(1);
-    pending.get('/v1/sessions')!({ status: 200, body: [session] });
-    pending.get('/v1/mounts')!({ status: 200, body: [] });
+    expect(get.mock.calls.filter(([path]) => path === '/v1/mounts?limit=500')).toHaveLength(1);
+    pending.get('/v1/sessions?limit=500')!({ status: 200, body: [session] });
+    pending.get('/v1/mounts?limit=500')!({ status: 200, body: [] });
     await vi.waitFor(() => expect(review.sessions).toHaveLength(1));
   });
 
@@ -404,17 +404,17 @@ describe('Review refresh speed', () => {
     clock.mockReturnValue(61_001);
     const previous = get.getMockImplementation()!;
     const releases: ((reply: ApiReply<unknown>) => void)[] = [];
-    get.mockImplementation(path => path === '/v1/sessions' || path === '/v1/mounts'
+    get.mockImplementation(path => path === '/v1/sessions?limit=500' || path === '/v1/mounts?limit=500'
       ? new Promise(resolve => releases.push(resolve)) : previous(path));
     let finish!: (reply: ApiReply<unknown>) => void;
     get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     const refreshing = review.refresh();
-    expect(get).not.toHaveBeenCalledWith('/v1/sessions');
-    expect(get).not.toHaveBeenCalledWith('/v1/mounts');
+    expect(get).not.toHaveBeenCalledWith('/v1/sessions?limit=500');
+    expect(get).not.toHaveBeenCalledWith('/v1/mounts?limit=500');
     finish({ status: 200, body: table });
     await refreshing;
     expect(review.state).toBe('ready');
-    expect(get).toHaveBeenCalledWith('/v1/mounts');
+    expect(get).toHaveBeenCalledWith('/v1/mounts?limit=500');
     identity.revision++;
     get.mockImplementation(previous);
     await review.load();
@@ -423,8 +423,8 @@ describe('Review refresh speed', () => {
     get.mockClear();
     identity.target = { server: 'http://other' } as typeof identity.target;
     await review.load();
-    expect(get).toHaveBeenCalledWith('/v1/sessions');
-    expect(get).toHaveBeenCalledWith('/v1/mounts');
+    expect(get).toHaveBeenCalledWith('/v1/sessions?limit=500');
+    expect(get).toHaveBeenCalledWith('/v1/mounts?limit=500');
   });
 });
 

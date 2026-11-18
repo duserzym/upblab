@@ -90,14 +90,15 @@ fn argv(
         Os::Windows => (path, Vec::new()),
         Os::Linux => return Err("Opening standalone GrainAtlas is not supported on Linux".into()),
     };
-    args.extend([
-        "--project".into(),
-        project.into(),
-        "--server".into(),
-        server.into(),
-        "--code".into(),
-        code.into(),
-    ]);
+    args.extend(["--project".into(), project.into()]);
+    if !server.is_empty() {
+        args.extend([
+            "--server".into(),
+            server.into(),
+            "--code".into(),
+            code.into(),
+        ]);
+    }
     if let Some(revision) = revision {
         args.extend(["--revision".into(), revision.to_string()]);
     }
@@ -236,9 +237,10 @@ fn registry_path() -> Option<PathBuf> {
 
 #[tauri::command]
 pub async fn grainatlas_launch(
+    identity: tauri::State<'_, crate::auth::Identity>,
     project: String,
-    server: String,
-    code: String,
+    server: Option<String>,
+    code: Option<String>,
     revision: Option<u64>,
     spot: Option<String>,
     grain: Option<String>,
@@ -251,18 +253,25 @@ pub async fn grainatlas_launch(
     if let Some(id) = &grain {
         validate_id(id, "grain")?;
     }
-    let url = url::Url::parse(&server).map_err(|_| "Invalid GrainAtlas server URL")?;
-    if !matches!(url.scheme(), "http" | "https")
-        || url.host_str().is_none()
-        || server.len() > 2048
-        || server.chars().any(char::is_whitespace)
-        || server.chars().any(char::is_control)
-    {
-        return Err("Invalid GrainAtlas server URL".into());
+    if let Some(server) = &server {
+        identity.guard_grainatlas(server)?;
+        let url = url::Url::parse(server).map_err(|_| "Invalid GrainAtlas server URL")?;
+        if !matches!(url.scheme(), "http" | "https")
+            || url.host_str().is_none()
+            || server.len() > 2048
+            || server.chars().any(|c| c.is_whitespace() || c.is_control())
+        {
+            return Err("Invalid GrainAtlas server URL".into());
+        }
+        let code = code.as_deref().ok_or("Invalid GrainAtlas handoff code")?;
+        if code.is_empty() || code.len() > 4096 || code.chars().any(char::is_control) {
+            return Err("Invalid GrainAtlas handoff code".into());
+        }
+    } else if code.is_some() {
+        return Err("GrainAtlas code requires a server".into());
     }
-    if code.is_empty() || code.len() > 4096 || code.chars().any(char::is_control) {
-        return Err("Invalid GrainAtlas handoff code".into());
-    }
+    let server = server.unwrap_or_default();
+    let code = code.unwrap_or_default();
     tauri::async_runtime::spawn_blocking(move || {
         let os = if cfg!(target_os = "macos") {
             Os::Mac
@@ -285,7 +294,14 @@ pub async fn grainatlas_launch(
             },
         )?;
         let (program, args) = argv(
-            os, path, &project, &server, &code, revision, spot.as_deref(), grain.as_deref(),
+            os,
+            path,
+            &project,
+            &server,
+            &code,
+            revision,
+            spot.as_deref(),
+            grain.as_deref(),
         )?;
         // Do not format argv at all: this also protects codes containing spaces.
         let mut command = Command::new(program);
@@ -343,6 +359,14 @@ mod tests {
     }
 
     #[test]
+    fn local_mode_has_no_credentials() {
+        for os in [Os::Mac, Os::Windows] {
+            let (_, args) = argv(os, "app".into(), "p", "", "", None, None, None).unwrap();
+            assert!(args.ends_with(&["--project".into(), "p".into()]));
+            assert!(!args.iter().any(|a| a == "--server" || a == "--code"));
+        }
+    }
+    #[test]
     fn arguments_per_os() {
         let (program, args) = argv(
             Os::Mac,
@@ -373,8 +397,17 @@ mod tests {
                 "41"
             ]
         );
-        let (program, args) =
-            argv(Os::Windows, EXE.into(), "p", "https://lab", "secret", None, None, None).unwrap();
+        let (program, args) = argv(
+            Os::Windows,
+            EXE.into(),
+            "p",
+            "https://lab",
+            "secret",
+            None,
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(program, PathBuf::from(EXE));
         assert_eq!(
             args,
@@ -387,20 +420,70 @@ mod tests {
                 "secret"
             ]
         );
-        assert!(argv(Os::Linux, "app".into(), "p", "https://lab", "secret", None, None, None).is_err());
+        assert!(argv(
+            Os::Linux,
+            "app".into(),
+            "p",
+            "https://lab",
+            "secret",
+            None,
+            None,
+            None
+        )
+        .is_err());
     }
 
     #[test]
     fn focus_arguments_and_validation() {
         for os in [Os::Mac, Os::Windows] {
-            let (_, args) = argv(os, "app".into(), "p", "https://lab", "code", None, Some("s"), Some("g")).unwrap();
+            let (_, args) = argv(
+                os,
+                "app".into(),
+                "p",
+                "https://lab",
+                "code",
+                None,
+                Some("s"),
+                Some("g"),
+            )
+            .unwrap();
             assert_eq!(&args[args.len() - 2..], ["--spot", "s"]);
             assert!(!args.iter().any(|a| a == "--grain"));
-            let (_, args) = argv(os, "app".into(), "p", "https://lab", "code", None, None, Some("g")).unwrap();
+            let (_, args) = argv(
+                os,
+                "app".into(),
+                "p",
+                "https://lab",
+                "code",
+                None,
+                None,
+                Some("g"),
+            )
+            .unwrap();
             assert_eq!(&args[args.len() - 2..], ["--grain", "g"]);
             for bad in ["", "../x", "-bad", "a b", &"a".repeat(129)] {
-                assert!(argv(os, "app".into(), "p", "https://lab", "code", None, Some(bad), None).is_err());
-                assert!(argv(os, "app".into(), "p", "https://lab", "code", None, None, Some(bad)).is_err());
+                assert!(argv(
+                    os,
+                    "app".into(),
+                    "p",
+                    "https://lab",
+                    "code",
+                    None,
+                    Some(bad),
+                    None
+                )
+                .is_err());
+                assert!(argv(
+                    os,
+                    "app".into(),
+                    "p",
+                    "https://lab",
+                    "code",
+                    None,
+                    None,
+                    Some(bad)
+                )
+                .is_err());
             }
             assert!(validate_id(&"a".repeat(128), "spot").is_ok());
         }

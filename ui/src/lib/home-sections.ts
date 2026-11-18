@@ -1,4 +1,4 @@
-export const homeSectionKeys = ['sessions', 'mounts'] as const;
+export const homeSectionKeys = ['sessions', 'mounts', 'local'] as const;
 export type HomeSection = typeof homeSectionKeys[number];
 export const atlasFilters = ['all', 'with', 'without'] as const;
 export type AtlasFilter = typeof atlasFilters[number];

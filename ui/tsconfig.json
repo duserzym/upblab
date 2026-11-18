@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "types": ["svelte", "vite/client"]
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte"]
+  "include": ["src/**/*.ts", "src/**/*.svelte", "tests/home.spec.ts", "tests/offline.spec.ts"]
 }
