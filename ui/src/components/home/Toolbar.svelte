@@ -31,7 +31,12 @@
   .toolbar { flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
   h2 { margin: 0; }
   input { width: 12rem; max-width: 100%; padding: var(--space-1) var(--space-2); font-size: 0.85rem; }
-  select { padding: var(--space-1) var(--space-2); font-size: 0.85rem; }
+  select { appearance: none; -webkit-appearance: none;
+    min-width: max(9rem, 144px); height: max(2rem, 32px); min-height: max(2rem, 32px); padding: var(--space-1) 2rem var(--space-1) var(--space-3); font-size: 0.9rem; line-height: 1.25rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+    background-position: calc(100% - 1rem - 4px) 50%, calc(100% - 1rem) 50%; background-size: 4px 4px; background-repeat: no-repeat; }
+  option { padding: 6px 10px; min-height: 28px; }
   .scope { margin: 0; }
   .count { white-space: nowrap; }
   .disclosure { justify-content: center; padding: 0 var(--space-1); min-width: 1.6rem; min-height: 1.6rem; }

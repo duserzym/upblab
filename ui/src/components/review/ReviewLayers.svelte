@@ -160,8 +160,12 @@
         ondragleave={e => { if (drop?.key === layer.key && !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) drop = undefined; }}
         oncontextmenu={e => { e.preventDefault(); toggle(full, level); }}>
         {#if !spot}
-          <button class="icon disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${layer.name}`} aria-expanded={open}
-            onclick={() => expanded[layer.key] = !open}><span aria-hidden="true">{open ? '▾' : '▸'}</span></button>
+          <button type="button" class="icon disclosure" aria-label={`${open ? 'Collapse' : 'Expand'} ${layer.name}`} aria-expanded={open}
+            onclick={() => expanded[layer.key] = !open}>
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <path d="M3 1l7 5-7 5z" />
+            </svg>
+          </button>
         {/if}
         <button type="button" class="icon visibility" role="checkbox" aria-checked={checked} aria-label={`Show ${layer.name} in Review`}
           title="Toggle visibility (right-click or H)" onclick={() => toggle(full, level)}>
@@ -180,7 +184,7 @@
           <small class="count">{layer.rows.length}</small>
         {/if}
         {#if (siblings(all, parent)?.length ?? 0) > 1}
-          <button class="icon handle" draggable="true" aria-label={`Reorder ${layer.name}`} aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+          <button type="button" class="icon handle" draggable="true" aria-label={`Reorder ${layer.name}`} aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
             title="Drag to reorder within this level, or press Option/Alt with ↑ or ↓"
             ondragstart={e => startDrag(e, parent, layer.key)} ondragend={clearDrag}
             onkeydown={e => moveWithKeys(e, parent, layer.key)}>⠿</button>
@@ -208,6 +212,9 @@
   .icon,.name,.spot {border:0;color:var(--text);background:transparent;font:inherit;font-size:0.72rem;cursor:pointer;border-radius:var(--radius-sm);}
   .icon {flex:none;padding:2px;width:17px;min-height:21px;color:var(--text-muted);}
   .icon:hover,.name:hover {color:var(--accent);}
+  .disclosure,.handle {display:grid;place-items:center;width:24px;height:24px;min-height:24px;line-height:1;}
+  .disclosure {color:var(--text);}
+  .disclosure[aria-expanded=true] svg {transform:rotate(90deg);}
   .visibility span {display:grid;place-items:center;width:13px;height:13px;border:1px solid var(--text-faint);border-radius:3px;font-size:0.62rem;line-height:1;}
   .visibility[aria-checked=true] span,.visibility[aria-checked=mixed] span {color:var(--accent);border-color:var(--accent);background:var(--accent-soft);}
   .name {min-width:0;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 1px;}
@@ -217,10 +224,10 @@
   .drop-before {box-shadow:inset 0 2px var(--accent);}
   .drop-after {box-shadow:inset 0 -2px var(--accent);}
   .dimmed .name,.dimmed .spot {opacity:0.60;}
-  .spot {min-width:0;display:flex;align-items:center;justify-content:space-between;gap:1px 4px;flex:1;flex-wrap:wrap;
+  .spot {min-width:0;display:flex;align-items:center;justify-content:space-between;gap:1px 4px;flex:1;
     padding:3px 2px;border:1px solid transparent;text-align:left;}
-  .spot span {overflow-wrap:anywhere;min-width:0;}
-  .spot small {font-size:0.64rem;white-space:nowrap;}
+  .spot span {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .spot small {flex:none;font-size:0.64rem;white-space:nowrap;}
   .spot.selected {background:var(--accent-soft);border-color:var(--accent);}
   .spot.hovered {outline:1px solid var(--accent);outline-offset:-1px;}
 </style>

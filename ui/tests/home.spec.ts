@@ -85,6 +85,36 @@ for (const desktop of [true, false]) {
     test(`${desktop ? 'desktop' : 'web'} board fits ${width} x ${height} with ${columns} columns`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await home(page, desktop);
+      const filters = page.getByRole('region', { name: 'Narrow data by person, team and project', exact: true });
+      const selects = filters.getByRole('combobox');
+      await expect(selects).toHaveCount(4);
+      const filterBoxes = await selects.evaluateAll(elements => elements.map(el => {
+        const { x, y, width, height } = el.getBoundingClientRect();
+        return { x, y, width, height };
+      }));
+      for (const box of filterBoxes) {
+        expect(box.width).toBeGreaterThanOrEqual(192);
+        expect(box.height).toBeGreaterThanOrEqual(34);
+      }
+      if (width >= 1280) {
+        expect(Math.max(...filterBoxes.map(box => box.y)) - Math.min(...filterBoxes.map(box => box.y))).toBeLessThanOrEqual(2);
+        const clear = (await filters.getByRole('button', { name: 'Clear filters', exact: true }).boundingBox())!;
+        expect(clear.x).toBeGreaterThanOrEqual(filterBoxes[3].x + filterBoxes[3].width);
+        expect(clear.y).toBeLessThan(filterBoxes[3].y + filterBoxes[3].height);
+        expect(clear.y + clear.height).toBeGreaterThan(filterBoxes[3].y);
+      } else {
+        expect(Math.abs(filterBoxes[0].y - filterBoxes[1].y)).toBeLessThanOrEqual(2);
+        expect(Math.abs(filterBoxes[2].y - filterBoxes[3].y)).toBeLessThanOrEqual(2);
+        expect(filterBoxes[2].y).toBeGreaterThan(filterBoxes[0].y);
+      }
+      const sorts = page.getByRole('combobox', { name: /^Sort / }).filter({ visible: true });
+      expect(await sorts.count()).toBeGreaterThanOrEqual(2);
+      for (const sort of await sorts.all()) {
+        const box = (await sort.boundingBox())!;
+        expect(box.width).toBeGreaterThanOrEqual(144);
+        expect(box.height).toBeGreaterThanOrEqual(30);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       await expect(page.getByTestId('open-panel').getByRole('button')).toHaveCount(4);
       const rows = await page.getByTestId('session-card').evaluateAll(cards => cards.map(c => ({ x: Math.round(c.getBoundingClientRect().x), y: Math.round(c.getBoundingClientRect().y) })));
       expect(new Set(rows.filter(r => r.y === rows[0].y).map(r => r.x)).size).toBe(columns);
