@@ -11,6 +11,7 @@ export type ReviewScope = {
 };
 export interface RunBrief {
   run_id: string;
+  upbrpy_version?: string;
   is_preferred: boolean;
   pipeline_version?: string;
   run_by?: string | null;

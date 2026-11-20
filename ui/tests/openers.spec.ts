@@ -230,6 +230,65 @@ test('failed Studio launch gives inline guidance in Review', async ({ page }) =>
   await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
 });
 
+test('an older Studio prompts before launch and Open anyway retains the selected analysis', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openReview(page, { studioFound: true, studioVersion: '0.1.2', fixtures: {
+    ...fixtures,
+    [`/v1/sessions/${session.id}/reductions`]: runs.map(run => ({ ...run, upbrpy_version: '0.1.3' })),
+  } });
+  await select(page);
+  // Selection loads depth asynchronously; it is unrelated to the version check.
+  await expect.poll(async () => (await calls(page)).some(([command, args]) => command === 'api_get'
+    && args?.path === '/v1/acquisitions/acq-2/depth-profile?run=run-preferred')).toBe(true);
+  const reads = (await calls(page)).filter(([command]) => command === 'api_get').length;
+  await details(page).getByRole('button', { name: 'Edit in UPbRPy Studio', exact: true }).click();
+  const prompt = details(page).getByRole('status');
+  await expect(prompt.locator('p')).toHaveText('Saved by UPbRPy Studio 0.1.3; you have 0.1.2. Update Studio to open it.');
+  await expect(prompt).toBeInViewport({ ratio: 0.99 });
+  await inside(prompt, details(page));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth && window.scrollX === 0)).toBe(true);
+  expect(await launches(page, 'studio_launch')).toHaveLength(0);
+  expect(await launches(page, 'auth_handoff')).toHaveLength(0);
+  expect((await calls(page)).filter(([command]) => command === 'api_get')).toHaveLength(reads);
+  await expect(prompt.getByRole('button', { name: 'Get the update', exact: true })).toBeVisible();
+  await expect(prompt.getByRole('button', { name: 'Open anyway', exact: true })).toBeVisible();
+  await prompt.getByRole('button', { name: 'Get the update', exact: true }).click();
+  await expect.poll(async () => (await calls(page)).filter(([command]) => command === 'plugin:opener|open_url').at(-1)?.[1]).toMatchObject({ url: 'https://github.com/duserzym/UPbRPy/releases/latest' });
+  expect(await launches(page, 'studio_launch')).toHaveLength(0);
+  await prompt.getByRole('button', { name: 'Open anyway', exact: true }).click();
+  await expect.poll(async () => (await launches(page, 'studio_launch')).length).toBe(1);
+  const url = new URL((await launches(page, 'studio_launch'))[0][1]!.url as string);
+  expect(url.host + url.pathname).toBe('run/run-preferred');
+  expect(url.searchParams.get('acquisition')).toBe('acq-2');
+  expect(url.searchParams.get('via')).toBe('upblab');
+  await expect(prompt).not.toBeVisible();
+  await expect(tab(page, 'Review')).toHaveAttribute('aria-selected', 'true');
+});
+
+test('the outdated session prompt stays on Home without fetching run metadata', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openReview(page, { studioFound: true, studioVersion: '0.1.2', fixtures: {
+    ...fixtures,
+    [`/v1/sessions/${session.id}/reductions`]: runs.map(run => ({ ...run, upbrpy_version: '0.1.3' })),
+  } });
+  await expect.poll(async () => (await calls(page)).some(([command, args]) => command === 'api_get'
+    && args?.path === '/v1/acquisitions/acq-1/depth-profile?run=run-preferred')).toBe(true);
+  await tab(page, 'Home').click();
+  const reduce = page.getByTestId('session-card').getByRole('button', { name: 'Reduce', exact: true });
+  await expect(reduce).toBeVisible();
+  const reads = (await calls(page)).filter(([command]) => command === 'api_get').length;
+  await reduce.click();
+  const home = page.getByTestId('home-scroll');
+  const prompt = home.getByRole('status').filter({ hasText: 'Saved by UPbRPy Studio' });
+  await expect(prompt).toBeInViewport({ ratio: 0.99 });
+  await expect(prompt.getByRole('button', { name: 'Open anyway', exact: true })).toBeVisible();
+  await inside(prompt, home);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth && window.scrollX === 0)).toBe(true);
+  expect((await calls(page)).filter(([command]) => command === 'api_get')).toHaveLength(reads);
+  expect(await launches(page, 'studio_launch')).toHaveLength(0);
+  await expect(tab(page, 'Home')).toHaveAttribute('aria-selected', 'true');
+});
+
 for (const [width, height] of [[1440, 900], [1280, 800]]) {
   test(`Balanced SEM header edits the selected spot with details below images at ${width} x ${height}`, async ({ page }) => {
     await page.setViewportSize({ width, height });

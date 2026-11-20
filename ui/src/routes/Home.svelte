@@ -3,6 +3,8 @@
   import RecordLists from '../components/RecordLists.svelte';
   import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
   import GrainAtlasLocalNotice from '../components/GrainAtlasLocalNotice.svelte';
+  import StudioGuidance from '../components/StudioGuidance.svelte';
+  import { apps } from '../lib/apps.svelte';
   import { connectivity } from '../lib/connectivity.svelte';
   import { localInventory } from '../lib/local-sessions.svelte';
   import { day, capInventory } from '../lib/home';
@@ -172,6 +174,7 @@
       </div>
     </header>
 
+    {#if apps.studio?.state === 'outdated'}<StudioGuidance from="home" />{/if}
     {#if active}<div class="filter-slot"><FilterBar {active} /></div>{/if}
     <div class="row home-actions">
     <div class="action-tiles" data-testid="open-panel">

@@ -20,6 +20,7 @@ export interface FakeOptions {
   cacheStatus?: { entries: number; bytes: number; newest: string | null; oldest: string | null };
   grainatlasLaunchErrors?: string[];
   studioFound?: boolean;
+  studioVersion?: string;
   studioLaunchErrors?: string[];
   sessionPaths?: string[];
   folderPaths?: string[];
@@ -165,7 +166,7 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'probe':
           return { reachable: true };
         case 'studio_status':
-          return opts.studioFound ? { found: true, path: '/Applications/UPbRPy Studio.app', kind: 'installed' } : { found: false, path: null, error: 'UPbRPy Studio is not installed' };
+          return opts.studioFound ? { found: true, path: '/Applications/UPbRPy Studio.app', kind: 'installed', version: opts.studioVersion } : { found: false, path: null, error: 'UPbRPy Studio is not installed' };
         case 'local_sessions': return opts.localSessions ?? [];
         case 'studio_open_local':
         case 'studio_launch': {

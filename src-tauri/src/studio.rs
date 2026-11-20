@@ -54,7 +54,7 @@ enum Launcher {
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     MacBundle(PathBuf),
     /// An executable (Windows `.exe`, or a binary).
-    Exe(PathBuf),
+    Exe(PathBuf, Option<String>),
     /// `python -m GUI` in a UPbRPy checkout.
     Checkout { python: PathBuf, dir: PathBuf },
 }
@@ -69,8 +69,20 @@ impl Launcher {
 
     fn path(&self) -> &Path {
         match self {
-            Launcher::MacApp(p) | Launcher::MacBundle(p) | Launcher::Exe(p) => p,
+            Launcher::MacApp(p) | Launcher::MacBundle(p) | Launcher::Exe(p, _) => p,
             Launcher::Checkout { dir, .. } => dir,
+        }
+    }
+
+    fn version(&self) -> Option<String> {
+        match self {
+            Launcher::MacApp(app) | Launcher::MacBundle(app) => {
+                plist_version(&std::fs::read_to_string(app.join("Contents/Info.plist")).ok()?)
+            }
+            Launcher::Checkout { dir, .. } => {
+                pyproject_version(&std::fs::read_to_string(dir.join("pyproject.toml")).ok()?)
+            }
+            Launcher::Exe(_, version) => version.clone(),
         }
     }
 
@@ -89,7 +101,7 @@ impl Launcher {
                 open_args(vec!["-n".into(), "-a".into(), app.to_string_lossy().into_owned()]),
             ),
             Launcher::MacBundle(_) => ("/usr/bin/open".into(), open_args(vec!["-n".into(), "-b".into(), BUNDLE_ID.into()])),
-            Launcher::Exe(exe) => (exe.clone(), tail()),
+            Launcher::Exe(exe, _) => (exe.clone(), tail()),
             Launcher::Checkout { python, .. } => {
                 let mut v = vec!["-m".to_string(), "GUI".to_string()];
                 v.extend(tail());
@@ -120,7 +132,7 @@ impl Launcher {
             Launcher::Checkout { dir, .. } => {
                 cmd.current_dir(dir);
             }
-            Launcher::Exe(exe) => {
+            Launcher::Exe(exe, _) => {
                 if let Some(dir) = exe.parent() {
                     cmd.current_dir(dir);
                 }
@@ -130,6 +142,44 @@ impl Launcher {
         detach(&mut cmd);
         cmd
     }
+}
+
+/// Only XML plists are supported; missing, malformed or binary values stay unknown.
+fn plist_version(plist: &str) -> Option<String> {
+    if plist.starts_with("bplist") {
+        return None;
+    }
+    let (_, rest) = plist.split_once("<key>CFBundleShortVersionString</key>")?;
+    let value = rest
+        .trim_start()
+        .strip_prefix("<string>")?
+        .split_once("</string>")?
+        .0
+        .trim();
+    (!value.is_empty() && !value.contains('<')).then(|| value.to_string())
+}
+
+/// Read only the literal version in [project], never another table's version.
+fn pyproject_version(toml: &str) -> Option<String> {
+    let mut in_project = false;
+    for line in toml.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_project = line.split('#').next()?.trim() == "[project]";
+        } else if in_project {
+            if let Some(("version", value)) = line
+                .split_once('=')
+                .map(|(key, value)| (key.trim(), value.trim()))
+            {
+                let quote = value.chars().next().filter(|c| *c == '"' || *c == '\'')?;
+                let (version, tail) = value[1..].split_once(quote)?;
+                if !version.is_empty() && (tail.trim().is_empty() || tail.trim().starts_with('#')) {
+                    return Some(version.to_string());
+                }
+                return None;
+            }
+        }
+    }
+    None
 }
 
 /// Studio outlives the shell: its own process group (Unix), no console and
@@ -228,14 +278,20 @@ fn exe_from_command(cmd: &str) -> Option<PathBuf> {
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
-/// Paths the registry suggests, most specific first. `reg` is `reg query`.
-fn registry_candidates(reg: &dyn Fn(&[&str]) -> Option<String>) -> Vec<PathBuf> {
+/// Paths the registry suggests, most specific first. Only Uninstall entries
+/// supply a version, tied to their executable paths. `reg` is `reg query`.
+fn registry_candidates(reg: &dyn Fn(&[&str]) -> Option<String>) -> Vec<(PathBuf, Option<String>)> {
     let mut out = Vec::new();
     let exe = format!("{APP_NAME}.exe");
     for root in ["HKCU", "HKLM"] {
         let key = format!(r"{root}\Software\Microsoft\Windows\CurrentVersion\App Paths\{exe}");
         if let Some(o) = reg(&[&key, "/ve"]) {
-            out.extend(parse_reg_values(&o).into_iter().filter_map(|(_, d)| exe_from_command(&d)));
+            out.extend(
+                parse_reg_values(&o)
+                    .into_iter()
+                    .filter_map(|(_, d)| exe_from_command(&d))
+                    .map(|p| (p, None)),
+            );
         }
     }
     for root in ["HKCU", "HKLM"] {
@@ -245,11 +301,18 @@ fn registry_candidates(reg: &dyn Fn(&[&str]) -> Option<String>) -> Vec<PathBuf> 
             for k in o.lines().filter(|l| l.starts_with("HKEY_")) {
                 if let Some(vals) = reg(&[k.trim()]) {
                     let vals = parse_reg_values(&vals);
+                    let version = vals
+                        .iter()
+                        .find(|(n, d)| n == "DisplayVersion" && !d.is_empty())
+                        .map(|(_, d)| d.clone());
                     if let Some((_, dir)) = vals.iter().find(|(n, _)| n == "InstallLocation") {
-                        out.push(PathBuf::from(dir.trim_matches('"')).join(&exe));
+                        out.push((
+                            PathBuf::from(dir.trim_matches('"')).join(&exe),
+                            version.clone(),
+                        ));
                     }
                     if let Some((_, icon)) = vals.iter().find(|(n, _)| n == "DisplayIcon") {
-                        out.extend(exe_from_command(icon));
+                        out.extend(exe_from_command(icon).map(|p| (p, version.clone())));
                     }
                 }
             }
@@ -261,10 +324,25 @@ fn registry_candidates(reg: &dyn Fn(&[&str]) -> Option<String>) -> Vec<PathBuf> 
             parse_reg_values(&o)
                 .into_iter()
                 .filter_map(|(_, d)| exe_from_command(&d))
-                .filter(|p| p.to_string_lossy().to_ascii_lowercase().contains("upbrpy")),
+                .filter(|p| p.to_string_lossy().to_ascii_lowercase().contains("upbrpy"))
+                .map(|p| (p, None)),
         );
     }
-    out
+    // An App Paths or scheme candidate can be the same executable as an
+    // Uninstall entry. Keep its priority and reuse the version already read.
+    out.iter()
+        .map(|(path, version)| {
+            let version = version.clone().or_else(|| {
+                let path = path.to_string_lossy().replace('\\', "/");
+                out.iter()
+                    .find(|(other, version)| {
+                        version.is_some() && path.eq_ignore_ascii_case(&other.to_string_lossy().replace('\\', "/"))
+                    })
+                    .and_then(|(_, version)| version.clone())
+            });
+            (path.clone(), version)
+        })
+        .collect()
 }
 
 #[cfg(windows)]
@@ -292,7 +370,7 @@ fn from_path(p: PathBuf) -> Launcher {
     if cfg!(target_os = "macos") && p.extension().is_some_and(|e| e == "app") {
         Launcher::MacApp(p)
     } else {
-        Launcher::Exe(p)
+        Launcher::Exe(p, None)
     }
 }
 
@@ -308,8 +386,11 @@ fn find(config: &StudioConfig) -> Result<Launcher, String> {
         }
     } else {
         #[cfg(windows)]
-        if let Some(p) = registry_candidates(&reg_query).into_iter().find(|p| p.is_file()) {
-            return Ok(Launcher::Exe(p));
+        if let Some((p, version)) = registry_candidates(&reg_query)
+            .into_iter()
+            .find(|(p, _)| p.is_file())
+        {
+            return Ok(Launcher::Exe(p, version));
         }
         if let Some(p) = candidates().into_iter().find(|p| p.exists()) {
             return Ok(from_path(p));
@@ -332,6 +413,8 @@ fn find(config: &StudioConfig) -> Result<Launcher, String> {
 #[serde(rename_all = "camelCase")]
 pub struct StudioStatus {
     found: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    version: Option<String>,
     /// `installed` or `checkout`.
     #[serde(skip_serializing_if = "Option::is_none")]
     kind: Option<&'static str>,
@@ -347,16 +430,31 @@ pub struct StudioStatus {
 #[tauri::command]
 pub async fn studio_status(config: Option<StudioConfig>) -> StudioStatus {
     let config = config.unwrap_or_default();
-    let found = tauri::async_runtime::spawn_blocking(move || find(&config)).await.map_err(|e| e.to_string()).and_then(|r| r);
+    let found = tauri::async_runtime::spawn_blocking(move || {
+        let launcher = find(&config)?;
+        let version = launcher.version();
+        Ok::<_, String>((launcher, version))
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
     match found {
-        Ok(l) => StudioStatus {
+        Ok((l, version)) => StudioStatus {
             found: true,
+            version,
             kind: Some(l.kind()),
             path: Some(l.path().to_string_lossy().into_owned()),
             command: Some(l.describe(Some("<url>"))),
             error: None,
         },
-        Err(e) => StudioStatus { found: false, kind: None, path: None, command: None, error: Some(e) },
+        Err(e) => StudioStatus {
+            found: false,
+            version: None,
+            kind: None,
+            path: None,
+            command: None,
+            error: Some(e),
+        },
     }
 }
 
@@ -454,6 +552,40 @@ pub async fn studio_open_local(
 mod tests {
     use super::*;
 
+    #[test]
+    fn xml_plist_version_is_optional() {
+        let xml = "<?xml version=\"1.0\"?><plist><dict><key>CFBundleVersion</key><string>99</string><key>CFBundleShortVersionString</key>\n<string>0.1.10</string></dict></plist>";
+        assert_eq!(plist_version(xml).as_deref(), Some("0.1.10"));
+        for missing in [
+            "bplist00",
+            "<plist/>",
+            "<key>CFBundleShortVersionString</key><integer>2</integer>",
+            "<key>CFBundleShortVersionString</key><string></string>",
+            "<key>CFBundleShortVersionString</key><string>0.1.2",
+        ] {
+            assert_eq!(plist_version(missing), None);
+        }
+    }
+
+    #[test]
+    fn pyproject_version_comes_only_from_project() {
+        assert_eq!(pyproject_version("[tool.demo]\nversion = \"9.0\"\n[project] # package\nname = \"invented\"\nversion = \"0.1.10\" # release\n[tool.other]\nversion = \"8.0\"").as_deref(), Some("0.1.10"));
+        assert_eq!(
+            pyproject_version("[project]\nversion='0.2.0'").as_deref(),
+            Some("0.2.0")
+        );
+        for missing in [
+            "",
+            "[tool.demo]\nversion = \"9.0\"",
+            "[project]\n[tool.demo]\nversion = \"9.0\"",
+            "[project]\nversion = 2",
+            "[project]\nversion = \"unterminated",
+            "[project]\nversion = \"\"",
+        ] {
+            assert_eq!(pyproject_version(missing), None);
+        }
+    }
+
     fn cfg(path: Option<&str>, checkout: Option<&str>) -> StudioConfig {
         StudioConfig { path: path.map(Into::into), checkout: checkout.map(Into::into) }
     }
@@ -468,7 +600,7 @@ mod tests {
     fn configured_executable_wins() {
         let exe = std::env::current_exe().unwrap();
         let l = find(&cfg(Some(&exe.to_string_lossy()), None)).unwrap();
-        assert_eq!(l, Launcher::Exe(exe));
+        assert_eq!(l, Launcher::Exe(exe, None));
         assert_eq!(l.kind(), "installed");
     }
 
@@ -513,7 +645,11 @@ mod tests {
 
     #[test]
     fn windows_exe_gets_open_url() {
-        let (prog, args) = Launcher::Exe(r"C:\Program Files\UPbRPy Studio\UPbRPy Studio.exe".into()).argv(Some("upbr://run/r"));
+        let (prog, args) = Launcher::Exe(
+            r"C:\Program Files\UPbRPy Studio\UPbRPy Studio.exe".into(),
+            None,
+        )
+        .argv(Some("upbr://run/r"));
         assert!(prog.to_string_lossy().ends_with("UPbRPy Studio.exe"));
         assert_eq!(args, ["--open", "upbr://run/r"]);
     }
@@ -551,7 +687,7 @@ mod tests {
             } else if key == r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall" {
                 Some("\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\UPbRPy Studio\r\n    DisplayName    REG_SZ    UPbRPy Studio\r\n\r\nEnd of search: 1 match(es) found.\r\n".into())
             } else if key.ends_with(r"Uninstall\UPbRPy Studio") {
-                Some(format!("\r\n{key}\r\n    DisplayName    REG_SZ    UPbRPy Studio\r\n    InstallLocation    REG_SZ    \"C:\\B\"\r\n    DisplayIcon    REG_SZ    C:\\B\\UPbRPy Studio.exe,0\r\n"))
+                Some(format!("\r\n{key}\r\n    DisplayName    REG_SZ    UPbRPy Studio\r\n    DisplayVersion    REG_SZ    0.1.10\r\n    InstallLocation    REG_SZ    \"C:\\B\"\r\n    DisplayIcon    REG_SZ    C:\\B\\UPbRPy Studio.exe,0\r\n"))
             } else if key.contains(r"Classes\upbr") {
                 // The shell's own handler is skipped.
                 Some(format!("\r\n{key}\r\n    (Default)    REG_SZ    \"C:\\Program Files\\UPb Lab\\upbstudio.exe\" \"%1\"\r\n"))
@@ -563,11 +699,38 @@ mod tests {
         assert_eq!(
             c,
             vec![
-                PathBuf::from(r"C:\A\UPbRPy Studio.exe"),
-                PathBuf::from(r"C:\B").join("UPbRPy Studio.exe"),
-                PathBuf::from(r"C:\B\UPbRPy Studio.exe"),
+                (PathBuf::from(r"C:\A\UPbRPy Studio.exe"), None),
+                (
+                    PathBuf::from(r"C:\B").join("UPbRPy Studio.exe"),
+                    Some("0.1.10".into())
+                ),
+                (
+                    PathBuf::from(r"C:\B\UPbRPy Studio.exe"),
+                    Some("0.1.10".into())
+                ),
             ]
         );
+        assert_eq!(
+            Launcher::Exe(c[1].0.clone(), c[1].1.clone())
+                .version()
+                .as_deref(),
+            Some("0.1.10")
+        );
+        let without_version = |args: &[&str]| {
+            reg(args).map(|output| {
+                output
+                    .lines()
+                    .filter(|line| !line.contains("DisplayVersion"))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+        };
+        assert!(registry_candidates(&without_version)
+            .iter()
+            .all(|(_, version)| version.is_none()));
+        let same_exe = |args: &[&str]| reg(args).map(|output| output.replace(r"C:\A\UPbRPy Studio.exe", r"c:/b/UPbRPy Studio.exe"));
+        assert_eq!(registry_candidates(&same_exe)[0].1.as_deref(), Some("0.1.10"));
+        assert!(registry_candidates(&|_| None).is_empty());
     }
 
     #[test]

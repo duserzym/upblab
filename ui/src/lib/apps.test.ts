@@ -1,16 +1,29 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-vi.mock('./platform', () => ({ isDesktop: true, launchGrainAtlas: vi.fn(async () => {}) }));
+import type { RunOut, SessionRow } from './overview.svelte';
+vi.mock('./platform', () => ({ isDesktop: true, launchGrainAtlas: vi.fn(async () => {}), studioStatus: vi.fn(async () => ({ found: true, path: '/invented/Studio.app', version: '0.1.2' })) }));
 vi.mock('./identity.svelte', () => ({ identity: { target: { server: 'https://lab' }, handoff: vi.fn(async () => 'CODE') } }));
-vi.mock('./shell.svelte', () => ({ shell: { view: 'review', studio: { state: 'launched' }, handleLink: vi.fn(async () => true), homeUrl: vi.fn(() => 'https://lab/atlas/?server=https%3A%2F%2Flab') } }));
+vi.mock('./shell.svelte', () => ({ shell: { view: 'review', studioConfig: { path: '', checkout: '' }, studio: { state: 'launched' }, show: vi.fn(async () => true), handleLink: vi.fn(async () => true), homeUrl: vi.fn(() => 'https://lab/atlas/?server=https%3A%2F%2Flab') } }));
 vi.mock('./app-watch.svelte', () => ({ appWatch: { atlas: vi.fn(), session: vi.fn() } }));
-const { editInAtlas, openInStudio, apps } = await import('./apps.svelte');
+vi.mock('./overview.svelte', () => ({ overview: { sessions: [] } }));
+vi.mock('./review.svelte', () => ({ review: { runs: [], sessions: [], run: null, runInfo: {}, scope: null, rows: [] } }));
+const { editInAtlas, openInStudio, openStudioAnyway, apps } = await import('./apps.svelte');
 const platform = await import('./platform');
 const { identity } = await import('./identity.svelte');
 const { shell } = await import('./shell.svelte');
 const { connectivity } = await import('./connectivity.svelte');
 const { appWatch } = await import('./app-watch.svelte');
+const { overview } = await import('./overview.svelte');
+const { review } = await import('./review.svelte');
 const target = { project: 'p', mount: 'm', spot: 's' };
-beforeEach(() => { connectivity.reset(); vi.clearAllMocks(); apps.atlas = null; apps.studio = null; });
+const studioTarget = { session: 's', run: 'r', acquisition: 'a' };
+const savedRun = (version = '0.1.3', id = 'r'): RunOut => ({ id, session_id: 's', upbrpy_version: version, is_preferred_for_session: true,
+  pipeline_name: 'invented', pipeline_version: '9.0.0', status: 'completed', started_at: '2026-11-01T00:00:00Z', completed_at: null, run_by: null, result_count: 1 });
+const sessionRow = (preferred: RunOut | null): SessionRow => ({ session: { id: 's', session_key: 'invented', material: 'zircon', started_at: null, acquisition_count: 1 }, runs: 1, preferred, latest: preferred });
+beforeEach(() => {
+  connectivity.reset(); vi.clearAllMocks(); apps.atlas = null; apps.studio = null;
+  overview.sessions = []; review.runs = []; review.sessions = []; review.run = null; review.runInfo = {}; review.scope = null; review.rows = [];
+  vi.mocked(platform.studioStatus).mockResolvedValue({ found: true, path: '/invented/Studio.app', version: '0.1.2' });
+});
 it('hands off context and watches a successful atlas opener', async () => {
   await editInAtlas(target, 'review');
   expect(platform.launchGrainAtlas).toHaveBeenCalledWith('p', 'https://lab', 'CODE', undefined, 's', undefined);
@@ -54,6 +67,104 @@ it('prefers run context, retains acquisition and always marks the sender', async
   expect(shell.handleLink).toHaveBeenLastCalledWith('upbr://session/s?via=upblab', 'home');
   await openInStudio({ session: null, run: null }, 'review');
   expect(apps.studio?.state).toBe('failed');
+});
+it('warns for an older Studio before launching or starting a session watcher', async () => {
+  review.runs = [savedRun()];
+  await openInStudio(studioTarget, 'review');
+  expect(platform.studioStatus).toHaveBeenCalledExactlyOnceWith(shell.studioConfig);
+  expect(apps.studio).toMatchObject({ state: 'outdated', target: studioTarget,
+    message: 'Saved by UPbRPy Studio 0.1.3; you have 0.1.2. Update Studio to open it.' });
+  expect(shell.handleLink).not.toHaveBeenCalled();
+  expect(identity.handoff).not.toHaveBeenCalled();
+  expect(appWatch.session).not.toHaveBeenCalled();
+  expect(shell.show).not.toHaveBeenCalled();
+  await openStudioAnyway();
+  expect(shell.handleLink).toHaveBeenCalledExactlyOnceWith('upbr://run/r?acquisition=a&via=upblab', 'review');
+  expect(platform.studioStatus).toHaveBeenCalledTimes(1);
+  expect(apps.studio?.state).toBe('launched');
+  expect(appWatch.session).toHaveBeenCalledWith('s');
+  await openStudioAnyway();
+  expect(shell.handleLink).toHaveBeenCalledTimes(1);
+});
+it.each(['0.1.3', '0.1.10', 'v0.2.0', undefined, 'unknown', '0.1.2rc1'])('launches with equal, newer or unknown installed version %s', async version => {
+  review.runs = [savedRun()];
+  vi.mocked(platform.studioStatus).mockResolvedValueOnce({ found: true, path: null, version });
+  await openInStudio(studioTarget, 'review');
+  expect(shell.handleLink).toHaveBeenCalledExactlyOnceWith('upbr://run/r?acquisition=a&via=upblab', 'review');
+  expect(apps.studio?.state).toBe('launched');
+});
+it.each(['', 'unknown', '0.1.3.dev1'])('launches with an unknown saved version %s', async version => {
+  review.runs = [savedRun(version)];
+  await openInStudio(studioTarget, 'review');
+  expect(shell.handleLink).toHaveBeenCalledTimes(1);
+});
+it('skips the check without loaded run metadata and keeps missing/probe-failure handling in the launcher', async () => {
+  await openInStudio(studioTarget, 'review');
+  expect(platform.studioStatus).not.toHaveBeenCalled();
+  review.runs = [savedRun()];
+  vi.mocked(platform.studioStatus).mockResolvedValueOnce({ found: false, path: null });
+  await openInStudio(studioTarget, 'review');
+  vi.mocked(platform.studioStatus).mockRejectedValueOnce(new Error('probe failed'));
+  await openInStudio(studioTarget, 'review');
+  expect(shell.handleLink).toHaveBeenCalledTimes(3);
+});
+it('uses only the requested run, even when another loaded run is preferred', async () => {
+  review.runs = [savedRun('0.1.10', 'preferred'), { ...savedRun('0.1.1'), is_preferred_for_session: false }];
+  await openInStudio(studioTarget, 'review');
+  expect(apps.studio?.state).toBe('launched');
+  await openInStudio({ ...studioTarget, run: 'not-loaded' }, 'review');
+  expect(shell.handleLink).toHaveBeenCalledTimes(2);
+  expect(platform.studioStatus).toHaveBeenCalledTimes(1);
+});
+it('checks a session preferred run already loaded in Review without navigating from Home', async () => {
+  review.runs = [savedRun()];
+  await openInStudio({ session: 's', run: null }, 'home');
+  expect(apps.studio?.state).toBe('outdated');
+  expect(shell.show).not.toHaveBeenCalled();
+  expect(shell.handleLink).not.toHaveBeenCalled();
+  await openStudioAnyway();
+  expect(shell.handleLink).toHaveBeenCalledExactlyOnceWith('upbr://session/s?via=upblab', 'home');
+});
+it('checks loaded overview summaries, including a preferred run embedded in the session list', async () => {
+  overview.sessions = [sessionRow(savedRun())];
+  await openInStudio(studioTarget, 'review');
+  expect(apps.studio?.state).toBe('outdated');
+  overview.sessions = [{ ...sessionRow(null), session: { ...sessionRow(null).session, preferred_run: savedRun() } }];
+  await openInStudio({ session: 's', run: null }, 'reduce');
+  expect(apps.studio?.state).toBe('outdated');
+  expect(shell.handleLink).not.toHaveBeenCalled();
+});
+it('does not substitute the latest run for a session with no loaded preferred run', async () => {
+  overview.sessions = [{ ...sessionRow(null), latest: { ...savedRun(), is_preferred_for_session: false } }];
+  await openInStudio({ session: 's', run: null }, 'home');
+  expect(shell.handleLink).toHaveBeenCalledTimes(1);
+  expect(platform.studioStatus).not.toHaveBeenCalled();
+});
+it('uses a loaded Review result brief without mistaking its pipeline version for Studio', async () => {
+  review.runInfo = { r: { run_id: 'r', is_preferred: true, upbrpy_version: '0.1.3', pipeline_version: '9.0.0' } };
+  await openInStudio(studioTarget, 'review');
+  expect(apps.studio?.state).toBe('outdated');
+  review.runInfo = { r: { run_id: 'r', is_preferred: true, pipeline_version: '9.0.0' } };
+  await openInStudio(studioTarget, 'review');
+  expect(apps.studio?.state).toBe('launched');
+});
+it('checks a session preferred result brief when its run list is unavailable', async () => {
+  review.scope = { kind: 'session', id: 's', run: 'preferred' };
+  review.run = { run_id: 'r', is_preferred: true, upbrpy_version: '0.1.3' };
+  await openInStudio({ session: 's', run: null }, 'review');
+  expect(apps.studio?.state).toBe('outdated');
+  expect(shell.handleLink).not.toHaveBeenCalled();
+});
+it('ignores a late version probe after a newer launch request', async () => {
+  review.runs = [savedRun()];
+  let resolve!: (status: Awaited<ReturnType<typeof platform.studioStatus>>) => void;
+  vi.mocked(platform.studioStatus).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  const pending = openInStudio(studioTarget, 'review');
+  await openInStudio({ session: 'other', run: null }, 'review');
+  resolve({ found: true, path: null, version: '0.1.2' });
+  await pending;
+  expect(apps.studio).toMatchObject({ state: 'launched', target: { session: 'other' } });
+  expect(shell.handleLink).toHaveBeenCalledTimes(1);
 });
 it('opens GrainAtlas locally without minting a handoff for a read-only copy, and leaves Studio available', async () => {
   connectivity.offlineCopy = 'invented copy';

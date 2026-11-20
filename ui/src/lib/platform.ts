@@ -76,6 +76,7 @@ export interface StudioConfig {
 /** Mirrors `StudioStatus` in src-tauri/src/studio.rs. */
 export interface StudioStatus {
   found: boolean;
+  version?: string;
   kind?: 'installed' | 'checkout';
   path: string | null;
   /** How it is launched, with `<url>` for the link. */
