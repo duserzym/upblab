@@ -128,7 +128,7 @@ export async function install(): Promise<void> {
   send({ type: 'install' });
   if (updatePreview) return;
   try {
-    await settings.update({ savedUpdateVersion: info.version, savedUpdateNotes: info.notes ?? '' });
+    await settings.update({ savedUpdateVersion: info.version, savedUpdateNotes: info.notes ?? '' }, { keysOnly: true });
     await invoke('update_install');
   } catch (error) { fail(error); }
 }
@@ -136,7 +136,7 @@ export async function install(): Promise<void> {
 export async function recordRunningVersion(version: string): Promise<void> {
   updater.whatsNewNotes = whatsNewNotes(version, bundledNotes(version), settings.savedUpdateVersion, settings.savedUpdateNotes);
   updater.whatsNewOpen = isNewerVersion(version, settings.lastSeenVersion);
-  await settings.update({ lastSeenVersion: version });
+  if (settings.lastSeenVersion !== version) await settings.update({ lastSeenVersion: version }, { keysOnly: true });
 }
 
 /** Mount once; cleanup also handles unmounting while native support is being queried. */

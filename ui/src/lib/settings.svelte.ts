@@ -96,7 +96,7 @@ const LS_KEY = 'upbstudio.settings';
 
 interface Backend {
   read(): Promise<Partial<SettingsData>>;
-  write(data: SettingsData): Promise<void>;
+  write(data: SettingsData, keys?: (keyof SettingsData)[]): Promise<void>;
 }
 
 const storeBackend: Backend = {
@@ -115,10 +115,10 @@ const storeBackend: Backend = {
     }
     return out;
   },
-  async write(data) {
+  async write(data, keys) {
     const { load } = await import('@tauri-apps/plugin-store');
     const store = await load(FILE, { defaults: {}, autoSave: 100 });
-    for (const [k, v] of Object.entries(data)) await store.set(k, v);
+    for (const key of keys ?? Object.keys(data) as (keyof SettingsData)[]) await store.set(key, data[key]);
     await store.save();
   },
 };
@@ -269,13 +269,14 @@ export class Settings {
     this.loaded = true;
   }
 
-  async update(patch: Partial<SettingsData>) {
+  async update(patch: Partial<SettingsData>, { keysOnly = false }: { keysOnly?: boolean } = {}) {
     if (patch.studioOpened) patch = { ...patch, studioOpened: readStudioOpened(patch.studioOpened) };
     Object.assign(this, patch);
     if (patch.theme) applyTheme(this.effectiveTheme);
     // Pin clicks and layout changes can overlap. Keep durable snapshots in edit order.
     const snapshot = this.snapshot();
-    const saving = this.saves.catch(() => {}).then(() => this.backend.write(snapshot));
+    const keys = keysOnly ? Object.keys(patch) as (keyof SettingsData)[] : undefined;
+    const saving = this.saves.catch(() => {}).then(() => this.backend.write(snapshot, keys));
     this.saves = saving;
     await saving;
   }

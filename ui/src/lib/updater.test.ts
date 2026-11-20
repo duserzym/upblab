@@ -180,6 +180,9 @@ it('saves manifest notes durably before installing', async () => {
     }
   });
   await runtime.install();
+  expect(mocks.settings.update).toHaveBeenCalledWith(
+    { savedUpdateVersion: info.version, savedUpdateNotes: 'New sample view.' }, { keysOnly: true },
+  );
   expect(mocks.invoke).toHaveBeenCalledWith('update_install', undefined);
 });
 it('does not install if saving fallback notes fails', async () => {
