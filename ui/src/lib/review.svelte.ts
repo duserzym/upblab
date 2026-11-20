@@ -161,7 +161,15 @@ export class Review {
     } catch (err) { if (source === this.currentSource()) this.error = String(err); }
     finally { this.listsLoading = false; }
   }
-  get selected(): ReviewSpot | null { return this.rows.find(r => r.key === this.selectedKey) ?? this.externalSpot; }
+  private rowsByKey = $derived.by(() => {
+    const index = new Map<string, ReviewSpot>();
+    for (const row of this.rows) if (!index.has(row.key)) index.set(row.key, row);
+    return index;
+  });
+  get selected(): ReviewSpot | null {
+    const key = this.selectedKey;
+    return (key === null ? undefined : this.rowsByKey.get(key)) ?? this.externalSpot;
+  }
   private async get<T>(path: string): Promise<T> {
     const r = await identity.get<T>(path);
     if (r.status !== 200) {
@@ -344,7 +352,7 @@ export class Review {
     this.groupView = false;
     this.selectionGeneration++;
     this.selectedKey = spot.key;
-    this.externalSpot = this.rows.some(r => r.key === spot.key) ? null : spot;
+    this.externalSpot = this.rowsByKey.has(spot.key) ? null : spot;
     this.scrollVersion++;
     void this.loadDepth();
     void this.loadSelectedBatches();

@@ -4,7 +4,9 @@
   import { PLOT_VISIBILITY, plotVisibility, type PlotVisibility } from './plot-visibility';
   import { ratioMarks } from './plot-data';
   import { clusterBounds, contains, type Bounds } from './plot-viewport';
-  import { ageTicks, concordia, curve, EARTH_AGE, visibleConcordiaAges, type ConcordiaMode } from '../../lib/concordia';
+  import { concordiaLabels, concordia, EARTH_AGE, visibleConcordiaAges, type ConcordiaMode } from '../../lib/concordia';
+  import { sampleCurve } from '../../lib/concordia-geometry';
+  import type { Point } from '../../lib/concordia';
   import type { ReviewSpot } from '../../lib/review-data';
   let { rows, selected, mode = $bindable(), hidden, onhide, onrestore, onselect }: {
     rows: ReviewSpot[];
@@ -21,14 +23,19 @@
   let more = $state(false);
   let moreControls = $state<HTMLDivElement>();
   let ellipses = $state(true);
-  const allMarks = $derived(ratioMarks(rows, mode));
+  // Keep each diagram's reactive dependencies stable across mode switches.
+  // A stale hidden diagram is recomputed only when it is shown again.
+  const wetherillMarks = $derived(ratioMarks(rows, 'wetherill'));
+  const twMarks = $derived(ratioMarks(rows, 'tw'));
+  const allMarks = $derived(mode === 'tw' ? twMarks : wetherillMarks);
   const shown = $derived(plotVisibility({ marks: allMarks, hidden: new Set([...hidden, ...(visibility?.hidden() ?? [])]) }).marks);
   const points = $derived(shown.map(m => m.point!));
   const cluster = $derived(clusterBounds(points));
   const outside = $derived(viewport ? points.filter(p => !contains(viewport!, p)).length : 0);
   const boxedKeys = $derived(shown.filter(m => boxed.has(m.spot.key)).map(m => m.spot.key));
   const marks = $derived(ellipses && !boxedKeys.length ? allMarks : allMarks.map(m => ({
-    ...m, polygon: ellipses ? m.polygon : undefined, boxed: boxed.has(m.spot.key),
+    spot: m.spot, point: m.point, ellipse: ellipses ? m.ellipse : undefined,
+    get polygon() { return ellipses ? m.polygon : undefined; }, boxed: boxed.has(m.spot.key),
   })));
   // The inverse U/Pb coordinate is unbounded as age approaches zero.
   const [youngX] = concordia(100e6, 'tw');
@@ -37,15 +44,11 @@
   const [oldWetherillX, oldWetherillY] = concordia(EARTH_AGE);
   const wetherillView: Bounds = { x: [0, oldWetherillX * 1.08], y: [0, oldWetherillY * 1.08] };
 
-  function guidesForBounds(bounds: Bounds) {
+  function guidesForBounds(bounds: Bounds, toScreen: (p: Point) => Point) {
     const ages = visibleConcordiaAges(bounds.x, bounds.y, mode);
     if (!ages) return [];
-    const ticks = ageTicks(ages).filter(t => t < EARTH_AGE);
-    // Prioritize this label over nearby round ages when both fit the viewport.
-    if (ages[1] === EARTH_AGE) ticks.unshift(EARTH_AGE);
-    return [{ path: curve(ages, mode) }, ...ticks.map(t => ({
-      path: [], point: concordia(t, mode), label: `${Number((t / 1e6).toPrecision(8))} Ma`,
-    }))];
+    return [{ path: sampleCurve(t => concordia(t, mode), ages[0], ages[1], toScreen) },
+      ...concordiaLabels(bounds.x, bounds.y, mode).map(({ age, label }) => ({ path: [], point: concordia(age, mode), label }))];
   }
 
   function setMode(next: ConcordiaMode) {

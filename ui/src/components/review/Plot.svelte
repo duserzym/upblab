@@ -7,6 +7,11 @@
   import 'uplot/dist/uPlot.min.css';
   import { settings } from '../../lib/settings.svelte';
   import { dateLabel, type ReviewSpot } from '../../lib/review-data';
+  import { traceEllipse, mapEllipse, type Ellipse } from '../../lib/concordia-geometry';
+  import { frameQueue } from '../../lib/animation-frame';
+  import { hitGrid, type HitPoint } from './plot-hit';
+  import { reconcileTargets, type PointTarget } from './plot-targets';
+  import { markBounds } from './plot-bounds';
   import type { Point } from '../../lib/concordia';
   import { color, isotopeLabel, type Mark, type Guide, type Band } from './plot-data';
   import { PLOT_VISIBILITY, plotVisibility, type PlotVisibility, type DrawnCounts, type DrawnSummary } from './plot-visibility';
@@ -14,7 +19,7 @@
   let { marks, guidesForBounds, emptyBounds, bands = [], hidden = new Set<string>(), selected, onselect, xLabel, yLabel, logX = false, logY = false, xTicks = [], legend = true, sharedHover = true, viewport = $bindable(null), onbox, ontoggle, controls }: {
     controls?: Snippet<[Snippet]>;
     marks: Mark[];
-    guidesForBounds?: (bounds: Bounds) => Guide[];
+    guidesForBounds?: (bounds: Bounds, toScreen: (p: Point) => Point) => Guide[];
     emptyBounds?: Bounds;
     bands?: Band[];
     hidden?: ReadonlySet<string>;
@@ -95,23 +100,69 @@
     { id: 'zoom', label: 'Box zoom', title: 'Drag a rectangle to zoom to its bounds' },
     { id: 'select', label: 'Box select', title: 'Drag a rectangle to select the spots whose centers are inside' },
   ];
-  let targets = $state<{ spot: ReviewSpot; x: number; y: number }[]>([]);
+  let targets = $state.raw<PointTarget[]>([]);
   let chart = $state<HTMLDivElement>();
-  $effect(() => { void review.hoveredKey; void selected; instance?.redraw(false); });
+  let overlay = $state<HTMLCanvasElement>();
+  let gesturing = $state(false);
+  let paintHover = () => {};
+  $effect(() => { void review.hoveredKey; void hovered; paintHover(); });
   let hovered = $state<ReviewSpot | null>(null);
   let tooltip = $state({ x: 0, y: 0 });
   $effect(() => { void selected; hovered = null; });
   function pointHover(target: {spot: ReviewSpot; x: number; y: number}) {
-    hovered = target.spot;
-    if (sharedHover) review.hoveredKey = target.spot.key;
-    tooltip = {x: Math.max(0, Math.min(width - 190, target.x + 8)), y: Math.max(0, target.y - 45)};
+    setHover(target.spot, target.x, target.y);
   }
   function clearPointHover() {
-    hovered = null;
-    if (sharedHover) review.hoveredKey = null;
+    if (hovered) hovered = null;
+    if (sharedHover && review.hoveredKey !== null) review.hoveredKey = null;
   }
-  const pointTargets = $derived(targets.filter(t => visibleKeys.has(t.spot.key)));
-  const keyboardKey = $derived(pointTargets.some(p => p.spot.key === selected) ? selected : pointTargets[0]?.spot.key);
+  function setHover(spot: ReviewSpot | null, x: number, y: number) {
+    if (hovered?.key !== spot?.key) hovered = spot;
+    if (sharedHover && review.hoveredKey !== (spot?.key ?? null)) review.hoveredKey = spot?.key ?? null;
+    const tx = Math.max(0, Math.min(width - 190, x + 8)), ty = Math.max(0, y - 45);
+    if (spot && (tooltip.x !== tx || tooltip.y !== ty)) tooltip = { x: tx, y: ty };
+  }
+  const pointTargets = $derived(targets);
+  let targetByKey = new Map<string, PointTarget>();
+  const targetKeys = $derived(new Set(pointTargets.map(t => t.spot.key)));
+  const targetElements = new Map<string, HTMLButtonElement>();
+  let previousTargetSelection: string | null = null, previousTargetHover: string | null = null;
+  let previousTargetList: typeof pointTargets | undefined;
+  function placeTarget(target: PointTarget) {
+    const node = targetElements.get(target.spot.key);
+    if (node) { node.style.left = `${target.x}px`; node.style.top = `${target.y}px`; }
+  }
+  function targetFlags(node: HTMLButtonElement, key: string) {
+    targetElements.set(key, node);
+    const target = targetByKey.get(key);
+    if (target) placeTarget(target);
+    untrack(() => {
+      node.dataset.selected = String(selected === key);
+      node.dataset.hovered = String(sharedHover && review.hoveredKey === key);
+      node.tabIndex = (targetKeys.has(selected ?? '') ? selected === key : pointTargets[0]?.spot.key === key) ? 0 : -1;
+    });
+    return { destroy() { if (targetElements.get(key) === node) targetElements.delete(key); } };
+  }
+  $effect(() => {
+    const key = selected, hover = sharedHover ? review.hoveredKey : null;
+    const points = pointTargets;
+    untrack(() => {
+      if (previousTargetSelection !== key || previousTargetList !== points) {
+        const old = previousTargetSelection ? targetElements.get(previousTargetSelection) : undefined;
+        if (old) { old.dataset.selected = 'false'; old.tabIndex = -1; }
+        const first = pointTargets[0] ? targetElements.get(pointTargets[0].spot.key) : undefined;
+        if (first) first.tabIndex = -1;
+        const current = key ? targetElements.get(key) : undefined;
+        if (current) { current.dataset.selected = 'true'; current.tabIndex = 0; }
+        else if (first) first.tabIndex = 0;
+      }
+      if (previousTargetHover !== hover || previousTargetList !== points) {
+        if (previousTargetHover) { const node = targetElements.get(previousTargetHover); if (node) node.dataset.hovered = 'false'; }
+        if (hover) { const node = targetElements.get(hover); if (node) node.dataset.hovered = 'true'; }
+      }
+      previousTargetSelection = key; previousTargetHover = hover; previousTargetList = points;
+    });
+  });
   $effect(() => {
     if (hovered && !visibleKeys.has(hovered.key)) clearPointHover();
     if (menuSpot && !visibleKeys.has(menuSpot.key)) { closeMenu(); menuSpot = null; }
@@ -129,43 +180,8 @@
     return () => { clearTimeout(timer); ro.disconnect(); };
   });
   const valid = (p: Point | null | undefined): p is Point => !!p && p.every(Number.isFinite) && (!logX || p[0] > 0) && (!logY || p[1] > 0);
-  const fullBounds = $derived.by((): Bounds => {
-    // Axes follow the data: points and paths first. An ellipse widens them only
-    // when it is no larger than the spread of the points (a badly measured spot
-    // must not squash the others). The reference curve follows the resulting view.
-    const core = [...data.marks.flatMap(m => [...(m.point ? [m.point] : []), ...(m.path ?? [])]), ...data.bands.flatMap(b => [...b.upper, ...b.lower])].filter(valid);
-    const span = (pts: Point[], d: number) => pts.length ? Math.max(...pts.map(p => p[d])) - Math.min(...pts.map(p => p[d])) : 0;
-    const sx = span(core, 0), sy = span(core, 1);
-    const ellipses = data.marks.flatMap(m => {
-      const poly = (m.polygon ?? []).filter(valid);
-      if (!poly.length) return [];
-      if (core.length > 1 && (span(poly, 0) > Math.max(sx, 1e-12) || span(poly, 1) > Math.max(sy, 1e-12))) return [];
-      return poly;
-    });
-    if (!core.length && emptyBounds) return emptyBounds;
-    const points = [...core, ...ellipses];
-    const extent = (dim: number, log: boolean): [
-      number,
-      number
-    ] => {
-      if (!points.length)
-        return log ? [0.1, 10] : [0, 1];
-      let lo = Infinity, hi = -Infinity;
-      for (const p of points) {
-        lo = Math.min(lo, p[dim]);
-        hi = Math.max(hi, p[dim]);
-      }
-      if (log) {
-        const pad = Math.max(Math.log10(hi / lo) * 0.08, 0.05);
-        return [lo / 10 ** pad, hi * 10 ** pad];
-      }
-      const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.1 || 1;
-      return [lo - pad, hi + pad];
-    };
-    return { x: extent(0, logX), y: extent(1, logY) };
-  });
+  const fullBounds = $derived(markBounds(data.marks, data.bands, logX, logY, emptyBounds));
   const bounds = $derived(viewport ?? fullBounds);
-  const guides = $derived(plotVisibility({ marks: [], guides: guidesForBounds?.(bounds), hidden: hiddenKeys }).guides);
   function zoom(factor: number, anchor: Point = [0.5, 0.5]) {
     viewport = zoomBounds(bounds, factor, anchor, zoomAxis);
   }
@@ -195,6 +211,72 @@
       }
       if (close)
         ctx.closePath();
+    };
+    const polygonPath = (target: Path2D, u: uPlot, points: Point[]) => {
+      let pen = false;
+      for (const p of points) {
+        if (!valid(p)) { pen = false; continue; }
+        const [x, y] = pixel(u, p);
+        if (pen) target.lineTo(x, y); else target.moveTo(x, y);
+        pen = true;
+      }
+      target.closePath();
+    };
+    let guideCache: { bounds: Bounds; width: number; height: number; source: typeof guidesForBounds; guides: Guide[] } | undefined;
+    let baseDrawn: DrawnSummary = Object.create(null);
+    let hoveredMarks = new Map<string, Mark>();
+    let cachedHit: (x: number, y: number, ellipses?: boolean) => ReviewSpot | null = () => null;
+    type ProjectedMark = { mark: Mark; key: string; ink: string; series: string; centre?: Point; exact?: Ellipse; polygon?: Point[] };
+    let projectionCache: { marks: Mark[]; bounds: Bounds; left: number; top: number; width: number; height: number; dpr: number; projected: ProjectedMark[] } | undefined;
+    const drawHighlight = (u: uPlot, ctx: CanvasRenderingContext2D, mark: Mark) => {
+      const dpr = u.ctx.canvas.width / u.width;
+      ctx.globalAlpha = 1; ctx.strokeStyle = color(mark.spot.sampleName); ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 2.5 * dpr;
+      let rings = 0;
+      if (mark.path) {
+        const p = new Path2D(); let pen = false;
+        for (const point of mark.path) {
+          if (!valid(point)) { pen = false; continue; }
+          const [x, y] = pixel(u, point);
+          if (pen) p.lineTo(x, y); else p.moveTo(x, y);
+          pen = true;
+        }
+        ctx.stroke(p);
+        for (const point of mark.path) if (valid(point)) {
+          const [x, y] = pixel(u, point); ctx.beginPath(); ctx.arc(x, y, 4 * dpr, 0, 2 * Math.PI); ctx.stroke(); rings++;
+        }
+      }
+      if (mark.ellipse && !logX && !logY) { const p = new Path2D(); traceEllipse(p, mapEllipse(mark.ellipse, p => pixel(u, p))); ctx.stroke(p); }
+      else if (mark.polygon) { const p = new Path2D(); polygonPath(p, u, mark.polygon); ctx.stroke(p); }
+      if (valid(mark.point)) {
+        const [x, y] = pixel(u, mark.point);
+        ctx.beginPath(); ctx.arc(x, y, 3 * dpr, 0, 2 * Math.PI); ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, 10 * dpr, 0, 2 * Math.PI); ctx.strokeStyle = axis; ctx.lineWidth = 2 * dpr; ctx.stroke(); rings += 2;
+      }
+      return rings;
+    };
+    const overlayHover = (u: uPlot) => {
+      if (!overlay) return;
+      const canvas = u.ctx.canvas;
+      if (overlay.style.width !== `${u.width}px`) overlay.style.width = `${u.width}px`;
+      if (overlay.style.height !== `${u.height}px`) overlay.style.height = `${u.height}px`;
+      if (overlay.width !== canvas.width) overlay.width = canvas.width;
+      if (overlay.height !== canvas.height) overlay.height = canvas.height;
+      const ctx = overlay.getContext('2d')!;
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      const key = sharedHover ? review.hoveredKey : null;
+      const mark = key ? hoveredMarks.get(key) : undefined;
+      const drawn = { ...baseDrawn };
+      if (mark) {
+        ctx.save(); ctx.beginPath(); ctx.rect(u.bbox.left, u.bbox.top, u.bbox.width, u.bbox.height); ctx.clip();
+        const rings = drawHighlight(u, ctx, mark);
+        ctx.restore();
+        if (mark.spot.key !== selected && !mark.boxed) {
+          const series = mark.seriesKey ?? mark.spot.sampleName;
+          if (drawn[series]) drawn[series] = { ...drawn[series], rings: drawn[series].rings + rings };
+        }
+      }
+      if (chart) chart.dataset.drawn = JSON.stringify(drawn);
     };
     const draw = (u: uPlot) => {
       const ctx = u.ctx, dpr = u.ctx.canvas.width / u.width;
@@ -230,154 +312,206 @@
       }
       ctx.strokeStyle = axis;
       ctx.lineWidth = dpr;
-      const labels: Point[] = [];
+      const labels: { x: number; y: number; width: number }[] = [];
+      if (!guideCache || guideCache.bounds !== bounds || guideCache.width !== u.bbox.width || guideCache.height !== u.bbox.height || guideCache.source !== guidesForBounds) {
+        guideCache = { bounds, width: u.bbox.width, height: u.bbox.height, source: guidesForBounds,
+          guides: guidesForBounds?.(bounds, p => { const q = pixel(u, p); return [q[0] / dpr, q[1] / dpr]; }) ?? [],
+        };
+      }
+      const guides = plotVisibility({ marks: [], guides: guideCache.guides, hidden: hiddenKeys }).guides;
       for (const guide of guides) {
         const series = guide.seriesKey ?? '__reference__';
         path(u, guide.path);
         ctx.stroke();
         if (guide.path.some(valid)) count(series, 'paths');
         if (guide.point && valid(guide.point)) {
-          count(series, 'points');
           const [x, y] = pixel(u, guide.point);
-          ctx.beginPath();
-          ctx.arc(x, y, 2 * dpr, 0, 2 * Math.PI);
-          ctx.fillStyle = axis;
-          ctx.fill();
           ctx.font = `${10 * dpr}px system-ui`;
           ctx.textAlign = 'left';
           ctx.textBaseline = 'alphabetic';
           const label = guide.label ?? '';
-          const labelX = Math.max(u.bbox.left + 2 * dpr, Math.min(x + 4 * dpr, u.bbox.left + u.bbox.width - ctx.measureText(label).width - 2 * dpr));
+          const labelWidth = ctx.measureText(label).width;
+          const labelX = Math.max(u.bbox.left + 2 * dpr, Math.min(x + 4 * dpr, u.bbox.left + u.bbox.width - labelWidth - 2 * dpr));
           const labelY = Math.max(u.bbox.top + 10 * dpr, y - 4 * dpr);
-          if (x >= u.bbox.left && x < u.bbox.left + u.bbox.width && y >= u.bbox.top && y < u.bbox.top + u.bbox.height &&
-              labels.every(([px, py]) => Math.abs(labelX - px) > 58 * dpr || Math.abs(labelY - py) > 14 * dpr)) {
+          const accepted = x >= u.bbox.left && x < u.bbox.left + u.bbox.width && y >= u.bbox.top && y < u.bbox.top + u.bbox.height &&
+              labels.every(p => labelX > p.x + p.width + 4 * dpr || labelX + labelWidth + 4 * dpr < p.x || Math.abs(labelY - p.y) > 14 * dpr);
+          // As in Studio, a labelled age shows its marker only when its label fits.
+          if (accepted || !label) {
+            count(series, 'points');
+            ctx.beginPath();
+            ctx.arc(x, y, 2 * dpr, 0, 2 * Math.PI);
+            ctx.fillStyle = axis;
+            ctx.fill();
+          }
+          if (accepted) {
             ctx.fillText(label, labelX, labelY);
             if (label) count(series, 'labels');
-            labels.push([labelX, labelY]);
+            labels.push({ x: labelX, y: labelY, width: labelWidth });
           }
         }
       }
-      const hoverKey = sharedHover ? untrack(() => review.hoveredKey) : null;
-      const priority = (m: Mark) => m.spot.key === hoverKey ? 2 : m.spot.key === selected || m.boxed ? 1 : 0;
-      const emphasis = data.marks.some(m => m.spot.key === selected || m.boxed);
-      for (const mark of [...data.marks].sort((a,b)=>priority(a)-priority(b))) {
-        const active = mark.spot.key === selected || mark.boxed;
-        const highlighted = mark.spot.key === hoverKey;
-        ctx.globalAlpha = emphasis && !active && !highlighted ? 0.45 : 1;
-        ctx.strokeStyle = color(mark.spot.sampleName);
-        ctx.fillStyle = ctx.strokeStyle;
-        ctx.lineWidth = (active || highlighted ? 2.5 : 1.2) * dpr;
-        const series = mark.seriesKey ?? mark.spot.sampleName;
-        if (mark.path) {
-          if (mark.path.some(valid)) count(series, 'paths');
-          path(u, mark.path);
-          ctx.stroke();
-          if (active || highlighted) {
-            for (const p of mark.path.filter(valid)) {
-              const [x, y] = pixel(u, p);
-              ctx.beginPath(); ctx.arc(x, y, 4 * dpr, 0, 2 * Math.PI); ctx.stroke();
-              count(series, 'rings');
+      const pens = new Map<string, { stroke: Path2D; fill: Path2D; color: string; alpha: number; width: number }>();
+      // Selection changes only pens/dimming, so reuse pixel geometry and the hit grid.
+      if (!projectionCache || projectionCache.marks !== data.marks || projectionCache.bounds !== bounds ||
+          projectionCache.left !== u.bbox.left || projectionCache.top !== u.bbox.top || projectionCache.width !== u.bbox.width || projectionCache.height !== u.bbox.height || projectionCache.dpr !== dpr) {
+        const hits: HitPoint<ReviewSpot>[] = [];
+        hoveredMarks = new Map();
+        const projected: ProjectedMark[] = data.marks.map(mark => {
+          const exact = mark.ellipse && !logX && !logY ? mapEllipse(mark.ellipse, p => pixel(u, p)) : undefined;
+          const polygon = exact ? undefined : mark.polygon;
+          hoveredMarks.set(mark.spot.key, mark);
+          const centre = valid(mark.point) ? pixel(u, mark.point) : undefined;
+          const positions = mark.point ? [mark.point] : mark.path ?? [];
+          const hitEllipse = exact ? { centre: [(exact.centre[0] - u.bbox.left) / dpr, (exact.centre[1] - u.bbox.top) / dpr] as Point,
+            a: [exact.a[0] / dpr, exact.a[1] / dpr] as Point, b: [exact.b[0] / dpr, exact.b[1] / dpr] as Point } : undefined;
+          const hitPolygon = polygon?.filter(valid).map(p => { const q = pixel(u, p); return [(q[0] - u.bbox.left) / dpr, (q[1] - u.bbox.top) / dpr] as Point; });
+          for (const p of positions) if (valid(p)) {
+            const q = centre ?? pixel(u, p);
+            hits.push({ point: [(q[0] - u.bbox.left) / dpr, (q[1] - u.bbox.top) / dpr], value: mark.spot, ellipse: hitEllipse, polygon: hitPolygon });
+          }
+          return { mark, exact, polygon, centre, key: mark.spot.key, ink: color(mark.spot.sampleName), series: mark.seriesKey ?? mark.spot.sampleName };
+        });
+        cachedHit = hitGrid(hits, u.bbox.width / dpr, u.bbox.height / dpr);
+        projectionCache = { marks: data.marks, bounds, ...u.bbox, dpr, projected };
+      }
+      const projected = projectionCache.projected, selectedKey = selected;
+      const emphasis = projected.some(p => p.key === selectedKey || p.mark.boxed);
+      // Two passes preserve selected/boxed priority without sorting or one stroke per ellipse.
+      for (const activePass of [false, true]) {
+        pens.clear();
+        for (const { mark, exact, polygon, key, ink, series, centre } of projected) {
+          const active = key === selectedKey || !!mark.boxed;
+          if (active !== activePass) continue;
+          const alpha = emphasis && !active ? 0.45 : 1, lineWidth = (active ? 2.5 : 1.2) * dpr;
+          const penKey = `${ink}/${alpha}/${lineWidth}`;
+          let pen = pens.get(penKey);
+          if (!pen) { pen = { stroke: new Path2D(), fill: new Path2D(), color: ink, alpha, width: lineWidth }; pens.set(penKey, pen); }
+          // Paths and bands keep their existing rendering and null-gap behaviour.
+          ctx.globalAlpha = alpha; ctx.strokeStyle = ink; ctx.fillStyle = ink; ctx.lineWidth = lineWidth;
+          if (mark.path) {
+            if (mark.path.some(valid)) count(series, 'paths');
+            path(u, mark.path); ctx.stroke();
+            if (active) for (const p of mark.path) if (valid(p)) {
+              const [x, y] = pixel(u, p); ctx.beginPath(); ctx.arc(x, y, 4 * dpr, 0, 2 * Math.PI); ctx.stroke(); count(series, 'rings');
             }
           }
-        }
-        if (mark.polygon) {
-          if (mark.polygon.some(valid)) count(series, 'ellipses');
-          path(u, mark.polygon, true);
-          ctx.stroke();
-        }
-        if (valid(mark.point)) {
-          count(series, 'points');
-          const [x, y] = pixel(u, mark.point);
-          ctx.beginPath();
-          ctx.arc(x, y, 3 * dpr, 0, 2 * Math.PI);
-          ctx.fill();
-          if (active || highlighted) {
-            count(series, 'rings', 2);
-            ctx.beginPath();
-            ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI);
-            ctx.stroke();
-            // A dark outer ring keeps the selection visible inside a dense cluster.
-            ctx.beginPath();
-            ctx.arc(x, y, 10 * dpr, 0, 2 * Math.PI);
-            ctx.strokeStyle = axis;
-            ctx.lineWidth = 2 * dpr;
-            ctx.stroke();
+          if (exact) { traceEllipse(pen.stroke, exact); count(series, 'ellipses'); }
+          else if (polygon) { polygonPath(pen.stroke, u, polygon); if (polygon.some(valid)) count(series, 'ellipses'); }
+          if (centre) {
+            count(series, 'points');
+            const [x, y] = centre;
+            pen.fill.moveTo(x + 3 * dpr, y); pen.fill.arc(x, y, 3 * dpr, 0, 2 * Math.PI);
           }
+        }
+        for (const pen of pens.values()) {
+          ctx.globalAlpha = pen.alpha; ctx.strokeStyle = pen.color; ctx.fillStyle = pen.color; ctx.lineWidth = pen.width;
+          ctx.stroke(pen.stroke); ctx.fill(pen.fill);
+        }
+        if (activePass) for (const { mark, key, ink, series, centre } of projected) if ((key === selectedKey || mark.boxed) && centre) {
+          const [x, y] = centre;
+          ctx.globalAlpha = 1; ctx.strokeStyle = ink; ctx.lineWidth = 2.5 * dpr;
+          ctx.beginPath(); ctx.arc(x, y, 7 * dpr, 0, 2 * Math.PI); ctx.stroke();
+          ctx.beginPath(); ctx.arc(x, y, 10 * dpr, 0, 2 * Math.PI); ctx.strokeStyle = axis; ctx.lineWidth = 2 * dpr; ctx.stroke();
+          count(series, 'rings', 2);
         }
       }
       ctx.restore();
       // Serialize once per draw, with one record per series (never per spot).
-      if (chart) chart.dataset.drawn = JSON.stringify(drawn);
+      baseDrawn = drawn;
+      overlayHover(u);
     };
     // Keyboard and pointer targets over each point, placed after uPlot has laid
     // out (its first layout runs in a microtask), relative to the chart box.
-    let targetFrame = 0;
     const placeTargets = (u: uPlot) => {
-      cancelAnimationFrame(targetFrame);
-      targetFrame = requestAnimationFrame(() => updateTargets(u));
+      if (!gesturing) updateTargets(u);
     };
     const updateTargets = (u: uPlot) => {
       if (!chart) return;
-      const o = u.over.getBoundingClientRect(), c = chart.getBoundingClientRect();
+      const dpr = u.ctx.canvas.width / u.width, left = u.bbox.left / dpr, top = u.bbox.top / dpr;
       const next = (sharedHover ? data.marks : []).flatMap(m => {
         const p = m.point ?? m.path?.find(valid);
         if (!valid(p)) return [];
-        const x = o.left - c.left + u.valToPos(p[0], 'x'), y = o.top - c.top + u.valToPos(p[1], 'y');
-        return x >= o.left - c.left && x <= o.right - c.left && y >= o.top - c.top && y <= o.bottom - c.top
+        const x = left + u.valToPos(p[0], 'x'), y = top + u.valToPos(p[1], 'y');
+        return x >= left && x <= left + u.bbox.width / dpr && y >= top && y <= top + u.bbox.height / dpr
           ? [{ spot: m.spot, x, y }] : [];
       });
-      untrack(() => { targets = next; });
+      untrack(() => {
+        const updated = reconcileTargets(targets, next, placeTarget);
+        targetByKey = new Map(updated.map(target => [target.spot.key, target]));
+        if (updated !== targets) targets = updated;
+      });
     };
     // Log axes: label and grid only whole decades (uPlot's default draws every minor line).
     const decades = (_u: uPlot, splits: number[]) => splits.map(v => v != null && v > 0 && Math.abs(Math.log10(v) - Math.round(Math.log10(v))) < 1e-9 ? v : null);
     const plotHost = host;
     const opts: uPlot.Options = { width: untrack(() => width), height: untrack(() => height), series: [{}, { show: false }], scales: { x: { time: false, distr: logX ? 3 : 1, range: () => bounds.x }, y: { distr: logY ? 3 : 1, range: () => bounds.y } },
-      axes: [{ label: isotopeLabel(xLabel), labelSize: 20, size: 42, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logX && !xTicks.length ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), ...(xTicks.length ? { splits: () => xTicks.map((_, i) => i), values: (_u: uPlot, vals: number[]) => vals.map(v => xTicks[v] ?? '') } : {}) },
-        { label: isotopeLabel(yLabel), labelSize: 18, size: 64, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logY ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), values: (_u, vals) => vals.map(v => v == null || !Number.isFinite(v) ? '' : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 0.001) ? v.toExponential(1) : Number(v.toPrecision(4)).toString()) }],
-      legend: { show: false }, cursor: { show: false }, select: { show: false, left: 0, top: 0, width: 0, height: 0 }, hooks: { draw: [u => untrack(() => draw(u))], ready: [placeTargets] },
+      axes: [{ label: isotopeLabel(untrack(() => xLabel)), labelSize: 20, size: 42, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logX && !xTicks.length ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), ...(xTicks.length ? { splits: () => xTicks.map((_, i) => i), values: (_u: uPlot, vals: number[]) => vals.map(v => xTicks[v] ?? '') } : {}) },
+        { label: isotopeLabel(untrack(() => yLabel)), labelSize: 18, size: 64, stroke: axis, grid: { stroke: grid }, ticks: { stroke: grid }, font: '11px system-ui', ...(logY ? { filter: decades, grid: { stroke: grid, filter: decades }, ticks: { stroke: grid, filter: decades } } : {}), values: (_u, vals) => vals.map(v => v == null || !Number.isFinite(v) ? '' : Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 0.001) ? v.toExponential(1) : Number(v.toPrecision(4)).toString()) }],
+      legend: { show: false }, cursor: { show: false }, select: { show: false, left: 0, top: 0, width: 0, height: 0 }, hooks: { draw: [u => untrack(() => draw(u))], ready: [u => untrack(() => placeTargets(u))] },
     };
     const plot = untrack(() => new uPlot(opts, [[], []], plotHost));
     instance = plot;
     const surface = onbox ? chart! : plot.over;
+    // Rectangles are read once on entry/gesture start, never in a frame callback.
+    let rect: DOMRect | undefined;
+    const measure = () => { rect = plot.over.getBoundingClientRect(); };
+    const invalidateRect = () => { if (!drag && !gesturing) rect = undefined; };
+    const dimensions = () => { const dpr = plot.ctx.canvas.width / plot.width; return { left: plot.bbox.left / dpr, top: plot.bbox.top / dpr, width: plot.bbox.width / dpr, height: plot.bbox.height / dpr }; };
+    const local = (e: MouseEvent): Point => [e.clientX - (rect?.left ?? 0), e.clientY - (rect?.top ?? 0)];
     function hit(event: MouseEvent, includeEllipses = true): ReviewSpot | null {
-      const rect = plot.over.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;
-      if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null;
-      let closest: ReviewSpot | null = null, distance = Infinity;
-      const position = (p: Point): Point => [plot.valToPos(p[0], 'x'), plot.valToPos(p[1], 'y')];
-      for (const m of data.marks) {
-        const pts = (m.point ? [m.point] : m.path ?? []).filter(valid);
-        for (const p of pts) {
-          const [px, py] = position(p), d = Math.hypot(x - px, y - py);
-          if (d > distance) continue;
-          let inside = false;
-          if (includeEllipses && d > 12 && m.polygon) {
-            const polygon = m.polygon.filter(valid).map(position);
-            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-              const a = polygon[i], b = polygon[j];
-              if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0])
-                inside = !inside;
-            }
-          }
-          if ((d <= 12 || inside) && d <= distance) {
-            distance = d;
-            closest = m.spot;
-          }
-        }
-      }
-      return closest;
+      if (!rect) measure();
+      return cachedHit(...local(event), includeEllipses);
     }
     let drag: { id: number; start: Point; bounds: Bounds; tool: DragTool; moved: boolean } | null = null;
-    function position(e: PointerEvent): Point {
-      const r = plot.over.getBoundingClientRect();
-      return [e.clientX - r.left, e.clientY - r.top];
-    }
+    let settleTimer: ReturnType<typeof setTimeout>;
+    const settle = () => {
+      clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        if (drag) return;
+        updateTargets(plot);
+        gesturing = false;
+        rect = undefined;
+      }, 120);
+    };
+    const beginGesture = () => {
+      clearTimeout(settleTimer);
+      gesturing = true; clearPointHover();
+    };
     function clip([x, y]: Point): Point {
-      return [Math.max(0, Math.min(plot.over.clientWidth, x)), Math.max(0, Math.min(plot.over.clientHeight, y))];
+      const { width, height } = dimensions();
+      return [Math.max(0, Math.min(width, x)), Math.max(0, Math.min(height, y))];
     }
+    let latest: PointerEvent | undefined, ending: PointerEvent | undefined;
+    let wheelFactor = 1, wheelAnchor: Point = [0.5, 0.5];
+    const input = frameQueue(() => {
+      const e = latest; latest = undefined;
+      if (e && drag?.id === e.pointerId) {
+        const [x, y] = local(e), { width, height, left, top } = dimensions();
+        const dx = x - drag.start[0], dy = y - drag.start[1];
+        if (drag.moved || Math.hypot(dx, dy) >= 4) {
+          drag.moved = true;
+          if (drag.tool === 'pan') viewport = panBounds(drag.bounds, dx / width, dy / height);
+          else {
+            const end = clip([x, y]);
+            box = { start: [drag.start[0] + left, drag.start[1] + top], end: [end[0] + left, end[1] + top] };
+          }
+        }
+      } else if (e && !gesturing) {
+        const [x, y] = local(e), { left, top } = dimensions();
+        setHover(cachedHit(x, y), x + left, y + top);
+      }
+      if (ending) finishDrag(ending);
+      if (wheelFactor !== 1) {
+        viewport = zoomBounds(bounds, wheelFactor, wheelAnchor, zoomAxis);
+        wheelFactor = 1;
+        settle();
+      }
+    });
     const down = (e: PointerEvent) => {
       if (!onbox || e.button !== 0 || drag) return;
       if (e.target !== plot.over && !(e.target instanceof HTMLElement && e.target.classList.contains('point-target'))) return;
-      drag = { id: e.pointerId, start: clip(position(e)), bounds, tool: tool === 'pan' && e.shiftKey ? 'zoom' : tool, moved: false };
+      input.cancel(); latest = undefined; wheelFactor = 1; measure();
+      drag = { id: e.pointerId, start: clip(local(e)), bounds, tool: tool === 'pan' && e.shiftKey ? 'zoom' : tool, moved: false };
       plot.over.setPointerCapture(e.pointerId);
       clearPointHover();
     };
@@ -389,63 +523,67 @@
     const contextmenu = (e: MouseEvent) => {
       if (!sharedHover) return;
       const key = (e.target as HTMLElement | null)?.dataset.pointKey;
-      const spot = data.marks.find(m => m.spot.key === key)?.spot ?? hit(e, false);
+      const spot = (key ? hoveredMarks.get(key)?.spot : undefined) ?? hit(e, false);
       if (!spot) return;
-      const anchor = [...(chart?.querySelectorAll<HTMLElement>('.point-target') ?? [])].find(n => n.dataset.pointKey === spot.key);
+      const anchor = targetElements.get(spot.key);
       if (!anchor) return;
       e.preventDefault();
       openMenu(spot, anchor);
     };
     const move = (e: PointerEvent) => {
+      if (ending) return;
+      if (!rect) measure();
       if (drag?.id === e.pointerId) {
-        const [x, y] = position(e);
-        const dx = x - drag.start[0], dy = y - drag.start[1];
-        if (!drag.moved && Math.hypot(dx, dy) < 4) return;
-        drag.moved = true;
-        if (drag.tool === 'pan') {
-          viewport = panBounds(drag.bounds, dx / plot.over.clientWidth, dy / plot.over.clientHeight);
-        } else {
-          const offset: Point = [plot.over.offsetLeft, plot.over.offsetTop];
-          const end = clip([x, y]);
-          box = { start: [drag.start[0] + offset[0], drag.start[1] + offset[1]], end: [end[0] + offset[0], end[1] + offset[1]] };
-        }
-        return;
-      }
-      if (onbox && e.target instanceof HTMLElement && e.target.classList.contains('point-target')) return;
-      hovered = hit(e);
-      if (sharedHover) review.hoveredKey = hovered?.key ?? null;
-      const r = plotHost.getBoundingClientRect();
-      tooltip = { x: Math.max(0, Math.min(width - 190, e.clientX - r.left + 8)), y: Math.max(0, e.clientY - r.top - 45) };
+        const p = local(e);
+        if (Math.hypot(p[0] - drag.start[0], p[1] - drag.start[1]) >= 4) beginGesture();
+      } else if (onbox && e.target instanceof HTMLElement && e.target.classList.contains('point-target')) return;
+      latest = e;
+      input.schedule();
     };
     const up = (e: PointerEvent) => {
       if (drag?.id !== e.pointerId) return;
+      latest = ending = e;
+      input.schedule();
+    };
+    function finishDrag(e: PointerEvent) {
+      ending = undefined;
+      if (!drag) return;
       const { start, moved, tool: action } = drag;
-      drag = null;
-      box = null;
+      drag = null; box = null;
       if (!moved) {
         const spot = hit(e);
         if (spot) onselect(spot);
       } else if (action !== 'pan') {
-        const end = clip(position(e));
-        if (Math.abs(end[0] - start[0]) < 4 || Math.abs(end[1] - start[1]) < 4) return;
-        const area: Bounds = {
-          x: [plot.posToVal(Math.min(start[0], end[0]), 'x'), plot.posToVal(Math.max(start[0], end[0]), 'x')],
-          y: [plot.posToVal(Math.max(start[1], end[1]), 'y'), plot.posToVal(Math.min(start[1], end[1]), 'y')],
-        };
-        if (action === 'zoom') viewport = area;
-        else onbox?.(area);
+        const end = clip(local(e));
+        if (Math.abs(end[0] - start[0]) >= 4 && Math.abs(end[1] - start[1]) >= 4) {
+          const area: Bounds = {
+            x: [plot.posToVal(Math.min(start[0], end[0]), 'x'), plot.posToVal(Math.max(start[0], end[0]), 'x')],
+            y: [plot.posToVal(Math.max(start[1], end[1]), 'y'), plot.posToVal(Math.min(start[1], end[1]), 'y')],
+          };
+          if (action === 'zoom') viewport = area;
+          else onbox?.(area);
+        }
       }
-    };
-    const cancel = () => { drag = null; box = null; clearPointHover(); };
+      if (gesturing) settle();
+    }
+    const leave = () => { if (!drag) { latest = undefined; if (wheelFactor === 1) input.cancel(); clearPointHover(); rect = undefined; } };
+    const cancel = () => { input.cancel(); latest = undefined; wheelFactor = 1; ending = undefined; drag = null; box = null; clearPointHover(); if (gesturing) settle(); };
+    const lostCapture = () => { if (!ending) cancel(); };
     const wheel = (e: WheelEvent) => {
       if (!onbox || !e.deltaY) return;
-      const r = plot.over.getBoundingClientRect();
+      if (!gesturing || !rect) measure();
+      const r = rect!;
       if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
       e.preventDefault();
       const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? r.height : 1);
-      clearPointHover();
-      zoom(2 ** Math.max(-1, Math.min(1, delta / 280)), [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height]);
+      beginGesture();
+      wheelFactor *= 2 ** Math.max(-1, Math.min(1, delta / 280));
+      wheelAnchor = [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height];
+      input.schedule(); settle();
     };
+    paintHover = () => { if (visible()) untrack(() => overlayHover(plot)); };
+    window.addEventListener('scroll', invalidateRect, true);
+    surface.addEventListener('pointerenter', measure);
     window.addEventListener('blur', cancel);
     document.addEventListener('mouseleave', clearPointHover);
     plot.over.addEventListener('click', click);
@@ -453,23 +591,27 @@
     surface.addEventListener('pointerdown', down);
     surface.addEventListener('pointermove', move);
     surface.addEventListener('pointerup', up);
-    surface.addEventListener('lostpointercapture', cancel);
-    surface.addEventListener('pointerleave', clearPointHover);
+    surface.addEventListener('lostpointercapture', lostCapture);
+    surface.addEventListener('pointerleave', leave);
     surface.addEventListener('wheel', wheel, { passive: false });
-    refreshTargets = () => placeTargets(plot);
+    refreshTargets = () => { if (!gesturing) rect = undefined; placeTargets(plot); };
     return () => {
+      input.cancel(); clearTimeout(settleTimer); gesturing = false; paintHover = () => {};
+      window.removeEventListener('scroll', invalidateRect, true);
+      surface.removeEventListener('pointerenter', measure);
       window.removeEventListener('blur', cancel);
       document.removeEventListener('mouseleave', clearPointHover);
+      plot.over.removeEventListener('click', click);
       surface.removeEventListener('pointerdown', down);
       surface.removeEventListener('contextmenu', contextmenu);
       surface.removeEventListener('pointermove', move);
       surface.removeEventListener('pointerup', up);
-      surface.removeEventListener('lostpointercapture', cancel);
-      surface.removeEventListener('pointerleave', clearPointHover);
+      surface.removeEventListener('lostpointercapture', lostCapture);
+      surface.removeEventListener('pointerleave', leave);
       surface.removeEventListener('wheel', wheel);
-      cancelAnimationFrame(targetFrame);
       instance = undefined;
-      targets = [];
+      // Axis/theme reconfiguration retains the keyboard/context-menu nodes.
+      if (!untrack(visible)) targets = [];
       hovered = null;
       plot.destroy();
     };
@@ -477,19 +619,25 @@
 
   // Data, selection, and viewport edits update the existing canvas.
   let refreshTargets = () => {};
+  let lastTargets: { data?: typeof data; bounds?: Bounds; w?: number; h?: number } = {};
   $effect(() => {
     const plot = instance, { x, y } = bounds, w = width, h = height;
     void data;
-    void guides;
+    void guidesForBounds;
+    void selected;
+    const labelX = isotopeLabel(xLabel), labelY = isotopeLabel(yLabel);
     if (!plot) return;
     untrack(() => {
       plot.batch(() => {
+        plot.axes[0].label = labelX; plot.axes[1].label = labelY;
         if (plot.width !== w || plot.height !== h) plot.setSize({ width: w, height: h });
         if (plot.scales.x.min !== x[0] || plot.scales.x.max !== x[1]) plot.setScale('x', { min: x[0], max: x[1] });
         if (plot.scales.y.min !== y[0] || plot.scales.y.max !== y[1]) plot.setScale('y', { min: y[0], max: y[1] });
       });
-      plot.redraw(false);
-      refreshTargets();
+      if (lastTargets.data !== data || lastTargets.bounds !== bounds || lastTargets.w !== w || lastTargets.h !== h) {
+        refreshTargets();
+        lastTargets = { data, bounds, w, h };
+      }
     });
   });
 </script>
@@ -503,10 +651,13 @@
 {/snippet}
 {@render controls?.(secondaryNavigation)}
 <div class="chart" class:navigable={!!onbox} class:panning={tool === 'pan'} bind:this={chart} data-testid="review-plot" data-viewport={JSON.stringify(bounds)} data-drawn={'{}'} data-point-count={pointTargets.length} data-hovered-key={sharedHover ? review.hoveredKey ?? '' : ''}>
+  <div class="point-targets" style:visibility={gesturing ? 'hidden' : 'visible'}>
   {#each pointTargets as t (t.spot.key)}
-    <button class="point-target" aria-haspopup="menu" aria-label={`Select ${t.spot.label}`} tabindex={keyboardKey === t.spot.key ? 0 : -1} data-point-key={t.spot.key} data-sample={t.spot.sampleName} data-selected={selected===t.spot.key} data-hovered={sharedHover && review.hoveredKey === t.spot.key} style:left="{t.x}px" style:top="{t.y}px" oncontextmenu={e => { e.preventDefault(); e.stopPropagation(); openMenu(t.spot, e.currentTarget); }} onkeydown={e => { if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); e.stopPropagation(); openMenu(t.spot, e.currentTarget); } }} onclick={()=>onselect(t.spot)} onmouseenter={()=>pointHover(t)} onmouseleave={clearPointHover} onfocus={()=>pointHover(t)} onblur={clearPointHover}></button>
+    <button class="point-target" aria-haspopup="menu" aria-label={`Select ${t.spot.label}`} use:targetFlags={t.spot.key} data-point-key={t.spot.key} data-sample={t.spot.sampleName} oncontextmenu={e => { e.preventDefault(); e.stopPropagation(); openMenu(t.spot, e.currentTarget); }} onkeydown={e => { if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) { e.preventDefault(); e.stopPropagation(); openMenu(t.spot, e.currentTarget); } }} onclick={()=>onselect(t.spot)} onmouseenter={()=>pointHover(t)} onmouseleave={clearPointHover} onfocus={()=>pointHover(t)} onblur={clearPointHover}></button>
   {/each}
+  </div>
   <div class="canvas" bind:this={host}></div>
+  <canvas class="hover-overlay" aria-hidden="true" bind:this={overlay}></canvas>
   {#if box}
     <div class="selection-box" style:left="{Math.min(box.start[0], box.end[0])}px" style:top="{Math.min(box.start[1], box.end[1])}px"
       style:width="{Math.abs(box.start[0] - box.end[0])}px" style:height="{Math.abs(box.start[1] - box.end[1])}px"></div>
@@ -539,7 +690,9 @@
   .spot-menu {background:var(--plot-bg);color:var(--text);gap:4px;padding:6px;border:1px solid var(--hairline);}
   .spot-menu:not(:popover-open) {display:none;} .spot-menu .btn {white-space:normal;justify-content:space-between;text-align:left;font-size:0.78rem;}
   .chart { position:relative; flex:1; min-height:150px;min-width:0;border-radius:var(--radius-sm); background:var(--plot-bg); overflow:hidden; }
-  .point-target {position:absolute;z-index:1;width:12px;height:12px;transform:translate(-50%,-50%);padding:0;border:0;background:transparent;border-radius:50%;cursor:pointer;}
+  .point-targets {position:absolute;inset:0;pointer-events:none;z-index:1;}
+  .hover-overlay {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+  .point-target {pointer-events:auto;position:absolute;z-index:1;width:12px;height:12px;transform:translate(-50%,-50%);padding:0;border:0;background:transparent;border-radius:50%;cursor:pointer;}
   .navigable .point-target {touch-action:none;}
   .navigable:not(.panning) .point-target {cursor:crosshair;}
   .navigable :global(.u-over) {touch-action:none;cursor:crosshair;}

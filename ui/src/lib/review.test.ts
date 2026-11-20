@@ -557,3 +557,23 @@ it('does not restore chemistry from a late batch reply after Review is cleared',
   finish({ status: 200, body: timsBatch }); await pending;
   expect(review.batches).toEqual({}); expect(review.batchErrors).toEqual({});
 });
+
+it('indexes thousands of stored spots, preserves first-match selection and follows refreshed rows', () => {
+  const invented = Array.from({ length: 3000 }, (_, i) => normalise({ acquisition_id: `invented-${i}`, label: `Invented ${i}` }));
+  review.rows = invented;
+  for (const i of [2999, 1, 2000, 0]) {
+    review.selectedKey = `invented-${i}`;
+    expect(review.selected).toBe(review.rows[i]);
+  }
+  const refreshed = { ...invented[2000], label: 'Refreshed stored label' };
+  review.rows = [refreshed, { ...refreshed, label: 'Duplicate key keeps the first match' }];
+  review.selectedKey = refreshed.key;
+  expect(review.selected?.label).toBe('Refreshed stored label');
+  review.externalSpot = normalise({ acquisition_id: 'external', label: 'External' });
+  review.selectedKey = 'absent';
+  expect(review.selected).toBe(review.externalSpot);
+  review.rows = [];
+  expect(review.selected).toBe(review.externalSpot);
+  review.clear();
+  expect(review.selected).toBeNull();
+});

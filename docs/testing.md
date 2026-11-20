@@ -56,6 +56,35 @@ Playwright reuses a dev server already running on port 1431.
 What stays slow: the WebKit half of Playwright (about half the run) and the
 Review and atlas-sync specs, which drive many real screens.
 
+## Concordia performance benchmark
+
+Run `CONCORDIA_PERF=1 pnpm --filter upbstudio-ui exec playwright test -c playwright.perf.config.ts`.
+That config builds the UI and serves the production build on port 1432: the
+dev server's Svelte development runtime (stack capture on every state write)
+would dominate the frame times. The spec uses CSS locators for the same reason:
+Playwright's label and role queries scan every spot button inside the page.
+It is skipped in normal e2e runs. The fixture generates seeded, invented zircon
+results for 800 and 2000 spots across five samples. Set `CONCORDIA_PERF_N=800,2000`
+to override the counts (each must be at least 41). Both browser projects use
+1440 × 900 and exercise Wetherill and Tera-Wasserburg diagrams.
+
+For pan, wheel zoom, hover, tree selection, diagram switches and sample toggles,
+the console table reports frame count, median, p95 and maximum frame interval
+in ms, frames over 33 ms, and wall time. Selection also reports input-to-one-frame
+latency; switches and toggles report input-to-two-frame latency (median and
+maximum). Chromium adds long-task count/duration and CDP deltas for task,
+script, layout and style duration in ms, plus layout and style counts. WebKit
+omits those fields. Raw frame intervals and action latencies are saved alongside
+the summaries in `ui/test-results/concordia-perf-<browser>.json`, keyed by spot
+count, diagram and scenario. Wall times include Playwright input delivery and
+frame waits; these are diagnostic measurements without pass/fail speed limits.
+
+For before/after comparisons, append `--workers=1` so browser projects do not
+compete, keep the same machine and browser versions, and copy the JSON files
+outside `test-results` before the next run (Playwright clears that directory).
+Run the same command after optimisation. The supervisor runs this benchmark;
+it requires the Playwright browsers and permission to bind the dev-server port.
+
 ## Release build
 
 | Step | Time |

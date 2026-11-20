@@ -1,5 +1,6 @@
 import { number, type ReviewSpot } from '../../lib/review-data';
 import { ellipse, type Point } from '../../lib/concordia';
+import { ellipseParams, type Ellipse } from '../../lib/concordia-geometry';
 export interface Mark {
   spot: ReviewSpot;
   seriesKey?: string;
@@ -7,6 +8,7 @@ export interface Mark {
   boxed?: boolean;
   path?: (Point | null)[];
   polygon?: Point[];
+  ellipse?: Ellipse;
 }
 export interface Guide {
   seriesKey?: string;
@@ -49,6 +51,7 @@ export function isotopeLabel(label: string): string {
     (_, mass: string) => [...mass].map(digit => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(digit)]).join(''));
 }
 
+const ratioCache = new WeakMap<ReviewSpot, Map<string, { signature: string; mark: Mark }>>();
 export function ratioMarks(rows: ReviewSpot[], mode: 'wetherill' | 'tw'): Mark[] {
   const [xk, yk] = mode === 'tw' ? ['238U/206Pb', '207Pb/206Pb'] : ['207Pb/235U', '206Pb/238U'];
   return rows.flatMap(spot => {
@@ -57,6 +60,17 @@ export function ratioMarks(rows: ReviewSpot[], mode: 'wetherill' | 'tw'): Mark[]
       return [];
     const ex = number(spot.values[xk + '_2e']), ey = number(spot.values[yk + '_2e']);
     const rho = mode === 'tw' ? number(spot.values.tw_rho) : number(spot.values.err_corr) ?? number(spot.values.err_corr_no_calibration) ?? number(spot.values.err_corr_with_calibration);
-    return [{ spot, point: [x, y] as Point, polygon: ex !== null && ey !== null ? ellipse(x, y, ex, ey, rho ?? 0) : undefined }];
+    const cache = ratioCache.get(spot) ?? new Map();
+    ratioCache.set(spot, cache);
+    const signature = JSON.stringify([x, y, ex, ey, rho]);
+    const previous = cache.get(mode);
+    if (previous?.signature === signature) return [previous.mark];
+    let polygon: Point[] | undefined;
+    const params = ex !== null && ey !== null ? ellipseParams(x, y, ex, ey, rho ?? 0) : undefined;
+    const mark: Mark = { spot, point: [x, y], ellipse: params,
+      get polygon() { return params ? polygon ??= ellipse(x, y, ex!, ey!, rho ?? 0) : undefined; },
+    };
+    cache.set(mode, { signature, mark });
+    return [mark];
   });
 }

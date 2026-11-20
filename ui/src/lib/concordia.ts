@@ -62,12 +62,28 @@ export function ageTicks([lo, hi]: [
   number,
   number
 ]): number[] {
-  const raw = (hi - lo) / 6;
+  const raw = (hi - lo) / 10;
   if (raw <= 0 || !Number.isFinite(raw)) return [];
   const p = 10 ** Math.floor(Math.log10(raw));
   const step = [1, 2, 5, 10].find(v => v * p >= raw)! * p;
   const start = Math.ceil(lo / step), end = Math.floor(hi / step);
-  return Array.from({ length: Math.min(7, Math.max(0, end - start + 1)) }, (_, i) => (start + i) * step);
+  return Array.from({ length: Math.min(12, Math.max(0, end - start + 1)) }, (_, i) => (start + i) * step);
+}
+/** Label precision follows the nice step, expressed in Ma. */
+export function formatAgeLabel(age: number, step: number): string {
+  const ma = age / 1e6, stepMa = step / 1e6;
+  return `${stepMa >= 1 ? Math.round(ma) : Number(ma.toFixed(Math.max(0, Math.ceil(-Math.log10(stepMa)))))} Ma`;
+}
+export function concordiaLabels(x: Point, y: Point, mode: ConcordiaMode): { age: number; label: string }[] {
+  const ages = visibleConcordiaAges(x, y, mode);
+  if (!ages) return [];
+  const inset = visibleConcordiaAges([x[0], x[1] - (x[1] - x[0]) * 0.04], [y[0], y[1] - (y[1] - y[0]) * 0.04], mode);
+  const ticks = inset ? ageTicks(inset).filter(t => t < EARTH_AGE) : [];
+  const step = ticks.length > 1 ? ticks[1] - ticks[0] : (inset ? (inset[1] - inset[0]) / 10 : 1e6);
+  const labels = ticks.map(age => ({ age, label: formatAgeLabel(age, step) }));
+  // The existing Earth-age label has priority even close to the inset edge.
+  if (ages[1] === EARTH_AGE) labels.unshift({ age: EARTH_AGE, label: '4540 Ma' });
+  return labels;
 }
 export const CI = { La: 0.237, Ce: 0.613, Pr: 0.0928, Nd: 0.457, Sm: 0.148, Eu: 0.0563, Gd: 0.199, Tb: 0.0361, Dy: 0.246, Ho: 0.0546, Er: 0.160, Tm: 0.0247, Yb: 0.161, Lu: 0.0246 };
 export const CI_LEGEND = 'CI chondrite, McDonough and Sun (1995)';

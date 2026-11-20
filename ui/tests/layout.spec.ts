@@ -145,12 +145,12 @@ test('plot controls use the More drawer at tile widths and size changes preserve
   await plots.getByRole('button', { name: 'Zoom in', exact: true }).click();
   const chart = plots.getByTestId('review-plot');
   const viewport = await chart.getAttribute('data-viewport');
-  const before = (await chart.locator('canvas').boundingBox())!;
+  const before = (await chart.locator('.uplot canvas').boundingBox())!;
   await page.getByRole('button', { name: 'Image focus', exact: true }).click();
-  await expect.poll(async () => (await chart.locator('canvas').boundingBox())!.width).toBeLessThan(before.width);
+  await expect.poll(async () => (await chart.locator('.uplot canvas').boundingBox())!.width).toBeLessThan(before.width);
   await expect(chart).toHaveAttribute('data-viewport', viewport!);
   await page.setViewportSize({ width: 1512, height: 982 });
-  await expect.poll(async () => (await chart.locator('canvas').boundingBox())!.width).toBeGreaterThan(before.width - 50);
+  await expect.poll(async () => (await chart.locator('.uplot canvas').boundingBox())!.width).toBeGreaterThan(before.width - 50);
   await expect(chart).toHaveAttribute('data-viewport', viewport!);
 });
 

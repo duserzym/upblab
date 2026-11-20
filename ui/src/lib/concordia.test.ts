@@ -45,3 +45,27 @@ describe('display geometry', () => {
     expect(CI.Lu).toBe(0.0246);
   });
 });
+
+import { concordiaLabels, formatAgeLabel } from './concordia';
+it('chooses 1–2–5 age labels with Studio precision and a 4% top/right inset', () => {
+  expect(ageTicks([0, 4.54e9])).toEqual(Array.from({ length: 10 }, (_, i) => i * 500e6));
+  expect(ageTicks([600.1e6, 600.9e6])).toEqual(Array.from({ length: 9 }, (_, i) => (6001 + i) * 1e5));
+  expect(formatAgeLabel(600.25e6, 0.05e6)).toBe('600.25 Ma');
+  expect(formatAgeLabel(600.2e6, 0.1e6)).toBe('600.2 Ma');
+  expect(formatAgeLabel(600e6, 1e6)).toBe('600 Ma');
+  expect(ageTicks([1, 1])).toEqual([]);
+  for (const mode of ['wetherill', 'tw'] as const) {
+    const a = concordia(300e6, mode), b = concordia(1200e6, mode);
+    const x: [number, number] = [Math.min(a[0], b[0]), Math.max(a[0], b[0])], y: [number, number] = [a[1], b[1]];
+    const labels = concordiaLabels(x, y, mode);
+    expect(labels.length).toBeGreaterThan(3); expect(labels.length).toBeLessThanOrEqual(12);
+    for (const { age, label } of labels) {
+      const p = concordia(age, mode);
+      expect(p[0]).toBeLessThanOrEqual(x[1] - (x[1] - x[0]) * 0.04 + 1e-12);
+      expect(p[1]).toBeLessThanOrEqual(y[1] - (y[1] - y[0]) * 0.04 + 1e-12);
+      expect(label).toMatch(/^\d+(\.\d+)? Ma$/);
+    }
+    const earth = concordia(EARTH_AGE, mode);
+    expect(concordiaLabels([0, earth[0] * 1.1], [0, earth[1] * 1.1], mode)[0]).toEqual({ age: EARTH_AGE, label: '4540 Ma' });
+  }
+});

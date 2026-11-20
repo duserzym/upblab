@@ -3,7 +3,7 @@
   import { tick, untrack } from 'svelte';
   import { review } from '../../lib/review.svelte';
   import { dateLabel, type ReviewSpot, type SpotGroup } from '../../lib/review-data';
-  import { fractionBadges, layerVisibility, moveLayer, orderedLayers, resultLayers, type Layer, type LayerOrder } from '../../lib/review-layers';
+  import { fractionBadges, layerIndex, reuseLayers, layerVisibility, moveLayer, orderedLayers, resultLayers, type Layer, type LayerOrder } from '../../lib/review-layers';
 
   let { scope, groups, allGroups, hidden, searching, active, onvisibility, ongrain, onall, onclear, ongroup, onorder }: {
     scope: string; groups: SpotGroup[]; allGroups: SpotGroup[]; hidden: Set<string>; searching: boolean; active: boolean;
@@ -26,10 +26,15 @@
   }
   let order = $state<LayerOrder>(readOrder());
   let expanded = $state<Record<string, boolean>>({});
+  const rememberedOpen = new Set<string>();
   let drag = $state<{ parent: string; key: string }>();
   let drop = $state<{ key: string; after: boolean }>();
   const all = $derived(orderedLayers(resultLayers(allGroups), order));
-  const layers = $derived(orderedLayers(resultLayers(groups), order));
+  let previousLayers: Layer[] = [];
+  const layers = $derived.by(() => {
+    previousLayers = reuseLayers(previousLayers, orderedLayers(resultLayers(groups), order));
+    return previousLayers;
+  });
   const grainOrder = $derived(layers.flatMap(branch => 'children' in branch ? branch.children : [])
     .flatMap(sample => 'children' in sample ? sample.children : [])
     .flatMap(grain => 'children' in grain && grain.grain ? [grain.key] : []));
@@ -40,38 +45,70 @@
   });
 
   function isOpen(layer: Layer, level: number) {
-    return searching || (expanded[layer.key] ?? (level === 0 || level > 1 || groups.length <= 3));
+    return searching || (expanded[layer.key] ?? (rememberedOpen.has(layer.key) || level === 0 || level > 1 || groups.length <= 3));
   }
 
+  const navigation = $derived(layerIndex(layers, isOpen));
   $effect(() => {
     void review.scrollVersion;
     const selected = review.selectedKey;
     if (!active || !selected || !tree) return;
     untrack(() => {
-      function openPath(branches: Layer[]) {
-        const layer = branches.find(branch => branch.rows.some(row => row.key === selected));
-        if (layer && 'children' in layer) {
-          expanded[layer.key] = true;
-          openPath(layer.children);
-        }
+      for (const parent of navigation.paths.get(selected) ?? []) {
+        // Persist the selected path without invalidating an already-open branch.
+        // Search and default-open branches still stay open after a later filter change.
+        rememberedOpen.add(parent);
+        if (navigation.closed.has(parent) || expanded[parent] === false) expanded[parent] = true;
       }
-      openPath(layers);
-      void tick().then(() => tree?.querySelector<HTMLElement>(`[data-spot-key="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: 'nearest' }));
+      void tick().then(() => spotElements.get(selected)?.scrollIntoView({ block: 'nearest' }));
     });
   });
 
-  function siblings(branches: Layer[], parent: string): Layer[] | undefined {
-    if (!parent) return branches;
-    for (const branch of branches) {
-      if (!('children' in branch)) continue;
-      if (branch.key === parent) return branch.children;
-      const match = siblings(branch.children, parent);
-      if (match) return match;
-    }
+  const fullByKey = $derived.by(() => {
+    const index = new Map<string, Layer>();
+    function visit(branches: Layer[]) { for (const branch of branches) { index.set(branch.key, branch); if ('children' in branch) visit(branch.children); } }
+    visit(all);
+    return index;
+  });
+  function siblings(parent: string): Layer[] | undefined {
+    if (!parent) return all;
+    const branch = fullByKey.get(parent);
+    return branch && 'children' in branch ? branch.children : undefined;
   }
 
+  const spotElements = new Map<string, HTMLButtonElement>();
+  function selectedRow(node: HTMLButtonElement | undefined, selected: boolean) {
+    if (!node) return;
+    node.classList.toggle('selected', selected);
+    node.tabIndex = selected ? 0 : -1;
+    node.closest('[role="treeitem"]')?.setAttribute('aria-selected', String(selected));
+  }
+  function spotRow(node: HTMLButtonElement, key: string) {
+    spotElements.set(key, node);
+    untrack(() => {
+      selectedRow(node, review.selectedKey === key);
+      node.classList.toggle('hovered', review.hoveredKey === key);
+    });
+    return { destroy() { if (spotElements.get(key) === node) spotElements.delete(key); } };
+  }
+  let previousSelection: string | null = null, previousHover: string | null = null;
+  $effect(() => {
+    const selected = review.selectedKey, hovered = review.hoveredKey;
+    untrack(() => {
+      if (previousSelection !== selected) {
+        if (previousSelection) selectedRow(spotElements.get(previousSelection), false);
+        if (selected) selectedRow(spotElements.get(selected), true);
+      }
+      if (previousHover !== hovered) {
+        if (previousHover) spotElements.get(previousHover)?.classList.remove('hovered');
+        if (hovered) spotElements.get(hovered)?.classList.add('hovered');
+      }
+      previousSelection = selected; previousHover = hovered;
+    });
+  });
+
   function move(parent: string, source: string, target: string, after: boolean) {
-    const keys = siblings(all, parent)?.map(layer => layer.key) ?? [];
+    const keys = siblings(parent)?.map(layer => layer.key) ?? [];
     order[parent] = moveLayer(keys, source, target, after);
     try { localStorage.setItem(orderKey, JSON.stringify(order)); } catch { /* Ordering still works without storage. */ }
   }
@@ -104,7 +141,7 @@
 
   function moveWithKeys(event: KeyboardEvent, parent: string, key: string) {
     if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
-    const keys = siblings(all, parent)?.map(layer => layer.key) ?? [];
+    const keys = siblings(parent)?.map(layer => layer.key) ?? [];
     const after = event.key === 'ArrowDown';
     const target = keys[keys.indexOf(key) + (after ? 1 : -1)];
     event.preventDefault();
@@ -132,15 +169,15 @@
       return;
     }
     if (event.altKey || !['ArrowUp', 'ArrowDown', 'Enter'].includes(event.key) || (row && !target.matches('.spot'))) return;
-    const spots = Array.from(tree?.querySelectorAll<HTMLButtonElement>('[data-spot-key]') ?? []).filter(button => !button.closest('[hidden]'));
-    const i = spots.findIndex(button => button.dataset.spotKey === review.selectedKey);
+    const spots = navigation.visible;
+    const i = navigation.positions.get(review.selectedKey ?? '') ?? -1;
     if (event.key === 'Enter' && !target.matches('.spot')) return;
     event.preventDefault();
     if (event.key === 'Enter' && review.selected) void review.focus(review.selected, true);
     else if (spots.length) {
-      const button = spots[Math.max(0, Math.min(spots.length - 1, i + (event.key === 'ArrowDown' ? 1 : -1)))];
-      button.click();
-      button.focus();
+      const button = spotElements.get(spots[Math.max(0, Math.min(spots.length - 1, i + (event.key === 'ArrowDown' ? 1 : -1)))]);
+      button?.click();
+      button?.focus();
     }
   }
 
@@ -152,9 +189,10 @@
   {#each branches as layer (layer.key)}
     {@const spot = 'spot' in layer ? layer.spot : null}
     {@const open = !spot && isOpen(layer, level)}
-    {@const full = siblings(all, parent)?.find(item => item.key === layer.key) ?? layer}
+    {@const full = fullByKey.get(layer.key) ?? layer}
     {@const checked = layerVisibility(full.rows, hidden)}
-    <div role="treeitem" aria-label={layer.name} aria-expanded={spot ? undefined : open} aria-selected={spot ? review.selectedKey === spot.key : undefined}>
+    <!-- spotRow owns aria-selected, tabindex and the two transient classes. -->
+    <div role="treeitem" aria-label={layer.name} aria-expanded={spot ? undefined : open} aria-selected={undefined}>
       <div class="layer-row" class:root={level === 0} class:drop-before={drop?.key === layer.key && !drop.after}
         class:drop-after={drop?.key === layer.key && drop.after} class:dimmed={checked === false}
         role="none" ondragover={e => over(e, parent, layer.key)} ondrop={e => finish(e, parent, layer.key)}
@@ -173,8 +211,8 @@
           <span aria-hidden="true">{checked === 'mixed' ? '−' : checked ? '✓' : ''}</span>
         </button>
         {#if spot}
-          <button class="spot" class:selected={review.selectedKey === spot.key} class:hovered={review.hoveredKey === spot.key}
-            data-spot-key={spot.key} tabindex={review.selectedKey === spot.key ? 0 : -1} aria-keyshortcuts="H" onclick={() => review.select(spot)} ondblclick={() => void review.focus(spot, true)}>
+          <button class="spot" use:spotRow={spot.key}
+            data-spot-key={spot.key} aria-keyshortcuts="H" onclick={() => review.select(spot)} ondblclick={() => void review.focus(spot, true)}>
             <span>{spot.label}</span><small style:color={badgeColor(spot)} title="Preferred date ± 2σ (Ma)">{dateLabel(spot)}</small>
           </button>
         {:else if 'grain' in layer && layer.grain}
@@ -187,7 +225,7 @@
         <span class="plucked-badges">{#each fractionBadges(layer, review.fractionIndex) as match (match.fraction.id)}
           <small class="plucked-badge" title={`${statusWords(match.fraction.status)}${match.source.is_fragment ? ` · fragment: ${match.source.fragment_note}` : ''}`}>{match.fraction.name} · {match.fraction.capsule_label ?? 'No capsule'}{match.source.is_fragment ? ' ◇' : ''}</small>
         {/each}</span>
-        {#if (siblings(all, parent)?.length ?? 0) > 1}
+        {#if (siblings(parent)?.length ?? 0) > 1}
           <button type="button" class="icon handle" draggable="true" aria-label={`Reorder ${layer.name}`} aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
             title="Drag to reorder within this level, or press Option/Alt with ↑ or ↓"
             ondragstart={e => startDrag(e, parent, layer.key)} ondragend={clearDrag}
@@ -234,6 +272,6 @@
     padding:3px 2px;border:1px solid transparent;text-align:left;}
   .spot span {min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .spot small {flex:none;font-size:0.64rem;white-space:nowrap;}
-  .spot.selected {background:var(--accent-soft);border-color:var(--accent);}
-  .spot.hovered {outline:1px solid var(--accent);outline-offset:-1px;}
+  .spot:global(.selected) {background:var(--accent-soft);border-color:var(--accent);}
+  .spot:global(.hovered) {outline:1px solid var(--accent);outline-offset:-1px;}
 </style>
