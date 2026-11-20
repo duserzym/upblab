@@ -46,7 +46,9 @@ export interface SettingsData {
   reviewDockSplit: string;
   /** The Review viewer's mount inset as last left (bridge v5.1); null until first changed. */
   reviewInset: ViewerInset | null;
-  updateChannel: 'stable' | 'beta';
+  lastSeenVersion: string;
+  savedUpdateVersion: string;
+  savedUpdateNotes: string;
   updateAuto: boolean;
   updateLastCheck: number;
 }
@@ -76,7 +78,9 @@ export const DEFAULTS: SettingsData = {
   reviewDockSolo: '',
   reviewDockSplit: '',
   reviewInset: null,
-  updateChannel: 'stable',
+  lastSeenVersion: '',
+  savedUpdateVersion: '',
+  savedUpdateNotes: '',
   updateAuto: true,
   updateLastCheck: 0,
 };
@@ -99,6 +103,11 @@ const storeBackend: Backend = {
   async read() {
     const { load } = await import('@tauri-apps/plugin-store');
     const store = await load(FILE, { defaults: {}, autoSave: 100 });
+    // Retire the old preference: every install follows the stable feed.
+    if (await store.get('updateChannel') !== undefined) {
+      await store.delete('updateChannel');
+      await store.save();
+    }
     const out: Partial<SettingsData> = {};
     for (const key of Object.keys(DEFAULTS) as (keyof SettingsData)[]) {
       const v = await store.get<unknown>(key);
@@ -117,7 +126,12 @@ const storeBackend: Backend = {
 const localBackend: Backend = {
   async read() {
     try {
-      return JSON.parse(localStorage.getItem(LS_KEY) ?? '{}');
+      const data = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}');
+      if (data && 'updateChannel' in data) {
+        delete data.updateChannel;
+        localStorage.setItem(LS_KEY, JSON.stringify(data));
+      }
+      return data;
     } catch {
       return {};
     }
@@ -174,7 +188,9 @@ export class Settings {
   reviewDockSolo = $state(DEFAULTS.reviewDockSolo);
   reviewDockSplit = $state(DEFAULTS.reviewDockSplit);
   reviewInset = $state<ViewerInset | null>(DEFAULTS.reviewInset);
-  updateChannel = $state<SettingsData['updateChannel']>(DEFAULTS.updateChannel);
+  lastSeenVersion = $state(DEFAULTS.lastSeenVersion);
+  savedUpdateVersion = $state(DEFAULTS.savedUpdateVersion);
+  savedUpdateNotes = $state(DEFAULTS.savedUpdateNotes);
   updateAuto = $state(DEFAULTS.updateAuto);
   updateLastCheck = $state(DEFAULTS.updateLastCheck);
   loaded = $state(false);
@@ -241,7 +257,9 @@ export class Settings {
       this.reviewDockSolo = typeof data.reviewDockSolo === 'string' ? data.reviewDockSolo : '';
       this.reviewDockSplit = typeof data.reviewDockSplit === 'string' ? data.reviewDockSplit : '';
       this.reviewInset = readInset(data.reviewInset);
-      this.updateChannel = data.updateChannel === 'beta' ? 'beta' : 'stable';
+      this.lastSeenVersion = typeof data.lastSeenVersion === 'string' ? data.lastSeenVersion : '';
+      this.savedUpdateVersion = typeof data.savedUpdateVersion === 'string' ? data.savedUpdateVersion : '';
+      this.savedUpdateNotes = typeof data.savedUpdateNotes === 'string' ? data.savedUpdateNotes : '';
       this.updateAuto = typeof data.updateAuto === 'boolean' ? data.updateAuto : true;
       this.updateLastCheck = Number.isFinite(data.updateLastCheck) && data.updateLastCheck > 0 ? data.updateLastCheck : 0;
     } catch (err) {
@@ -284,7 +302,9 @@ export class Settings {
       reviewDockSolo: this.reviewDockSolo,
       reviewDockSplit: this.reviewDockSplit,
       reviewInset: this.reviewInset ? { ...this.reviewInset } : null,
-      updateChannel: this.updateChannel,
+      lastSeenVersion: this.lastSeenVersion,
+      savedUpdateVersion: this.savedUpdateVersion,
+      savedUpdateNotes: this.savedUpdateNotes,
       updateAuto: this.updateAuto,
       updateLastCheck: this.updateLastCheck,
     };

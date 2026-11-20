@@ -4,9 +4,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const dir = join(homedir(), '.tauri');
-const key = join(dir, 'upbstudio-updater.key');
 const root = new URL('../', import.meta.url);
+const confPath = new URL('src-tauri/tauri.conf.json', root);
+const conf = JSON.parse(readFileSync(confPath, 'utf8'));
+if (conf.plugins.updater.pubkey?.trim() && !process.argv.includes('--force')) {
+  throw new Error('Updater pubkey is already configured. Use --force to replace it.');
+}
+const dir = join(homedir(), '.tauri');
+const key = join(dir, 'upblab-updater.key');
 mkdirSync(dir, { recursive: true });
 if (!existsSync(key)) {
   const cargo = spawnSync('cargo', ['tauri', '--version'], { stdio: 'ignore' });
@@ -19,8 +24,6 @@ if (!existsSync(key)) {
   console.log(`Using existing key ${key}`);
 }
 const pub = readFileSync(`${key}.pub`, 'utf8').trim();
-const confPath = new URL('src-tauri/tauri.conf.json', root);
-const conf = JSON.parse(readFileSync(confPath, 'utf8'));
 conf.plugins.updater.pubkey = pub;
 writeFileSync(confPath, JSON.stringify(conf, null, 2) + '\n');
 console.log('Public key written to src-tauri/tauri.conf.json. Commit that change.');

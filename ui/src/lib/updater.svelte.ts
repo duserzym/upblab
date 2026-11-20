@@ -1,7 +1,8 @@
 import { isDesktop } from './platform';
 import { settings } from './settings.svelte';
 import { shellVersion } from './versions';
-import { checkButtonView, pickEndpoint, STABLE_ENDPOINT, transition, UPDATE_INSTALL_REASON, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
+import { bundledNotes, whatsNewNotes, isNewerVersion } from './release-notes';
+import { checkButtonView, STABLE_ENDPOINT, transition, UPDATE_INSTALL_REASON, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
 
 const WEB_REASON = 'Updates come with the desktop app; the web page is always the version its server serves.';
 const INSTALL_REASON = UPDATE_INSTALL_REASON;
@@ -27,6 +28,8 @@ export const updater = $state({
     : { kind: 'unsupported', reason: WEB_REASON }) as UpdateStatus,
   version: __APP_VERSION__,
   supported: false,
+  whatsNewOpen: false,
+  whatsNewNotes: '',
   justChecked: false,
   lastResult: '',
   standards: { message: 'Standards have not been checked.', warning: false, changed: [] } as StandardsStatus,
@@ -64,16 +67,6 @@ export async function checkStandards(): Promise<void> {
   }
 }
 
-async function endpoint() {
-  if (settings.updateChannel === 'stable') return STABLE_ENDPOINT;
-  try {
-    const res = await fetch('https://api.github.com/repos/duserzym/upblab/releases?per_page=10', {
-      headers: { Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(15_000),
-    });
-    return res.ok ? pickEndpoint('beta', await res.json()) : STABLE_ENDPOINT;
-  } catch { return STABLE_ENDPOINT; }
-}
-
 /** A manual check always reaches the server, including when an update is ready. */
 export async function check(manual = false): Promise<void> {
   if (!updatePreview && !isDesktop) return;
@@ -94,7 +87,7 @@ export async function check(manual = false): Promise<void> {
       return;
     }
     updater.supported = await invoke<boolean>('update_supported');
-    const info = await invoke<UpdateInfo | null>('update_check', { endpoint: await endpoint() });
+    const info = await invoke<UpdateInfo | null>('update_check', { endpoint: STABLE_ENDPOINT });
     const checkedAt = Date.now();
     await settings.update({ updateLastCheck: checkedAt });
     send({ type: 'checked', info, checkedAt });
@@ -131,9 +124,19 @@ export async function download(): Promise<void> {
 
 export async function install(): Promise<void> {
   if (updater.status.kind !== 'ready' || !updatePreview && !updater.supported) return;
+  const info = updater.status.info;
   send({ type: 'install' });
   if (updatePreview) return;
-  try { await invoke('update_install'); } catch (error) { fail(error); }
+  try {
+    await settings.update({ savedUpdateVersion: info.version, savedUpdateNotes: info.notes ?? '' });
+    await invoke('update_install');
+  } catch (error) { fail(error); }
+}
+
+export async function recordRunningVersion(version: string): Promise<void> {
+  updater.whatsNewNotes = whatsNewNotes(version, bundledNotes(version), settings.savedUpdateVersion, settings.savedUpdateNotes);
+  updater.whatsNewOpen = isNewerVersion(version, settings.lastSeenVersion);
+  await settings.update({ lastSeenVersion: version });
 }
 
 /** Mount once; cleanup also handles unmounting while native support is being queried. */
@@ -141,6 +144,7 @@ export function startScheduler(): () => void {
   let stopped = false;
   let first: ReturnType<typeof setTimeout> | undefined;
   let every: ReturnType<typeof setInterval> | undefined;
+  if (updatePreview || !isDesktop) void recordRunningVersion(updater.version).catch(console.warn);
   if (!updatePreview && isDesktop) {
     function scheduledCheck() {
       if (updater.supported) void check();
@@ -150,7 +154,11 @@ export function startScheduler(): () => void {
     every = setInterval(scheduledCheck, 6 * 3600_000);
     void (async () => {
       try {
-        updater.version = await shellVersion();
+        const version = await shellVersion();
+        if (stopped) return;
+        updater.version = version;
+        await recordRunningVersion(version);
+        if (stopped) return;
         updater.supported = await invoke<boolean>('update_supported');
         if (stopped) return;
         if (!updater.supported) {

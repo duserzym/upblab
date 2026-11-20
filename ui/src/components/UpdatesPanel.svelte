@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UpdateNotes from './UpdateNotes.svelte';
   import { moduleLabel } from '../lib/links';
   import { untrack } from 'svelte';
   import { localService } from '../lib/localService.svelte';
@@ -12,7 +13,6 @@
   const standardsPage = 'https://github.com/duserzym/upb-standards';
   let versions = $state<BuildVersions | null>(null);
   const status = $derived(updater.status);
-  const info = $derived('info' in status ? status.info : null);
   const view = $derived(checkButtonView(status, updater.version, { autoDownload: settings.updateAuto }));
   $effect(() => {
     if (!settings.loaded || shell.view !== 'settings') return;
@@ -28,6 +28,7 @@
 <strong>UPb Lab v{versions?.shell ?? updater.version}</strong>
 <p class="small muted" role="status">{view.text}</p>
 {#if view.secondaryText}<p class="small muted">{view.secondaryText}</p>{/if}
+<UpdateNotes {status} />
 {#if view.details !== null}<p class="small muted error-details">Details: {view.details}</p>{/if}
 <div class="row">
   <button class="btn" disabled={view.busy || !isDesktop && !updatePreview} onclick={() => void check(true)}>Check now</button>
@@ -39,15 +40,7 @@
   <input type="checkbox" checked={settings.updateAuto} onchange={(e) => { void settings.update({ updateAuto: e.currentTarget.checked }); if (e.currentTarget.checked) void download(); }} />
   Download updates automatically
 </label>
-<label class="row small">
-  Channel
-  <select value={settings.updateChannel} disabled={view.busy} onchange={(e) => { void settings.update({ updateChannel: e.currentTarget.value === 'beta' ? 'beta' : 'stable' }); void check(true); }}>
-    <option value="stable">Stable</option>
-    <option value="beta">Beta (pre-releases)</option>
-  </select>
-</label>
 <p class="faint small">Last check: {settings.updateLastCheck ? new Date(settings.updateLastCheck).toLocaleString() : 'Never'}{updater.lastResult ? ` · ${updater.lastResult}` : ''}</p>
-{#if info?.notes}<pre class="notes small">{info.notes}</pre>{/if}
 <a href={RELEASES_PAGE} target="_blank" rel="noreferrer" onclick={(e) => { if (isDesktop) { e.preventDefault(); void openExternal(RELEASES_PAGE); } }}>Release notes on GitHub</a>
 {#if isDesktop}
   <h4>UPb Standards</h4>
@@ -80,7 +73,6 @@
 <style>
   p, h4 { margin: 0; }
   .error-details { user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
-  .notes { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; line-height: 1.4; max-height: 16.8em; }
   table.data th { position: static; text-transform: none; letter-spacing: normal; }
   table.data td { overflow-wrap: anywhere; }
 </style>

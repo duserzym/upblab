@@ -3,7 +3,6 @@ export const RELEASES_PAGE = 'https://github.com/duserzym/upblab/releases';
 export const UPDATE_APP_NAME = 'UPb Lab';
 const UPDATE_HOST = new URL(STABLE_ENDPOINT).host;
 export const UPDATE_INSTALL_REASON = `${UPDATE_APP_NAME} cannot replace itself in this folder. Download the new version from GitHub.`;
-export type Channel = 'stable' | 'beta';
 export interface UpdateInfo {
   version: string;
   currentVersion: string;
@@ -94,20 +93,6 @@ export function compareVersions(a: string, b: string): number {
     return n > m ? 1 : -1;
   }
   return 0;
-}
-
-interface Release {
-  draft?: boolean;
-  published_at?: string | null;
-  assets?: { name?: string; browser_download_url?: string }[];
-}
-/** GitHub lists newest first; published dates also handle an unordered list. */
-export function pickEndpoint(channel: Channel, releases: unknown): string {
-  if (channel === 'stable' || !Array.isArray(releases)) return STABLE_ENDPOINT;
-  const newest = (releases as Release[]).filter((r) => r && !r.draft).sort((a, b) =>
-    (Date.parse(b.published_at ?? '') || 0) - (Date.parse(a.published_at ?? '') || 0))[0];
-  const url = newest?.assets?.find((a) => a.name === 'latest.json')?.browser_download_url;
-  return url?.startsWith('https://') ? url : STABLE_ENDPOINT;
 }
 
 export type UpdateEvent =

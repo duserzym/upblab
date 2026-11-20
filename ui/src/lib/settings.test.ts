@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./platform', () => ({ isDesktop: false }));
+const native = vi.hoisted(() => ({ desktop: false, load: vi.fn() }));
+vi.mock('./platform', () => ({ get isDesktop() { return native.desktop; } }));
+vi.mock('@tauri-apps/plugin-store', () => ({ load: native.load }));
 const { Settings, DEFAULTS } = await import('./settings.svelte');
 
 let stored: Record<string, unknown>;
@@ -24,6 +26,7 @@ beforeEach(() => {
     addEventListener: (_type: string, fn: (event: { matches: boolean }) => void) => changes.add(fn),
     removeEventListener: (_type: string, fn: (event: { matches: boolean }) => void) => changes.delete(fn),
   })));
+  native.desktop = false;
   settings = new Settings();
 });
 afterEach(() => {
@@ -227,4 +230,41 @@ describe('readInset', () => {
     for (const bad of [null, undefined, 'x', { width: 50, collapsed: false }, { width: 200 }, { width: 200.5, collapsed: true }])
       expect(readInset(bad)).toBeNull();
   });
+});
+
+it('silently retires a stored beta preference and preserves update preferences', async () => {
+  stored = { updateChannel: 'beta', updateAuto: false, updateLastCheck: 123, lastSeenVersion: '0.1.0', savedUpdateVersion: '0.2.0', savedUpdateNotes: 'New view.' };
+  await settings.load();
+  expect(stored).not.toHaveProperty('updateChannel');
+  expect(settings.snapshot()).not.toHaveProperty('updateChannel');
+  expect(settings.updateAuto).toBe(false);
+  expect(settings.updateLastCheck).toBe(123);
+  await settings.update({ lastTab: 'settings' });
+  await settings.load();
+  expect(settings.lastSeenVersion).toBe('0.1.0');
+  expect(settings.savedUpdateVersion).toBe('0.2.0');
+  expect(settings.savedUpdateNotes).toBe('New view.');
+});
+
+it('removes a legacy beta preference from the desktop store before using stable-only settings', async () => {
+  const values: Record<string, unknown> = { updateChannel: 'beta', updateAuto: false };
+  const store = {
+    get: vi.fn(async (key: string) => values[key]),
+    delete: vi.fn(async (key: string) => { delete values[key]; }),
+    save: vi.fn(async () => {}),
+    set: vi.fn(async (key: string, value: unknown) => { values[key] = value; }),
+  };
+  native.load.mockResolvedValue(store);
+  native.desktop = true;
+  const desktop = new Settings();
+  try {
+    await desktop.load();
+    expect(store.delete).toHaveBeenCalledWith('updateChannel');
+    expect(store.save).toHaveBeenCalledOnce();
+    expect(values).not.toHaveProperty('updateChannel');
+    expect(desktop.updateAuto).toBe(false);
+    await desktop.update({ lastSeenVersion: '0.1.3' });
+    expect(values.lastSeenVersion).toBe('0.1.3');
+    expect(values).not.toHaveProperty('updateChannel');
+  } finally { desktop.dispose(); native.desktop = false; }
 });

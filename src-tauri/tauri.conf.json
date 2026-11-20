@@ -61,7 +61,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENDRTAyNEFEMjVCMUUxMTcKUldRWDRiRWxyU1RnekxYNmN2eFV2YVJVSUVLRGd4UDdjSnh3aTFvRm1qd0EycCtWRTk3U1VkRzAK",
       "endpoints": ["https://github.com/duserzym/upblab/releases/latest/download/latest.json"],
       "windows": { "installMode": "passive" }
     },

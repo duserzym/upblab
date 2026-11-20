@@ -176,3 +176,58 @@ test('desktop standards warning survives the fold and the popover hides native m
   await page.keyboard.press('Escape');
   await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.filter(([c]) => c === 'module_open').length)).toBeGreaterThan(opens);
 });
+
+for (const auto of [false, true]) {
+  test(`${auto ? 'automatic' : 'manual'} desktop updates show plain text notes and use the system opener`, async ({ page }) => {
+    await page.clock.install();
+    const notes = '<b>Plain text only</b>\n- One\n- Two\n- Three\n- Four\n- Five';
+    await page.addInitScript(installFakeTauri, {
+      appVersion: version,
+      store: { mode: 'server', lastTab: 'home', updateAuto: auto, updateChannel: 'beta' },
+      update: { version: '0.2.0', currentVersion: version, notes, date: null, ready: false },
+    });
+    await page.route('**/modules/manifest.json', route => route.fulfill({ json: { modules: [] } }));
+    const betaRequests: string[] = [];
+    page.on('request', request => { if (request.url().startsWith('https://api.github.com/')) betaRequests.push(request.url()); });
+    await page.goto('./');
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { store: Record<string, unknown> } }).__fake.store.lastSeenVersion)).toBe(version);
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.some(([cmd]) => cmd === 'update_status'))).toBe(true);
+    if (auto) await page.clock.fastForward(8000);
+    await page.getByTestId('check-updates').click();
+    const popup = page.getByTestId('check-updates-popover');
+    await expect(popup.getByRole('status')).toHaveText(auto ? 'v0.2.0 is ready' : 'Update available: v0.2.0');
+    await expect(popup.getByTestId('update-notes')).toHaveText(notes);
+    await expect(popup.getByTestId('update-notes').locator('b')).toHaveCount(0);
+    await expect(popup.getByTestId('update-notes')).toHaveCSS('-webkit-line-clamp', '4');
+    await popup.getByRole('link', { name: 'Release notes', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, { url?: string }][] } }).__fake.calls.some(([cmd, args]) => cmd === 'plugin:opener|open_url' && args?.url === 'https://github.com/duserzym/upblab/releases/tag/v0.2.0'))).toBe(true);
+    await popup.getByRole('link', { name: 'Update settings…' }).click();
+    const panel = page.getByTestId('updates-panel');
+    await expect(panel.getByTestId('update-notes')).toHaveText(notes);
+    await expect(panel.getByText('Channel', { exact: true })).toHaveCount(0);
+    if (!auto) await panel.getByRole('button', { name: 'Download', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'Restart to update' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Restart to update' }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { store: Record<string, unknown> } }).__fake.store.savedUpdateNotes)).toBe(notes);
+    expect(await page.evaluate(() => (window as unknown as { __fake: { store: Record<string, unknown> } }).__fake.store)).not.toHaveProperty('updateChannel');
+    expect(betaRequests).toEqual([]);
+  });
+}
+
+for (const saved of [false, true]) {
+  test(`what's new ${saved ? 'uses saved manifest notes' : 'has a version fallback'} without bundled notes`, async ({ page }) => {
+    await page.addInitScript(installFakeTauri, {
+      appVersion: '99.0.0',
+      store: { mode: 'server', lastTab: 'home', lastSeenVersion: version, savedUpdateVersion: '99.0.0', savedUpdateNotes: saved ? 'Saved notes <b>as text</b>.' : '' },
+    });
+    await page.route('**/modules/manifest.json', route => route.fulfill({ json: { modules: [] } }));
+    await page.goto('./');
+    const card = page.getByTestId('whats-new');
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("What's new in v99.0.0");
+    await expect(card.locator('.whats-new-notes')).toHaveText(saved ? 'Saved notes <b>as text</b>.' : 'Updated to v99.0.0.');
+    await expect(card.locator('b')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('check-updates')).toBeFocused();
+  });
+}

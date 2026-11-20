@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { STABLE_ENDPOINT } from './updates';
 import type { UpdateInfo } from './updates';
 const mocks = vi.hoisted(() => ({
   desktop: true,
   invoke: vi.fn(), listen: vi.fn(), off: vi.fn(),
-  settings: { updateChannel: 'stable', updateAuto: true, updateLastCheck: 0, update: vi.fn() },
+  settings: { lastSeenVersion: '', savedUpdateVersion: '', savedUpdateNotes: '', updateAuto: true, updateLastCheck: 0, update: vi.fn() },
 }));
 vi.mock('./platform', () => ({ get isDesktop() { return mocks.desktop; } }));
 vi.mock('./settings.svelte', () => ({ settings: mocks.settings }));
@@ -15,7 +16,9 @@ beforeEach(() => {
   vi.resetModules();
   vi.useFakeTimers();
   mocks.desktop = true;
-  mocks.settings.updateChannel = 'stable';
+  mocks.settings.lastSeenVersion = '';
+  mocks.settings.savedUpdateVersion = '';
+  mocks.settings.savedUpdateNotes = '';
   mocks.settings.updateAuto = true;
   mocks.settings.updateLastCheck = 0;
   mocks.settings.update.mockImplementation(async (patch) => { Object.assign(mocks.settings, patch); });
@@ -156,4 +159,51 @@ it('checks standards in the background when the app updater is unsupported', asy
   } finally {
     stop();
   }
+});
+
+it('uses only the stable feed without fetching a releases list', async () => {
+  const fetch = vi.fn();
+  vi.stubGlobal('fetch', fetch);
+  const runtime = await import('./updater.svelte');
+  await runtime.check(true);
+  expect(mocks.invoke).toHaveBeenCalledWith('update_check', { endpoint: STABLE_ENDPOINT });
+  expect(fetch).not.toHaveBeenCalled();
+});
+it('saves manifest notes durably before installing', async () => {
+  const runtime = await import('./updater.svelte');
+  runtime.updater.supported = true;
+  runtime.updater.status = { kind: 'ready', info: { ...info, notes: 'New sample view.', ready: true } };
+  mocks.invoke.mockImplementation(async (command) => {
+    if (command === 'update_install') {
+      expect(mocks.settings.savedUpdateVersion).toBe(info.version);
+      expect(mocks.settings.savedUpdateNotes).toBe('New sample view.');
+    }
+  });
+  await runtime.install();
+  expect(mocks.invoke).toHaveBeenCalledWith('update_install', undefined);
+});
+it('does not install if saving fallback notes fails', async () => {
+  const runtime = await import('./updater.svelte');
+  runtime.updater.supported = true;
+  runtime.updater.status = { kind: 'ready', info };
+  mocks.settings.update.mockRejectedValueOnce(new Error('store unavailable'));
+  await runtime.install();
+  expect(runtime.updater.status.kind).toBe('error');
+  expect(mocks.invoke).not.toHaveBeenCalledWith('update_install', undefined);
+});
+it('records a first install silently and shows an upgrade only once', async () => {
+  const runtime = await import('./updater.svelte');
+  await runtime.recordRunningVersion('0.1.0');
+  expect(runtime.updater.whatsNewOpen).toBe(false);
+  expect(mocks.settings.lastSeenVersion).toBe('0.1.0');
+  mocks.settings.savedUpdateVersion = '0.2.0';
+  mocks.settings.savedUpdateNotes = 'Saved release notes.';
+  await runtime.recordRunningVersion('0.2.0');
+  expect(runtime.updater.whatsNewOpen).toBe(true);
+  expect(runtime.updater.whatsNewNotes).toBe('Saved release notes.');
+  runtime.updater.whatsNewOpen = false;
+  await runtime.recordRunningVersion('0.2.0');
+  expect(runtime.updater.whatsNewOpen).toBe(false);
+  await runtime.recordRunningVersion('0.1.0');
+  expect(runtime.updater.whatsNewOpen).toBe(false);
 });

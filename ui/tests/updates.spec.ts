@@ -7,6 +7,9 @@ const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.u
 
 async function openPreview(page: Page, theme: 'light' | 'dark', state: string) {
   await page.addInitScript((theme) => {
+    // Seed once per test: later documents keep what the app wrote (lastSeenVersion).
+    if (sessionStorage.getItem('updates-spec-seeded')) return;
+    sessionStorage.setItem('updates-spec-seeded', '1');
     localStorage.setItem('upbstudio.settings', JSON.stringify({ theme, themeChosen: true, mode: 'server', lastTab: 'home', updateAuto: false }));
   }, theme);
   await page.route('**/modules/manifest.json', (route) => route.fulfill({ json: { modules: [
@@ -41,6 +44,8 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       const popover = page.getByTestId('check-updates-popover');
       await expect(popover).toContainText('v0.2.0 is ready');
       await expect(popover.getByRole('button', { name: 'Restart to update' })).toBeVisible();
+      await expect(popover.getByTestId('update-notes')).toHaveText('Review tab, faster module switching');
+      await expect(popover.getByRole('link', { name: 'Release notes', exact: true })).toHaveAttribute('href', 'https://github.com/duserzym/upblab/releases/tag/v0.2.0');
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
       await insideViewport(page);
       if (process.env.SCREENSHOTS === '1') {
@@ -55,6 +60,9 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(panel.getByRole('table', { name: 'In this build' })).toBeVisible();
       await expect(panel).toContainText('0.11.0-test (local build)');
       await expect(panel).toContainText('Review tab, faster module switching');
+      await expect(panel.getByTestId('update-notes')).toHaveCSS('-webkit-line-clamp', '4');
+      await expect(panel.getByRole('link', { name: 'Release notes', exact: true })).toHaveAttribute('href', 'https://github.com/duserzym/upblab/releases/tag/v0.2.0');
+      await expect(panel.getByText('Channel', { exact: true })).toHaveCount(0);
       await insideViewport(page);
       if (process.env.SCREENSHOTS === '1') await page.screenshot({ path: `test-results/updates-panel-${theme}-${width}x${height}.png` });
     });
@@ -78,3 +86,41 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     }
   }
 }
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`what's new after a manual reinstall appears once, reopens and restores focus ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.addInitScript(({ theme }) => {
+      if (!localStorage.getItem('upbstudio.settings')) localStorage.setItem('upbstudio.settings', JSON.stringify({ mode: 'server', lastTab: 'home', theme, themeChosen: true, lastSeenVersion: '0.1.2', updateChannel: 'beta' }));
+    }, { theme });
+    await page.route('**/modules/manifest.json', route => route.fulfill({ json: { modules: [] } }));
+    await page.goto('./?update-preview=idle');
+    const card = page.getByTestId('whats-new');
+    const button = page.getByTestId('check-updates');
+    await expect(card).toBeVisible();
+    await expect(card).toContainText(`What's new in v${version}`);
+    const notes = readFileSync(new URL(`../../release-notes/${version}.md`, import.meta.url), 'utf8').trim();
+    await expect(card.locator('.whats-new-notes')).toHaveText(notes);
+    await expect(card).toBeInViewport({ ratio: 1 });
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await page.keyboard.press('Escape');
+    await expect(card).toBeHidden();
+    await expect(button).toBeFocused();
+    await button.click();
+    await page.getByTestId('check-updates-popover').getByRole('link', { name: "What's new", exact: true }).click();
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: "Dismiss what's new" }).click();
+    await expect(button).toBeFocused();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('upbstudio.settings')!))).toMatchObject({ lastSeenVersion: version });
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('upbstudio.settings')!))).not.toHaveProperty('updateChannel');
+    await page.reload();
+    await expect(button).toBeVisible();
+    await expect(card).toBeHidden();
+  });
+}
+
+test('first install records the running version without showing a card', async ({ page }) => {
+  await openPreview(page, 'light', 'idle');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('upbstudio.settings')!).lastSeenVersion)).toBe(version);
+  await expect(page.getByTestId('whats-new')).toBeHidden();
+});

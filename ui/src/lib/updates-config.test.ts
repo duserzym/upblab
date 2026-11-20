@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import configJson from '../../../src-tauri/tauri.conf.json?raw';
 import releaseConfigJson from '../../../src-tauri/tauri.release.conf.json?raw';
+import { bundledNotes } from './release-notes';
 import { checkButtonView, STABLE_ENDPOINT, UPDATE_APP_NAME } from './updates';
 
 const config = JSON.parse(configJson);
@@ -14,6 +15,12 @@ describe('signed update configuration', () => {
     expect(UPDATE_APP_NAME).toBe(config.productName);
     // A release override must retain the same stable endpoint if it supplies one.
     expect(releaseConfig.plugins?.updater?.endpoints ?? config.plugins.updater.endpoints).toEqual([endpoint]);
+  });
+
+  it('bundles the running stable version notes', () => {
+    expect(config.version).toBe(__APP_VERSION__);
+    expect(config.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(bundledNotes(config.version)).not.toBe('');
   });
 
   it('creates signed updater artifacts for releases', () => {

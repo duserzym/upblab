@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkButtonView, compareVersions, friendlyUpdateError, pickEndpoint, STABLE_ENDPOINT, transition, UPDATE_INSTALL_REASON, updateErrorDetail, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
+import { checkButtonView, compareVersions, friendlyUpdateError, transition, UPDATE_INSTALL_REASON, updateErrorDetail, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
 
 const info: UpdateInfo = { version: '0.2.0', currentVersion: '0.1.0', notes: 'Invented notes', date: null, ready: false };
 describe('friendly updater errors', () => {
@@ -80,17 +80,6 @@ describe('semver precedence', () => {
     ['1.0.0-1', '1.0.0-alpha', -1], ['1.0.0-beta-one', '1.0.0-beta-two', -1],
     ['1.0.0-beta.9007199254740993', '1.0.0-beta.9007199254740992', 1],
   ])('%s against %s', (a, b, order) => { expect(compareVersions(a, b)).toBe(order); expect(compareVersions(b, a)).toBe(-order || 0); });
-});
-
-describe('channel endpoints', () => {
-  const release = (date: string, url: string, draft = false, prerelease = false) => ({ published_at: date, draft, prerelease, assets: [{ name: 'latest.json', browser_download_url: url }] });
-  const stable = release('2026-01-01', 'https://example.com/stable');
-  const beta = release('2026-02-01', 'https://example.com/beta', false, true);
-  it('always uses latest for Stable', () => expect(pickEndpoint('stable', [beta, stable])).toBe(STABLE_ENDPOINT));
-  it('Beta includes pre-releases and chooses the newest published release', () => expect(pickEndpoint('beta', [stable, beta])).toBe('https://example.com/beta'));
-  it('ignores drafts', () => expect(pickEndpoint('beta', [release('2026-03-01', 'https://example.com/draft', true), beta])).toBe('https://example.com/beta'));
-  it.each([null, {}, [], [{ draft: true }], [{ assets: [] }], [release('2026-02-01', 'http://example.com/file')]])('falls back for %j', (releases) => expect(pickEndpoint('beta', releases)).toBe(STABLE_ENDPOINT));
-  it('falls back when the newest release has no manifest', () => expect(pickEndpoint('beta', [{ published_at: '2026-03-01', assets: [] }, beta])).toBe(STABLE_ENDPOINT));
 });
 
 const states: UpdateStatus[] = [

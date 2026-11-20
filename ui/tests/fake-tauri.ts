@@ -6,6 +6,8 @@
 export interface FakeOptions {
   /** Stored settings (plugin-store); mode '' shows the first-run wizard. */
   store: Record<string, unknown>;
+  appVersion?: string;
+  update?: { version: string; currentVersion: string; notes: string | null; date: string | null; ready: boolean };
   fixtures?: Record<string, unknown>;
   standards?: { warning: boolean; message: string; changed: string[] };
   signedIn?: boolean;
@@ -47,6 +49,7 @@ export function installFakeTauri(opts: FakeOptions) {
     return token; // Embedded modules can read a copy; standalone launches remain local.
   };
   const store = { ...opts.store };
+  let update = opts.update;
   const fixtures = { ...opts.fixtures };
   const apiReplies = { ...opts.apiReplies };
   const apiGates = new Map<string, { wait: Promise<void>; release: () => void }>();
@@ -162,6 +165,18 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'quit_confirm':
         case 'quit_cancel':
           return null; // recorded in calls; native watchdog is covered by Rust tests
+        case 'plugin:app|version': return opts.appVersion ?? '0.1.0';
+        case 'update_supported': return !!update;
+        case 'update_check':
+        case 'update_status': return update ?? null;
+        case 'update_download':
+          if (update) update = { ...update, ready: true };
+          return update ?? null;
+        case 'plugin:store|delete': {
+          const present = (args!.key as string) in store;
+          delete store[args!.key as string];
+          return present;
+        }
         case 'plugin:store|load':
           return 1;
         case 'plugin:store|get':

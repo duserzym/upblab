@@ -21,12 +21,9 @@ UPb Lab implementation.
   "Download updates automatically" on (the default), an available update is
   downloaded quietly and the icon gains a dot when ready. With it off, the
   icon gains a dot when an update is available and the popover offers Download.
-- Channels: **Stable** reads `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`,
-  which GitHub resolves to the newest published, non-pre-release release.
-  **Beta** lists the repository's releases through the GitHub API, skips
-  drafts, and takes `latest.json` from the newest release, pre-releases
-  included. A tag like `v0.4.0-beta.1` becomes a pre-release and only the Beta
-  channel receives it.
+- Every app follows the latest stable release at
+  `https://github.com/<owner>/<repo>/releases/latest/download/latest.json`.
+  Stored Beta preferences are removed silently; there is no channel selector.
 - Hosted inside UPb Lab (the `@lab/bridge` transport is `tauri` or
   `postMessage`), a module never runs its own updater: the shell updates
   itself and the modules it pins in `modules.lock.json`. The module's update button is hidden
@@ -49,25 +46,49 @@ UPb Lab implementation.
 - **Settings > Updates**: current version, the last check time and result,
   **Check now**, **Download** (when automatic downloads are off), **Restart to
   update** (when the download is done), "Download updates automatically",
-  the channel (Stable / Beta), and a link to the release notes.
-- Nothing is sent anywhere: the check is one GET of `latest.json` (and the
-  releases list on Beta). No telemetry.
+  and a link to the release notes for the available or ready version.
+- Available and ready updates show the manifest's plain-text notes below the
+  state line, clamped to 4 lines, in both the popover and Settings. Release
+  notes opens that version's GitHub release in the system browser.
+- After an upgrade or manual reinstall, a "What's new in vX.Y.Z" card near
+  the update button shows the bundled notes once. The fallback is notes saved
+  before installing that version, then "Updated to vX.Y.Z." First installs
+  only record the version. Close with ✕ or Escape; focus returns to the
+  update button. The popover's "What's new" link reopens the card.
+- The update check is one GET of `latest.json`. No telemetry.
 
-## Release flow
+## Releasing
 
-1. Bump the version (the version copies must agree; see the repository section),
-   commit and push.
-2. Tag `vX.Y.Z` (or `vX.Y.Z-beta.N` for the Beta channel) and push the tag.
-3. The release workflow (`v*` tags and manual dispatch only, never on push)
-   builds the installers, signs the update bundles with the private key from
-   the `TAURI_SIGNING_PRIVATE_KEY` secret, and creates a draft GitHub Release
-   with the installers, the signed bundles (`.app.tar.gz` + `.sig` on macOS,
-   `.exe`/`.msi` + `.sig` on Windows) and `latest.json`.
-4. Publish the draft release. Installed copies see the new version at their
-   next check.
+1. Write `release-notes/<version>.md` at the repository root. Use plain text
+   or at most 5 short `- ` bullets, at most 600 characters, with no headings.
+   Describe what changes for lab users. The UI bundles the running version's
+   file at build time, including for manual reinstalls.
+2. Build with the signing key set (keep it private):
 
-A manual run (`gh workflow run <name>`) builds the same artifacts and keeps
-them as workflow artifacts without publishing a release; it is the dry run.
+   ```bash
+   TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/upblab-updater.key)" cargo tauri build --config src-tauri/tauri.release.conf.json
+   ```
+
+3. Generate the feed from the signed artifacts:
+
+   ```bash
+   node scripts/release-feed.mjs --darwin-aarch64 path/to/UPb.Lab.app.tar.gz --out latest.json
+   ```
+
+   The version defaults to `src-tauri/tauri.conf.json`; `--version X.Y.Z`
+   overrides it. Add `--windows-x86_64 path/to/UPb.Lab-setup.exe` when available.
+   Each artifact needs its `.sig` beside it. The script refuses missing,
+   empty or oversized notes, an empty pubkey, mismatched key ids, and failed
+   artifact or global minisign signatures. It verifies locally before writing
+   `latest.json`; no new dependencies are needed.
+4. Upload the `.dmg`, `.app.tar.gz`, its `.sig`, and `latest.json` to the
+   matching `v<version>` GitHub release. Include the Windows installer and its
+   `.sig` when supplied to the script. Publish as a stable release; installed
+   copies see it on their next check. Keep the versions and the release tag
+   consistent (`make check-version`).
+
+The existing release workflow runs only for `v*` tags or manual dispatch.
+Manual workflow runs keep build artifacts without publishing a release.
 
 ## One-time setup per repository (the owner does this)
 
@@ -79,7 +100,8 @@ them as workflow artifacts without publishing a release; it is the dry run.
 
    The private key lands in `~/.tauri/<app>-updater.key` (back it up: losing
    it means installed copies cannot verify future updates). The script writes
-   the public key into `src-tauri/tauri.conf.json`; commit that change.
+   the public key into `src-tauri/tauri.conf.json`. It refuses to replace a
+   non-empty pubkey unless `--force` is supplied.
 2. Store the private key as the repository secret `TAURI_SIGNING_PRIVATE_KEY`
    (the script does it with `gh secret set` when `gh` is signed in; otherwise
    paste the file's contents in GitHub > Settings > Secrets and variables >
@@ -90,8 +112,10 @@ them as workflow artifacts without publishing a release; it is the dry run.
 
 ## Checks in the repository
 
-- Unit tests cover version comparison, channel selection, the update state
-  machine, friendly errors and the button presentation (`updates.test.*`).
+- Unit tests cover version comparison, stable-only feed selection, the update state
+  machine, friendly errors, notes fallback and the button presentation. Node
+  tests generate temporary Ed25519 keys to check both minisign signatures and
+  reject changed artifacts, signatures, comments and key ids.
 - Browser tests check the ready panel and the ready, available and up-to-date
   popover at 1440 x 900 and 1280 x 800, light and dark. Button tests also
   cover 1512 x 982 and the minimum 1024 x 640 window. The page honours
@@ -114,7 +138,7 @@ them as workflow artifacts without publishing a release; it is the dry run.
 - The app command ACL requires `permissions/updates.toml` and
   `capabilities/updates.json` under `src-tauri/`, scoped only to the shell
   webview. No updater plugin JavaScript permissions are granted.
-- The icon replaces the version chip in the header bar, right of the tabs.
+- The icon sits beside the version chip in the header bar, right of the tabs.
   On the desktop the module webviews cover the content area, so opening the
   popover hides those views through the same overlay flag as the account dialog.
 - Settings > Updates also lists what this build contains: the grainatlas web
@@ -124,13 +148,14 @@ them as workflow artifacts without publishing a release; it is the dry run.
 - Version copies that must agree: `package.json`, `ui/package.json`,
   `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`; `make check-version`
   compares them and the workflow refuses a tag that does not match.
-- Signing key: `~/.tauri/upbstudio-updater.key`; setup script
+- Signing key: `~/.tauri/upblab-updater.key`; setup script
   `scripts/setup-updater.mjs` (`pnpm updater:setup`).
 - Release workflow: `.github/workflows/build.yml` (macOS arm64 `.dmg`, Windows
   `.msi` and NSIS `-setup.exe`, the signed update bundles and `latest.json`,
   attached to a draft release of the tag). Publish the draft on GitHub and the
   updater endpoint starts serving it.
 - Update endpoint: `https://github.com/duserzym/upblab/releases/latest/download/latest.json`.
-- Settings: the channel, the automatic-download switch and the last check are
+- Settings: the automatic-download switch, last check, last seen version and
+  notes saved before installation are
   shell settings (`settings.json` in the app's config folder on the desktop,
   `localStorage['upbstudio.settings']` on the web).
