@@ -16,7 +16,7 @@ async function openPreview(page: Page, theme: 'light' | 'dark', state: string) {
   await page.goto(`./?server=http://localhost:8000&update-preview=${state}`);
 }
 async function insideViewport(page: Page) {
-  for (const selector of ['[data-testid="check-updates"]', 'header .account', 'header button[aria-label="Settings"]']) {
+  for (const selector of ['[data-testid="check-updates"]', 'header [data-testid="app-version"]', 'header .account', 'header button[aria-label="Settings"]']) {
     const box = await page.locator(selector).boundingBox();
     expect(box).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -35,6 +35,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       const button = page.getByTestId('check-updates');
       await expect(button).toHaveAttribute('data-badge', 'true');
       await expect(page.locator('header').getByTestId('check-updates')).toBeVisible();
+      await expect(page.locator('header').getByTestId('app-version')).toHaveText(`v${version}`);
       expect((await button.boundingBox())!.width).toBeLessThanOrEqual(36);
       await button.click();
       const popover = page.getByTestId('check-updates-popover');
@@ -49,7 +50,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await popover.getByRole('link', { name: 'Update settings…' }).click();
       const panel = page.getByTestId('updates-panel');
       await expect(panel).toBeInViewport({ ratio: 1 });
-      await expect(panel).toContainText('ready to install');
+      await expect(panel.getByRole('status')).toHaveText('v0.2.0 is ready');
       await expect(panel.getByRole('button', { name: 'Restart to update' })).toBeVisible();
       await expect(panel.getByRole('table', { name: 'In this build' })).toBeVisible();
       await expect(panel).toContainText('0.11.0-test (local build)');

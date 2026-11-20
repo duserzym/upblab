@@ -45,10 +45,14 @@ test('idle button has a version tooltip, no badge and an exact accessible name',
   await expect(button).toHaveAttribute('title', new RegExp(`Check for updates · UPb Lab v${version.replaceAll('.', '\\.')}`));
   await expect(button).not.toHaveAttribute('data-badge');
   await expect(button.locator('.dot')).toHaveCount(0);
+  await expect(page.locator('header').getByTestId('app-version')).toHaveText(`v${version}`);
+  // Opening without a manual check exposes the idle wording.
+  await page.getByTestId('check-updates-popover').evaluate((element) => (element as HTMLElement).showPopover());
+  await expect(page.getByTestId('check-updates-popover').getByRole('status')).toHaveText(`Current version: v${version}`);
   await screenshot(page, info, 'idle');
 });
 
-for (const [width, height] of [[1512, 982], [1024, 640]]) {
+for (const [width, height] of [[1512, 982], [1440, 900], [1280, 800], [1024, 640]]) {
   test(`available popover fits ${width}x${height} and closes with Escape, outside click and a second click`, async ({ page }, info) => {
     await page.setViewportSize({ width, height });
     await preview(page, 'available');
@@ -57,9 +61,11 @@ for (const [width, height] of [[1512, 982], [1024, 640]]) {
     await expect(button).toHaveAttribute('data-badge', 'true');
     await expect(button.locator('.dot')).toBeVisible();
     await insideViewport(page, button);
+    await insideViewport(page, page.getByTestId('app-version'));
     await button.click();
     await expect(popup).toContainText('Update available: v0.2.0');
     await expect(popup).toContainText(`UPb Lab v${version}`);
+    await expect(popup).toContainText(`Current version: v${version}`);
     await expect(popup.getByRole('button', { name: 'Download', exact: true })).toBeVisible();
     await expect(popup).toContainText('Modules: grainatlas 0.1.0 (local abc1234), UPbDB 0.3.0');
     await expect(popup).toContainText('Modules update with UPb Lab.');
@@ -89,7 +95,7 @@ for (const [scenario, text] of [
   ['checking', 'Checking for updates…'],
   ['downloading', 'Downloading v0.2.0… 43%'],
   ['ready', 'v0.2.0 is ready'],
-  ['unsupported', 'Update available: v0.2.0'],
+  ['unsupported', 'UPb Lab cannot replace itself in this folder. Download the new version from GitHub.'],
 ]) {
   test(`${scenario} shows its result beside the button`, async ({ page }) => {
     await preview(page, scenario);
@@ -98,13 +104,22 @@ for (const [scenario, text] of [
     const popup = page.getByTestId('check-updates-popover');
     await expect(popup).toContainText(text);
     await expect(popup.getByRole('link', { name: 'Update settings…' })).toBeVisible();
-    if (scenario === 'checking') {
+    if (scenario === 'checking' || scenario === 'downloading') {
       await expect(button).toHaveAttribute('aria-busy', 'true');
       await expect(button.locator('svg')).toHaveClass(/busy/);
       await expect(button.locator('svg')).toHaveCSS('animation-name', /update-spin/);
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await expect(button.locator('svg')).toHaveCSS('animation-name', 'none');
-      await expect(popup).toContainText('Checking for updates…');
+      await expect(popup).toContainText(text);
+    }
+    if (scenario === 'error') {
+      const details = popup.getByText('Details: Updates are not configured for this build yet', { exact: true });
+      await expect(details).toBeVisible();
+      await expect(details).toHaveCSS('user-select', 'text');
+      await popup.getByRole('link', { name: 'Update settings…' }).click();
+      const panel = page.getByTestId('updates-panel');
+      await expect(panel.getByRole('status')).toHaveText(text);
+      await expect(panel.getByText('Details: Updates are not configured for this build yet', { exact: true })).toBeVisible();
     }
     if (scenario === 'ready') await expect(popup.getByRole('button', { name: 'Restart to update' })).toBeVisible();
     if (scenario === 'unsupported') await expect(popup.getByRole('link', { name: 'Open download page' })).toHaveAttribute('href', /\/releases$/);
@@ -122,10 +137,11 @@ test('Download and Restart use the shared updater and settings link opens the ex
   await expect(popup).toContainText('v0.2.0 is ready');
   await expect(page.getByTestId('check-updates')).toHaveAttribute('data-badge', 'true');
   await popup.getByRole('button', { name: 'Restart to update' }).click();
-  await expect(popup).toContainText('Installing and restarting…');
+  await expect(popup).toContainText('Installing v0.2.0 and restarting…');
   await popup.getByRole('link', { name: 'Update settings…' }).click();
   await expect(popup).toBeHidden();
   await expect(page.getByTestId('updates-panel')).toBeInViewport({ ratio: 0.9 });
+  await expect(page.getByTestId('updates-panel').getByRole('status')).toHaveText('Installing v0.2.0 and restarting…');
 });
 
 test('missing module manifest omits the module list', async ({ page }) => {

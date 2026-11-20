@@ -113,6 +113,7 @@ it('can check unsupported installs but never downloads them', async () => {
   const runtime = await import('./updater.svelte');
   await runtime.check(true);
   expect(runtime.updater.status).toMatchObject({ kind: 'unsupported', info });
+  expect(runtime.updater.lastResult).toBe('UPb Lab cannot replace itself in this folder. Download the new version from GitHub.');
   await runtime.download();
   expect(mocks.invoke).not.toHaveBeenCalledWith('update_download', undefined);
 });
@@ -124,6 +125,7 @@ it('cleans the listener up on download failure', async () => {
   const runtime = await import('./updater.svelte');
   await runtime.check();
   expect(runtime.updater.status).toMatchObject({ kind: 'error', message: 'Error: Signature verification failed' });
+  expect(runtime.updater.lastResult).toBe("The update's signature did not match. Nothing was installed.");
   expect(mocks.off).toHaveBeenCalledOnce();
 });
 it('schedules after eight seconds and every six hours, and stops on cleanup', async () => {

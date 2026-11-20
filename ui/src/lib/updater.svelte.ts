@@ -1,10 +1,10 @@
 import { isDesktop } from './platform';
 import { settings } from './settings.svelte';
 import { shellVersion } from './versions';
-import { checkButtonView, pickEndpoint, STABLE_ENDPOINT, transition, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
+import { checkButtonView, pickEndpoint, STABLE_ENDPOINT, transition, UPDATE_INSTALL_REASON, type UpdateEvent, type UpdateInfo, type UpdateStatus } from './updates';
 
 const WEB_REASON = 'Updates come with the desktop app; the web page is always the version its server serves.';
-const INSTALL_REASON = 'Install UPb Lab to receive in-app updates on this computer.';
+const INSTALL_REASON = UPDATE_INSTALL_REASON;
 const previewName = !isDesktop && typeof location !== 'undefined'
   ? new URLSearchParams(location.search).get('update-preview') : null;
 export const updatePreview = ['idle', 'checking', 'none', 'available', 'downloading', 'ready', 'error', 'unsupported'].includes(previewName ?? '');
@@ -97,10 +97,11 @@ export async function check(manual = false): Promise<void> {
     const info = await invoke<UpdateInfo | null>('update_check', { endpoint: await endpoint() });
     const checkedAt = Date.now();
     await settings.update({ updateLastCheck: checkedAt });
-    updater.lastResult = info ? `Version ${info.version} ${info.ready ? 'is ready to install' : 'is available'}` : "You're up to date";
     send({ type: 'checked', info, checkedAt });
+    updater.lastResult = checkButtonView(updater.status, updater.version).text;
     if (!updater.supported && !updatePreview) {
       updater.status = { kind: 'unsupported', reason: INSTALL_REASON, info: info ?? undefined };
+      updater.lastResult = checkButtonView(updater.status, updater.version).text;
       return;
     }
     if (!info && manual) showChecked();
@@ -123,7 +124,7 @@ export async function download(): Promise<void> {
     });
     const info = await invoke<UpdateInfo>('update_download');
     send({ type: 'downloaded', info });
-    updater.lastResult = `Version ${info.version} is ready to install`;
+    updater.lastResult = checkButtonView(updater.status, updater.version).text;
   } catch (error) { fail(error); }
   finally { off?.(); }
 }

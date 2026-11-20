@@ -6,25 +6,14 @@
   import { settings } from '../lib/settings.svelte';
   import { shell } from '../lib/shell.svelte';
   import { check, checkStandards, download, install, updater, updatePreview } from '../lib/updater.svelte';
-  import { friendlyUpdateError, RELEASES_PAGE } from '../lib/updates';
+  import { checkButtonView, RELEASES_PAGE } from '../lib/updates';
   import { collectVersions, type BuildVersions } from '../lib/versions';
 
   const standardsPage = 'https://github.com/duserzym/upb-standards';
   let versions = $state<BuildVersions | null>(null);
   const status = $derived(updater.status);
   const info = $derived('info' in status ? status.info : null);
-  const busy = $derived(['checking', 'downloading', 'installing'].includes(status.kind));
-  const line = $derived(
-    status.kind === 'checking' ? 'Checking for updates…'
-      : status.kind === 'none' ? `You're up to date · checked ${new Date(status.checkedAt).toLocaleTimeString()}`
-      : status.kind === 'available' ? `Version ${status.info.version} is available`
-      : status.kind === 'downloading' ? `Downloading ${status.info.version}${status.pct === null ? '…' : ` · ${status.pct}%`}`
-      : status.kind === 'ready' ? `Version ${status.info.version} is ready to install`
-      : status.kind === 'installing' ? 'Installing and restarting…'
-      : status.kind === 'error' ? friendlyUpdateError(status.message)
-      : status.kind === 'unsupported' ? `${status.reason}${status.info ? ` Version ${status.info.version} is available.` : ''}`
-      : 'Checks run automatically in the background.',
-  );
+  const view = $derived(checkButtonView(status, updater.version, { autoDownload: settings.updateAuto }));
   $effect(() => {
     if (!settings.loaded || shell.view !== 'settings') return;
     // Refresh when the service or Studio configuration changes, without changing either.
@@ -37,9 +26,11 @@
 </script>
 
 <strong>UPb Lab v{versions?.shell ?? updater.version}</strong>
-<p class="small muted" role="status">{line}</p>
+<p class="small muted" role="status">{view.text}</p>
+{#if view.secondaryText}<p class="small muted">{view.secondaryText}</p>{/if}
+{#if view.details !== null}<p class="small muted error-details">Details: {view.details}</p>{/if}
 <div class="row">
-  <button class="btn" disabled={busy || !isDesktop && !updatePreview} onclick={() => void check(true)}>Check now</button>
+  <button class="btn" disabled={view.busy || !isDesktop && !updatePreview} onclick={() => void check(true)}>Check now</button>
   {#if status.kind === 'available' && !settings.updateAuto}<button class="btn" onclick={() => void download()}>Download</button>{/if}
   {#if status.kind === 'ready'}<button class="btn primary" onclick={() => void install()}>Restart to update</button>{/if}
   {#if status.kind === 'unsupported' && status.info}<button class="btn" onclick={() => void openExternal(RELEASES_PAGE)}>Open download page</button>{/if}
@@ -50,7 +41,7 @@
 </label>
 <label class="row small">
   Channel
-  <select value={settings.updateChannel} disabled={busy} onchange={(e) => { void settings.update({ updateChannel: e.currentTarget.value === 'beta' ? 'beta' : 'stable' }); void check(true); }}>
+  <select value={settings.updateChannel} disabled={view.busy} onchange={(e) => { void settings.update({ updateChannel: e.currentTarget.value === 'beta' ? 'beta' : 'stable' }); void check(true); }}>
     <option value="stable">Stable</option>
     <option value="beta">Beta (pre-releases)</option>
   </select>
@@ -88,6 +79,7 @@
 
 <style>
   p, h4 { margin: 0; }
+  .error-details { user-select: text; -webkit-user-select: text; overflow-wrap: anywhere; }
   .notes { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; line-height: 1.4; max-height: 16.8em; }
   table.data th { position: static; text-transform: none; letter-spacing: normal; }
   table.data td { overflow-wrap: anywhere; }

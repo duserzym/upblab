@@ -55,6 +55,7 @@
 
 <svelte:window onresize={() => { if (open) position(); }} />
 
+<span class="chip small muted version" data-testid="app-version" title="Current version">v{updater.version}</span>
 <button
   bind:this={button}
   class="tab icon"
@@ -69,7 +70,7 @@
   onclick={() => { if (!popup.matches(':popover-open')) void check(true); }}
 >
   <svg class:busy={view.busy} viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M19 8a8 8 0 1 0 1 6M19 3v5h-5" />
+    <path d="M20 7a8 8 0 0 0-14-2L3 8m0-5v5h5M4 17a8 8 0 0 0 14 2l3-3m0 5v-5h-5" />
   </svg>
   {#if view.badge}<span class="dot" class:warning={updater.standards.warning} aria-hidden="true"></span>{/if}
 </button>
@@ -89,6 +90,8 @@
 >
   <strong>UPb Lab v{updater.version}</strong>
   <p role="status">{view.text}</p>
+  {#if view.secondaryText}<p class="small muted">{view.secondaryText}</p>{/if}
+  {#if view.details !== null}<p class="small muted error-details">Details: {view.details}</p>{/if}
   {#if view.action === 'download'}
     <button class="btn" onclick={() => void download()}>Download</button>
   {:else if view.action === 'install'}
@@ -106,6 +109,8 @@
 
 <style>
   button.tab { position: relative; flex: none; }
+  .version { flex: none; cursor: default; }
+  .error-details { user-select: text; -webkit-user-select: text; }
   .dot { position: absolute; width: 6px; height: 6px; top: 2px; right: 2px; background: var(--accent); }
   .dot.warning { background: var(--warning); }
   .warning { color: var(--warning); }
