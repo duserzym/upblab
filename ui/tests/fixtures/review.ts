@@ -57,3 +57,32 @@ for (const row of rows) {
   for (const run of runs)
     reviewFixtures[`/v1/acquisitions/${row.acquisition_id}/depth-profile?run=${run.id}`] = row.acquisition_id === 'acq-1' ? { ...profile, run: { ...runBrief, run_id: run.id, is_preferred: run.is_preferred_for_session } } : { acquisition_id: row.acquisition_id, run: runBrief, columns: [], data: {} };
 }
+
+// Invented TIMS chemistry; deliberately independent of the default Review fixture.
+const timsBase = { created_at: '2026-11-06T10:00:00Z', updated_at: '2026-11-06T10:00:00Z', created_by_id: 'synthetic-account' };
+export const timsFraction: import('../../src/lib/tims-api').FractionOut = {
+  ...timsBase, id: 'fraction-z1', lab_id: 'synthetic-lab', name: 'z1', sample: { id: 'sample-a', name: 'Synthetic-A' },
+  mineral: 'zircon', status: 'dissolved_in_ca', batch_id: 'batch-synthetic', capsule_number: 1, capsule_label: 'K1', capsule_set_name: 'Krogh', notes: 'Synthetic chemistry note', retired_at: null, retired_by_id: null,
+  sources: [{ ...timsBase, id: 'source-z1', grain_id: 'grain-1', atlas_grain_id: 'atlas-grain-1', spot_id: 'spot-1', atlas_spot_id: 'atlas-1', spot_label: 'Zircon_1', mount_id: mount.id, is_fragment: true, fragment_note: 'Synthetic fragment A', note: '', retired_at: null }],
+};
+export const timsGrainFraction: import('../../src/lib/tims-api').FractionOut = {
+  ...timsFraction, id: 'fraction-z2', name: 'z2', status: 'picked', capsule_number: 2, capsule_label: 'K2', notes: '',
+  sources: [{ ...timsFraction.sources[0], id: 'source-z2', spot_id: null, atlas_spot_id: null, spot_label: null, fragment_note: 'Synthetic fragment B' }],
+};
+export const timsBatch: import('../../src/lib/tims-api').BatchDetail = {
+  ...timsBase, id: 'batch-synthetic', lab_id: 'synthetic-lab', capsule_set_id: 'set-k', started_on: '2026-11-06', operator_id: null, operator_name: 'Synthetic analyst', recipe_id: null, recipe_snapshot: [], notes: '', retired_at: null,
+  capsule_set: { ...timsBase, id: 'set-k', lab_id: 'synthetic-lab', facility: 'Synthetic facility', name: 'Krogh', code: 'K', positions: 15, positions_per_puck: 5, active: true, notes: '', capsule_labels: Array.from({ length: 15 }, (_, i) => `K${i + 1}`) },
+  capsule_map: Object.fromEntries(Array.from({ length: 15 }, (_, i) => [String(i + 1), i === 0 ? timsFraction.id : i === 1 ? timsGrainFraction.id : null])),
+  fractions: [timsFraction, timsGrainFraction],
+  steps: [
+    { ...timsBase, id: 'ca-step', batch_id: 'batch-synthetic', ordinal: 1, method_code: 'SP-TIMS-CA', method_name: 'Chemical abrasion', parameters: { acid: '29 M HF', temperature_c: 190, duration_h: 12 }, parameter_definitions: [{ name: 'acid', meaning: 'Acid', type: 'choice', choices: ['29 M HF'] }, { name: 'temperature_c', meaning: 'Temperature', type: 'number', unit: '°C' }, { name: 'duration_h', meaning: 'Duration', type: 'number', unit: 'h' }], performed_on: null, notes: '' },
+    { ...timsBase, id: 'diss-step', batch_id: 'batch-synthetic', ordinal: 2, method_code: 'SP-TIMS-DISS', method_name: 'Dissolution', parameters: { acid: '29 M HF', temperature_c: 210, duration_h: 48 }, parameter_definitions: [{ name: 'acid', meaning: 'Acid' }, { name: 'temperature_c', meaning: 'Temperature', unit: '°C' }, { name: 'duration_h', meaning: 'Duration', unit: 'h' }], performed_on: null, notes: '' },
+    { ...timsBase, id: 'spike-step', batch_id: 'batch-synthetic', ordinal: 3, method_code: 'SP-TIMS-SPIKE', method_name: 'Spiking', parameters: { spike_version: 'synthetic-version' }, parameter_definitions: [{ name: 'spike_version', type: 'spike_version' }], performed_on: null, notes: '' },
+  ],
+  fraction_step_records: [{ ...timsBase, id: 'record-ca', fraction_id: timsFraction.id, step_id: 'ca-step', parameters: { temperature_c: 180 }, skipped: false, outcome: 'dissolved_in_ca', outcome_note: 'Synthetic recorded outcome' }],
+  spikes: [{ ...timsBase, id: 'synthetic-addition', fraction_id: timsGrainFraction.id, step_id: 'spike-step', spike_version_id: 'synthetic-version', spike_weight_g: '0.000125', bottle_before_g: null, bottle_after_g: null, bottle_difference_g: null, notes: '', warnings: ['spike_version_not_current'] }], spike_versions: { 'synthetic-version': { ...timsBase, id: 'synthetic-version', solution_id: 'synthetic-solution', registry_id: 'Synthetic-spike', solution_name: 'Synthetic spike', subfraction_id: 'synthetic-bottle', subfraction: 'master', subfraction_name: 'Master', version: 'v1', status: 'superseded', supersedes_id: null, calibrated: '', source: 'synthetic', source_display: 'Invented fixture', locator: '', notes: '', composition: { concentrations: { '205Pb': { value: 0.001, unit: 'mol/g' } }, ratios: {} }, content_sha256: 'invented', registry_revision: '', is_current: false } },
+};
+export const timsReviewFixtures: Record<string, unknown> = {
+  [`/v1/fractions?limit=500&mount=${mount.id}`]: [timsFraction, timsGrainFraction],
+  [`/v1/tims/batches/${timsBatch.id}`]: timsBatch,
+};

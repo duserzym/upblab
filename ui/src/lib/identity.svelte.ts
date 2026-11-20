@@ -16,10 +16,11 @@
 // Module tabs reload when the account changes (`revision`), so they pick up
 // the new token, or their own sign-in screen after a sign-out.
 
+import { grainImages } from './tims-grain-image-cache';
 import { oversight, WriteError } from './oversight.svelte';
 import { connectivity } from './connectivity.svelte';
 import { SHELL_EVENTS } from '@lab/bridge';
-import { serverMessage, statusSentence, apiReplyMessage } from './server-error';
+import { serverMessage, statusSentence, apiReplyMessage, ApiReadError } from './server-error';
 import {
   desktopAuth,
   isDesktop,
@@ -67,7 +68,7 @@ interface Backend {
   exchange(t: AuthTarget, code: string): Promise<AuthState>;
   logout(t: AuthTarget): Promise<AuthState>;
   handoff(t: AuthTarget, onBehalf?: boolean): Promise<string>;
-  write<T>(t: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean): Promise<ApiReply<T>>;
+  write<T>(t: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean, idempotencyKey?: string): Promise<ApiReply<T>>;
   get<T>(t: AuthTarget, path: string): Promise<ApiReply<T>>;
   /** Web only: the token for module iframes. */
   token(t: AuthTarget): string | null;
@@ -205,10 +206,10 @@ const webBackend: Backend = {
     }
     return reply;
   },
-  async write<T>(t: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean) {
+  async write<T>(t: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean, idempotencyKey?: string) {
     const token = readToken(t);
-    const { response: res, body: replyBody, error } = await apiRequest(t, path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(onBehalf ? { 'X-UPbDB-Oversight': 'on-behalf' } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-    return { status: res.status, body: replyBody as T, error };
+    const { response: res, body: replyBody, error } = await apiRequest(t, path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(onBehalf ? { 'X-UPbDB-Oversight': 'on-behalf' } : {}), ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+    return { status: res.status, body: replyBody as T, error, retryAfter: res.headers.get('Retry-After') ?? undefined };
   },
   token: (t) => readToken(t) ?? memory.get(t.key) ?? null,
 };
@@ -265,6 +266,8 @@ class Identity {
   pending = $state<{ provider: Provider; at: number; state?: string } | null>(null);
   /** Bumped whenever the account changes; module tabs reload on it. */
   revision = $state(0);
+  /** Successful token renewal, including signing in again as the same account. */
+  authentication = $state(0);
   private backend: Backend = isDesktop ? desktopBackend : webBackend;
   private restoring: string | null = null;
 
@@ -274,7 +277,7 @@ class Identity {
       const next = oversight.viewAs?.username ?? '';
       if (next === scope) return;
       scope = next; this.revision++;
-      webReads.clear();
+      webReads.clear(); grainImages.clear();
     });
   }
 
@@ -298,7 +301,7 @@ class Identity {
     this.state = next;
     const who = (s: AuthState) => (s.signedIn ? (s.account?.username ?? '?') : '');
     if (before.signedIn !== next.signedIn || (next.account && who(before) !== who(next))) {
-      oversight.reset(); webReads.clear();
+      oversight.reset(); webReads.clear(); grainImages.clear();
       const copy = connectivity.offlineCopy;
       connectivity.reset(); connectivity.offlineCopy = copy; this.revision += 1;
     }
@@ -343,6 +346,7 @@ class Identity {
       if (this.target?.server !== target.server || this.target?.key !== target.key) connectivity.reset();
       this.target = target;
       this.changed(next);
+      if (next.signedIn) this.authentication++;
       await logInfo(`[identity] signed in to ${target.server} as ${next.account?.username ?? username.trim()}`);
       return true;
     } catch (err) {
@@ -402,6 +406,7 @@ class Identity {
     try {
       const next = await this.backend.exchange(this.target, code);
       this.changed(next);
+      if (next.signedIn) this.authentication++;
       this.error = '';
       this.dialog = false;
       return { ok: true, outcome: `signed in${pending.provider === 'browser' ? ' in the browser' : ` with ${providerName(pending.provider)}`} as ${next.account?.username ?? '?'}` };
@@ -461,19 +466,21 @@ class Identity {
     if (revision !== this.revision || target !== this.target) throw new Error('The account or view changed during the request.');
     // A proxy can return HTML even with status 200. All read consumers must
     // see that diagnostic before treating the body as endpoint data.
-    if (reply.error) throw new Error(reply.error);
+    if (reply.error) throw new ApiReadError(reply.status, reply.body, reply.error);
     return reply;
   }
 
   /** All data writes share one per-operation oversight guard. */
-  async write<T>(path: string, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: unknown): Promise<ApiReply<T>> {
+  async write<T>(path: string, method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', body?: unknown, options?: { idempotencyKey?: string }): Promise<ApiReply<T>> {
     oversight.assertWritable(path);
+    const idempotencyKey = options?.idempotencyKey;
+    if (idempotencyKey !== undefined && !/^[!-~]{1,255}$/.test(idempotencyKey)) throw new Error('Idempotency-Key must be 1–255 printable ASCII characters without whitespace.');
     if (!this.target || !this.signedIn) throw new Error('Sign in to make changes.');
     const target = this.target, revision = this.revision;
     const payload = body === undefined ? undefined : structuredClone(body);
     return oversight.write(async onBehalf => {
-      const reply = await this.backend.write<T>(target, path, method, payload, onBehalf);
-      if (reply.status < 200 || reply.status >= 300 || reply.error) throw new WriteError(reply.status, reply.body, apiReplyMessage(reply));
+      const reply = await this.backend.write<T>(target, path, method, payload, onBehalf, idempotencyKey);
+      if (reply.status < 200 || reply.status >= 300 || reply.error) throw new WriteError(reply.status, reply.body, apiReplyMessage(reply), reply.retryAfter);
       return reply;
     }, () => target === this.target && revision === this.revision);
   }

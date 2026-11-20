@@ -9,7 +9,7 @@
   import ReviewLayers from '../components/review/ReviewLayers.svelte';
   import { review } from '../lib/review.svelte';
   import { overview } from '../lib/overview.svelte';
-  import { dateLabel, groupSpots, spotGroupKey, type ReviewSpot } from '../lib/review-data';
+  import { dateLabel, groupSpots, filterTimsSpots, isPlucked, spotGroupKey, type ReviewSpot } from '../lib/review-data';
   import { identity } from '../lib/identity.svelte';
   import { selection } from '../lib/selection.svelte';
   import { equalLayout, presetLayout, presets, readLayout } from '../lib/review-layout';
@@ -191,8 +191,9 @@
   let seenEvent: unknown = null;
   let loadedContext = '';
   const sampleRows = $derived(filterRows(scopeRows, samplesShown));
-  const groups = $derived(groupSpots(sampleRows, filter));
-  const plotRows = $derived(groupSpots(scopeRows, filter).flatMap(sample => sample.grains.flatMap(grain => grain.spots)));
+  const pluckedCount = $derived(sampleRows.filter(row => isPlucked(row, review.fractionIndex)).length);
+  const groups = $derived(groupSpots(filterTimsSpots(sampleRows, review.fractionIndex, filter, settings.reviewPlucked)));
+  const plotRows = $derived(groupSpots(filterTimsSpots(scopeRows, review.fractionIndex, filter, settings.reviewPlucked)).flatMap(sample => sample.grains.flatMap(grain => grain.spots)));
   const plotted = $derived(groups.flatMap(sample => sample.grains.flatMap(grain => grain.spots)));
   const shown = $derived(plotted.filter(row => !hiddenSpots.has(row.key)));
   const shownKeys = $derived(new Set(shown.map(row => row.key)));
@@ -279,7 +280,7 @@
     review.select(spot);
   }
 </script>
-<svelte:window onkeydown={layoutEscape} />
+<svelte:window onkeydown={layoutEscape} onfocus={() => { if (active && review.state === 'ready') void review.loadFractions(); }} />
 {#snippet layoutButtons()}
   {#each presets.filter(name => split || name !== 'Image focus') as name}
     <button class="chip" aria-pressed={equalLayout(dockLayout, presetLayout(name, split))} title={name === 'Balanced' ? 'Reset layout to the default panel positions and sizes' : name} onclick={() => { dock?.applyPreset(name); layoutsOpen = false; }}>{name}</button>
@@ -362,7 +363,10 @@
     {/snippet}
     {#snippet spots()}
       <aside class="tree stack" aria-label="Samples and grains">
-        <input type="search" aria-label="Filter spots" placeholder="Filter spots…" bind:value={filter} />
+        <div class="row spot-filters"><input type="search" aria-label="Filter spots" placeholder="Filter spots…" bind:value={filter} />
+          <button class="chip" aria-pressed={settings.reviewPlucked} onclick={() => void settings.update({ reviewPlucked: !settings.reviewPlucked })}>Plucked {pluckedCount}</button></div>
+        {#if review.fractionNotice}<p class="small muted" role="status">{review.fractionNotice}</p>{/if}
+        {#if review.fractionError}<p class="error small" data-testid="review-fractions-error">Could not read TIMS fractions: {review.fractionError}</p>{/if}
         <label class="group-option"><input type="checkbox" bind:checked={groupUnknown} onchange={() => review.groupView = true} /> Group unregistered by spot name</label>
         {#key scopeValue}
           <ReviewLayers scope={scopeValue} {groups} allGroups={scopeGroups} hidden={hiddenSpots} searching={!!filter.trim()} {active}
@@ -413,13 +417,14 @@
   .sample-toggle {position:relative;min-width:0;max-width:100%;}
   .selection-bar .sample-chip {max-width:240px;width:100%;padding-right:42px;}.sample-chip span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.sample-chip i {width:9px;height:9px;border-radius:50%;flex:none;}.sample-chip small {color:var(--text-muted);}
   .selection-bar .sample-only {position:absolute;right:3px;top:50%;transform:translateY(-50%);padding:0 4px;font-size:0.65rem;opacity:0;pointer-events:none;}
+  .spot-filters {flex-wrap:wrap;gap:4px;} .spot-filters input {min-width:0;flex:1 1 100px;width:100%;font-size:0.78rem;}
   .sample-toggle:hover .sample-only,.sample-toggle:focus-within .sample-only {opacity:1;pointer-events:auto;}
   .sample-chip:focus-visible,.sample-only:focus-visible,.section-label:focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
   .section-label {font-size:0.67rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);}
   .section-label[aria-pressed='mixed'] {background:var(--accent-soft);border-style:dashed;}
   .tree,.plots,.details {flex:1;padding:8px;min-height:0;min-width:0;gap:8px;}
+  .tree .error {overflow-wrap:anywhere;}
   .group-option {font-size:0.68rem;align-items:flex-start;}
-  .tree>input {width:100%;min-width:0;font-size:0.78rem;}
   .plots {overflow:auto;background:var(--glass);}.details {overflow-y:auto;overflow-x:hidden;overflow-wrap:anywhere;}
   .notice {margin:0;padding:4px 12px;}.view-switch {display:flex;align-items:center;gap:4px;flex:none;min-width:0;flex-wrap:wrap;}.view-switch button {border:0;background:transparent;gap:5px;font-size:0.78rem;padding:5px 8px;}.view-switch svg {width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.4;flex:none;}.view-switch button[aria-selected='true'] {background:var(--accent-soft);color:var(--accent);}
   :global(.review .wrap) {flex-wrap:wrap;}

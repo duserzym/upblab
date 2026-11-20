@@ -30,3 +30,9 @@ it.each(['project', 'paths'])('does not announce a failed local %s launch', asyn
   await expect(launch).rejects.toThrow('GrainAtlas is not installed');
   expect(connectivity.grainAtlasLocal).toBeNull();
 });
+it('passes both source grain and spot identities to the GrainAtlas host', async () => {
+  vi.stubGlobal('window', { __TAURI_INTERNALS__: {} });
+  const platform = await import('./platform'); const { invoke } = await import('@tauri-apps/api/core');
+  await platform.launchGrainAtlas('synthetic-project', 'https://lab', 'synthetic-code', undefined, 'synthetic-spot', 'synthetic-grain');
+  expect(invoke).toHaveBeenLastCalledWith('grainatlas_launch', { project: 'synthetic-project', server: 'https://lab', code: 'synthetic-code', spot: 'synthetic-spot', grain: 'synthetic-grain' });
+});

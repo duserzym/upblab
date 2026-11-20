@@ -280,6 +280,13 @@ describe('theme (System by default, passed to module tabs at load and live)', ()
 });
 
 describe('tab switching', () => {
+  it('opens a TIMS batch again with a new navigation request, including the same id from Review', async () => {
+    shell.view = 'review'; const before = shell.timsRequest;
+    await shell.openTimsBatch('invented-batch');
+    expect(shell.view).toBe('tims'); expect(shell.timsBatch).toBe('invented-batch'); expect(shell.timsRequest).toBe(before + 1);
+    shell.view = 'review'; await shell.openTimsBatch('invented-batch');
+    expect(shell.view).toBe('tims'); expect(shell.timsBatch).toBe('invented-batch'); expect(shell.timsRequest).toBe(before + 2);
+  });
   it('switches at once, with no leave guard', async () => {
     shell.view = 'review';
     const switching = shell.show('home');

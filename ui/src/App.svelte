@@ -1,4 +1,7 @@
 <script lang="ts">
+  import OutboxStatus from './components/OutboxStatus.svelte';
+  import { outbox, currentOutboxScope } from './lib/outbox.svelte';
+  import { timsRights } from './lib/tims-rights.svelte';
   import { onMount, untrack } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import Oversight from './components/Oversight.svelte';
@@ -15,6 +18,7 @@
   import AtlasViewer from './components/AtlasViewer.svelte';
   import Sessions from './routes/Sessions.svelte';
   import Reduce from './routes/Reduce.svelte';
+  import Tims from './routes/Tims.svelte';
   import Review from './routes/Review.svelte';
   import Settings from './routes/Settings.svelte';
   import FirstRun from './components/FirstRun.svelte';
@@ -37,6 +41,7 @@
     { id: 'sessions', label: 'Sessions', hint: 'UPbDB' },
     { id: 'review', label: 'Review', hint: 'Results with their images' },
     { id: 'reduce', label: 'Reduce', hint: 'UPbRPy Studio' },
+    { id: 'tims', label: 'TIMS', hint: 'Plucked grains and ID-TIMS chemistry' },
   ];
 
   // Never carry rights from an old server while the new sign-in is being read.
@@ -71,6 +76,16 @@
       void overview.load({ force: true });
       if (shell.view === 'review') void review.load({ quiet: true });
     });
+  }));
+  $effect(() => {
+    const scope = currentOutboxScope();
+    void identity.revision; void identity.authentication;
+    untrack(() => { void outbox.activate(scope); if (scope) void timsRights.load(); });
+  });
+  $effect(() => { void connectivity.state; void connectivity.offlineCopy; void oversight.viewAs; untrack(() => void outbox.flush()); });
+  onMount(() => outbox.subscribe(entry => {
+    if (shell.view === 'review') { void review.outboxSaved(entry.objectKey); }
+    window.dispatchEvent(new CustomEvent('tims-saved', { detail: { objectKey: entry.objectKey } }));
   }));
   onMount(() => { appWatch.start(); return () => appWatch.clear(); });
 
@@ -205,7 +220,7 @@
 </script>
 
 
-<svelte:window onfocus={() => { void appWatch.check(); }} />
+<svelte:window ononline={() => { void connectivity.retryNow(); void outbox.flush(); }} onfocus={() => { void appWatch.check(); void outbox.flush(); }} />
 <svelte:document onvisibilitychange={() => { appWatch.visibilityChanged(); }} />
 <div class="shell">
   <header class="bar glass">
@@ -258,6 +273,7 @@
 
   <Oversight />
   <OfflineBanner />
+  {#key JSON.stringify([identity.target?.server, identity.account?.id, identity.revision])}<OutboxStatus />{/key}
   <main class="content">
     {#if firstRun}
       <FirstRun />
@@ -273,6 +289,7 @@
           <AtlasViewer {active} {layoutKey} />
         {/snippet}
       </Review>
+      <Tims active={shell.view === 'tims'} />
       <Reduce active={shell.view === 'reduce'} />
       <Settings active={shell.view === 'settings'} />
       {#if shell.view === 'account'}<Account />{/if}

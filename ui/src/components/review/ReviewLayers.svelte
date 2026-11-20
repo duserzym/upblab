@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { statusWords } from '../../lib/tims-api';
   import { tick, untrack } from 'svelte';
   import { review } from '../../lib/review.svelte';
   import { dateLabel, type ReviewSpot, type SpotGroup } from '../../lib/review-data';
-  import { layerVisibility, moveLayer, orderedLayers, resultLayers, type Layer, type LayerOrder } from '../../lib/review-layers';
+  import { fractionBadges, layerVisibility, moveLayer, orderedLayers, resultLayers, type Layer, type LayerOrder } from '../../lib/review-layers';
 
   let { scope, groups, allGroups, hidden, searching, active, onvisibility, ongrain, onall, onclear, ongroup, onorder }: {
     scope: string; groups: SpotGroup[]; allGroups: SpotGroup[]; hidden: Set<string>; searching: boolean; active: boolean;
@@ -183,6 +184,9 @@
           <button class="name" title={layer.name} onclick={e => { ongroup(level === 1 ? layer.key : undefined, e); expanded[layer.key] = !open; }}>{layer.name}</button>
           <small class="count">{layer.rows.length}</small>
         {/if}
+        <span class="plucked-badges">{#each fractionBadges(layer, review.fractionIndex) as match (match.fraction.id)}
+          <small class="plucked-badge" title={`${statusWords(match.fraction.status)}${match.source.is_fragment ? ` · fragment: ${match.source.fragment_note}` : ''}`}>{match.fraction.name} · {match.fraction.capsule_label ?? 'No capsule'}{match.source.is_fragment ? ' ◇' : ''}</small>
+        {/each}</span>
         {#if (siblings(all, parent)?.length ?? 0) > 1}
           <button type="button" class="icon handle" draggable="true" aria-label={`Reorder ${layer.name}`} aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
             title="Drag to reorder within this level, or press Option/Alt with ↑ or ↓"
@@ -204,6 +208,8 @@
 </div>
 
 <style>
+  .plucked-badges {display:flex;flex-wrap:wrap;max-width:45%;min-width:0;gap:2px;}
+  .plucked-badge {font-size:0.63rem;color:var(--accent);background:var(--accent-soft);border-radius:var(--radius-sm);padding:1px 3px;max-width:100%;overflow-wrap:anywhere;flex-shrink:1;min-width:0;}
   .layer-tree {min-height:0;overflow:auto;}
   .children {margin-left:8px;border-left:1px solid var(--hairline);padding-left:2px;}
   .layer-row {display:flex;align-items:center;min-width:0;gap:2px;position:relative;min-height:24px;}

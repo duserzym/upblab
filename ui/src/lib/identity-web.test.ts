@@ -78,11 +78,12 @@ it('resends exactly the rejected write with the header and an unchanged body aft
   identity.target = { server: 'https://write.invalid', key: 'write' }; identity.state = { signedIn: true, account: { username: 'viewer' }, offline: false };
   const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ code: 'oversight_confirm', owner: 'Cedar', detail: 'Confirm Cedar change' }), { status: 403 })).mockResolvedValueOnce(new Response('{}'));
   vi.stubGlobal('fetch', fetch);
-  const body = { description: 'Invented note' }; const write = identity.write('/v1/samples/demo', 'PATCH', body);
-  await vi.waitFor(() => expect(oversight.pending?.owner).toBe('Cedar')); body.description = 'Changed after request'; oversight.confirm(true); await write;
+  const body = { description: 'Invented note' }, options = { idempotencyKey: 'synthetic-key' }; const write = identity.write('/v1/samples/demo', 'PATCH', body, options);
+  await vi.waitFor(() => expect(oversight.pending?.owner).toBe('Cedar')); body.description = 'Changed after request'; options.idempotencyKey = 'changed-key'; oversight.confirm(true); await write;
   expect(fetch.mock.calls.map(([path]) => path)).toEqual(['https://write.invalid/v1/samples/demo', 'https://write.invalid/v1/samples/demo']);
   expect(fetch.mock.calls.map(([, init]) => init.body)).toEqual([JSON.stringify({ description: 'Invented note' }), JSON.stringify({ description: 'Invented note' })]);
   expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('X-UPbDB-Oversight'); expect(fetch.mock.calls[1][1].headers['X-UPbDB-Oversight']).toBe('on-behalf');
+  expect(fetch.mock.calls.map(([, init]) => init.headers['Idempotency-Key'])).toEqual(['synthetic-key', 'synthetic-key']);
 });
 it('allows a progressing transfer longer than 30 seconds and reports non-JSON excerpts', async () => {
   const { oversight } = await import('./oversight.svelte'); oversight.reset();
@@ -102,4 +103,39 @@ it('allows a progressing transfer longer than 30 seconds and reports non-JSON ex
     expect(fetch.mock.calls[0][1].signal.aborted).toBe(false);
     await expect(identity.get('/v1/mounts')).rejects.toThrow('Server returned 502: <html>Invented gateway error</html>');
   } finally { vi.useRealTimers(); }
+});
+it.each([404, 405, 503, 200])('preserves HTTP %i on non-JSON read errors', async status => {
+  const { ApiReadError } = await import('./server-error');
+  identity.target = { server: 'https://legacy.invalid', key: 'legacy' };
+  vi.stubGlobal('sessionStorage', { getItem: () => 'invented-token' });
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>Invented legacy reply</html>', { status })));
+  const failure = await identity.get('/v1/fractions?limit=500&mount=synthetic').catch(error => error);
+  expect(failure).toBeInstanceOf(ApiReadError);
+  expect(failure).toMatchObject({ status, body: null, message: `Server returned ${status}: <html>Invented legacy reply</html>` });
+});
+it('sends optional idempotency headers, validates before fetching, and preserves structured write errors and Retry-After', async () => {
+  const { oversight, WriteError } = await import('./oversight.svelte'); oversight.reset();
+  identity.target = { server: 'https://synthetic.invalid', key: 'synthetic' };
+  identity.state = { signedIn: true, account: { username: 'synthetic' }, offline: false };
+  vi.stubGlobal('sessionStorage', { getItem: () => 'synthetic-token' });
+  const fetch = vi.fn().mockResolvedValueOnce(new Response('{}')).mockResolvedValueOnce(new Response('{}')).mockResolvedValueOnce(new Response(JSON.stringify({ code: 'idempotency_in_progress', detail: 'Synthetic write still running.' }), { status: 409, headers: { 'Retry-After': '2' } }));
+  vi.stubGlobal('fetch', fetch);
+  await identity.write('/v1/fractions/f', 'PATCH', { notes: 'Synthetic' });
+  await identity.write('/v1/fractions/f', 'PATCH', {}, { idempotencyKey: 'synthetic-key' });
+  expect(fetch.mock.calls[0][1].headers).not.toHaveProperty('Idempotency-Key'); expect(fetch.mock.calls[1][1].headers['Idempotency-Key']).toBe('synthetic-key');
+  for (const key of ['', 'a b', 'a\t', 'a\n', 'é', 'x'.repeat(256)]) await expect(identity.write('/v1/fractions/f', 'PATCH', {}, { idempotencyKey: key })).rejects.toThrow('Idempotency-Key');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  const error = await identity.write('/v1/fractions/f', 'PATCH', {}, { idempotencyKey: 'synthetic-key' }).catch(e => e);
+  expect(error).toBeInstanceOf(WriteError); expect(error).toMatchObject({ status: 409, code: 'idempotency_in_progress', detail: 'Synthetic write still running.', retryAfter: '2' });
+});
+
+it('announces a fresh authentication when the same signed-in account renews its token', async () => {
+  const { oversight } = await import('./oversight.svelte'); oversight.reset();
+  vi.stubGlobal('sessionStorage', { getItem: () => 'old-invented-token', setItem: vi.fn() });
+  identity.target = { server: 'https://renew.invalid', key: 'renew' };
+  identity.state = { signedIn: true, account: { id: 'invented', username: 'invented' }, offline: false };
+  const fetch = vi.fn(async () => new Response(JSON.stringify({ token: 'new-invented-token', account: { id: 'invented', username: 'invented' } }), { status: 200 })); vi.stubGlobal('fetch', fetch);
+  const before = identity.authentication;
+  expect(await identity.login('invented', 'invented-password')).toBe(true);
+  expect(identity.authentication).toBe(before + 1);
 });

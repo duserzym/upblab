@@ -16,6 +16,11 @@ export function apiReplyMessage(reply: { status: number; body: unknown; error?: 
   return reply.error || `Server returned ${reply.status}: ${serverMessage(reply.body, reply.status)}`;
 }
 
+/** Keep HTTP status available even when an API reply is not JSON. */
+export class ApiReadError extends Error {
+  constructor(public status: number, public body: unknown, message: string) { super(message); }
+}
+
 export function statusSentence(status: number): string {
   if (status === 401) return 'Sign in again to continue.';
   if (status === 403) return 'Your account does not have access to this.';

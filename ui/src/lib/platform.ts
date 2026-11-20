@@ -176,6 +176,8 @@ export interface AuthTarget {
 
 /** UPbDB's AccountOut, the fields the shell uses. */
 export interface Account {
+  id?: string;
+  is_superuser?: boolean;
   username: string;
   display_name?: string;
   email?: string;
@@ -209,6 +211,7 @@ export interface ApiReply<T = unknown> {
   error?: string;
   cached?: { asOf: string; reason: 'unreachable' | 'server_error'; detail?: string };
   nextCursor?: string;
+  retryAfter?: string;
 }
 
 export interface CacheStatus { entries: number; bytes: number; newest: string | null; oldest: string | null }
@@ -247,7 +250,7 @@ export const desktopAuth = {
       throw error;
     }
   },
-  write: <T>(target: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean) => invoke<ApiReply<T>>('api_write', { target, path, method, body: body ?? null, onBehalf }),
+  write: <T>(target: AuthTarget, path: string, method: string, body: unknown, onBehalf: boolean, idempotencyKey?: string) => invoke<ApiReply<T>>('api_write', { target, path, method, body: body ?? null, onBehalf, idempotencyKey }),
   get: <T>(target: AuthTarget, path: string) => invoke<ApiReply<T>>('api_get', { target, path }),
 };
 
@@ -335,6 +338,6 @@ export async function launchGrainAtlas(project: string, server: string | undefin
   const copy = connectivity.offlineCopy;
   connectivity.grainAtlasLocal = null;
   if (copy) { server = undefined; code = undefined; }
-  await invoke('grainatlas_launch', { project, ...(server ? { server, code } : {}), ...(revision === undefined ? {} : { revision }), ...(spot ? { spot } : grain ? { grain } : {}) });
+  await invoke('grainatlas_launch', { project, ...(server ? { server, code } : {}), ...(revision === undefined ? {} : { revision }), ...(spot ? { spot } : {}), ...(grain ? { grain } : {}) });
   if (copy && copy === connectivity.offlineCopy) connectivity.grainAtlasLocal = 'home';
 }

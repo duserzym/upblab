@@ -1,10 +1,13 @@
-import type { ReviewSpot, SpotGroup } from './review-data';
+import { spotFractions, grainFractions, type FractionIndex, type ReviewSpot, type SpotGroup } from './review-data';
 
 export type Layer = {
   key: string;
   name: string;
   rows: ReviewSpot[];
 } & ({ children: Layer[]; grain?: boolean } | { spot: ReviewSpot });
+export function fractionBadges(layer: Layer, index: FractionIndex) {
+  return 'spot' in layer ? spotFractions(layer.spot, index) : 'grain' in layer && layer.grain ? grainFractions(layer.rows, index) : [];
+}
 export type LayerOrder = Record<string, string[]>;
 export const grainKey = (sample: string, grain: string) => JSON.stringify(['grain', sample, grain]);
 

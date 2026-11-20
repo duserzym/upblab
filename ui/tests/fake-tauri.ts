@@ -39,6 +39,7 @@ export function installFakeTauri(opts: FakeOptions) {
   const callbacks = new Map<number, Cb>();
   const listeners = new Map<string, number[]>();
   const calls: [string, Record<string, unknown> | undefined][] = [];
+  const writes: { method: string; path: string; body: unknown; idempotencyKey?: string }[] = [];
   const bridgeTokens: { module: string; token: string | null }[] = [];
   const moduleToken = (module: string) => {
     const token = opts.signedIn ? 'DEMO-SCREENSHOTS-TOKEN' : null;
@@ -48,6 +49,13 @@ export function installFakeTauri(opts: FakeOptions) {
   const store = { ...opts.store };
   const fixtures = { ...opts.fixtures };
   const apiReplies = { ...opts.apiReplies };
+  const apiGates = new Map<string, { wait: Promise<void>; release: () => void }>();
+  const holdApi = (key: string) => {
+    let release!: () => void;
+    const wait = new Promise<void>(resolve => { release = resolve; });
+    apiGates.set(key, { wait, release });
+  };
+  const releaseApi = (key: string) => { const gate = apiGates.get(key); apiGates.delete(key); gate?.release(); };
   let savedReply = opts.cached;
   let offline = opts.offline ?? false;
   let theme: 'light' | 'dark' = 'light';
@@ -74,7 +82,7 @@ export function installFakeTauri(opts: FakeOptions) {
   // pushes onto window.__inbox and the next `inbox_take` empties it.
   const inbox: unknown[] = [];
   w.__inbox = inbox;
-  w.__fake = { calls, bridgeTokens, store, listeners, fixtures, apiReplies, goOnline: () => { savedReply = undefined; offline = false; } };
+  w.__fake = { calls, writes, bridgeTokens, store, listeners, fixtures, apiReplies, holdApi, releaseApi, goOnline: () => { savedReply = undefined; offline = false; } };
   const emit = async (event: string, payload: unknown) => {
     await Promise.all((listeners.get(event) ?? []).map(id => callbacks.get(id)?.({ event, id, payload })));
   };
@@ -299,12 +307,15 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'cache_prefetch': return { fetched: opts.offline ? 0 : (args!.paths as string[]).length, unchanged: 0, failed: opts.offline ? 1 : 0 };
         case 'api_write':
         case 'api_get': {
+          if (cmd === 'api_write') writes.push({ method: String(args!.method), path: String(args!.path), body: args!.body, idempotencyKey: args!.idempotencyKey as string | undefined });
           if (opts.apiPassthrough) {
-            const res = await fetch(String((args!.target as { server: string }).server) + String(args!.path), { method: cmd === 'api_get' ? 'GET' : String(args!.method), headers: { 'Content-Type': 'application/json', Authorization: 'Bearer DEMO-SCREENSHOTS-TOKEN', ...(args!.onBehalf ? { 'X-UPbDB-Oversight': 'on-behalf' } : {}) }, ...(cmd === 'api_write' ? { body: JSON.stringify(args!.body) } : {}) });
-            return { status: res.status, body: await res.json(), nextCursor: res.headers.get('X-Next-Cursor') ?? undefined };
+            const res = await fetch(String((args!.target as { server: string }).server) + String(args!.path), { method: cmd === 'api_get' ? 'GET' : String(args!.method), headers: { 'Content-Type': 'application/json', Authorization: 'Bearer DEMO-SCREENSHOTS-TOKEN', ...(args!.onBehalf ? { 'X-UPbDB-Oversight': 'on-behalf' } : {}), ...(args!.idempotencyKey ? { 'Idempotency-Key': String(args!.idempotencyKey) } : {}) }, ...(cmd === 'api_write' ? { body: JSON.stringify(args!.body) } : {}) });
+            return { status: res.status, body: await res.json(), nextCursor: res.headers.get('X-Next-Cursor') ?? undefined, retryAfter: res.headers.get('Retry-After') ?? undefined };
           }
           const path = args!.path as string;
-          const reply = apiReplies[path];
+          const requestKey = `${cmd === 'api_get' ? 'GET' : args!.method} ${path}`;
+          const reply = apiReplies[requestKey] ?? apiReplies[path];
+          await apiGates.get(requestKey)?.wait;
           if (reply) return { offlineCopy: opts.offlineCopy, ...reply };
           const key = Object.prototype.hasOwnProperty.call(fixtures, path) ? path : path.replace('?limit=500', '');
           if (Object.prototype.hasOwnProperty.call(fixtures, key)) return { offlineCopy: opts.offlineCopy, status: 200, body: fixtures[key], ...(savedReply ? { cached: savedReply } : {}) };

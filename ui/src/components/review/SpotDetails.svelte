@@ -1,12 +1,14 @@
 <script lang="ts">
+  import TimsFractions from './TimsFractions.svelte';
   import { oversight, READ_ONLY_REASON } from '../../lib/oversight.svelte';
   import { editInAtlas, openInStudio } from '../../lib/apps.svelte';
   import AtlasGuidance from '../AtlasGuidance.svelte';
   import StudioGuidance from '../StudioGuidance.svelte';
   import { review } from '../../lib/review.svelte';
   import { shell } from '../../lib/shell.svelte';
-  import { dateLabel, number } from '../../lib/review-data';
+  import { dateLabel, number, spotFractions } from '../../lib/review-data';
   const spot = $derived(review.selected);
+  const hasFractions = $derived(!!spot && spotFractions(spot, review.fractionIndex).length > 0);
   const run = $derived(spot?.runId ? review.runInfo[spot.runId] : null);
   const metrics = ['206Pb/238U_age', '207Pb/206Pb_age', '206Pb/238U', '207Pb/206Pb', '207Pb/235U', '238U/206Pb', 'U', 'Th', 'Pb', 'Th/U', 'disc%'];
   const names: Record<string, string> = { '206Pb/238U_age': '206Pb/238U date (Ma)', '207Pb/206Pb_age': '207Pb/206Pb date (Ma)', 'disc%': 'Discordance (%)', 'U': 'U (ppm)', 'Th': 'Th (ppm)', 'Pb': 'Pb (ppm)' };
@@ -21,7 +23,7 @@
   };
 </script>
 {#if spot}
-  <div class="details">
+  <div class="details" class:with-tims={hasFractions}>
     <header class="identity">
       <div class="identity-actions">
         <h2>{spot.label}</h2>
@@ -56,6 +58,7 @@
         {#if spot.flags.length}<ul class="small warning">{#each spot.flags as flag}<li>{flag}</li>{/each}</ul>{:else}<p class="small faint">None recorded</p>{/if}
       </section>
     {/if}
+    {#if hasFractions}<div class="tims-fractions"><TimsFractions /></div>{/if}
     <div class="more row">
       {#if spot.acquisitionId}<button class="btn" onclick={()=>void shell.handleLink(`upbdb://acquisition/${spot!.acquisitionId}`,'review')}>Raw sweeps in Sessions</button>{/if}
     </div>
@@ -84,10 +87,13 @@
   /* The dock body is the query container for the grid itself. */
   @container (min-width: 560px) {
     .details {grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);grid-template-areas:"id id" "date values" "flags values" "more values" "run run";align-items:start;column-gap:8px;}
+    .details.with-tims {grid-template-areas:"id id" "date values" "flags values" "more values" "run run" "tims tims";}
+    .tims-fractions {grid-area:tims;min-width:0;}
     .identity {grid-area:id;} .date {grid-area:date;} .values {grid-area:values;} .flags {grid-area:flags;} .more {grid-area:more;} .run-info {grid-area:run;}
     .run-info h3 {display:inline;margin-right:8px;} .run-info .run {display:inline;}
   }
   @container (min-width: 900px) {
     .details {grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,0.9fr);grid-template-areas:"id values flags" "date values more" "run run run";}
+    .details.with-tims {grid-template-areas:"id values flags" "date values more" "run run run" "tims tims tims";}
   }
 </style>

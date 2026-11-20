@@ -289,3 +289,8 @@ it('updates route and view-as scope together and removes the old scope on Exit',
   expect(withOversight('http://h/app/#/sessions/demo?as=old&panel=sharing', { ...scope, viewAs: null })).toBe('http://h/app/#/sessions/demo?panel=sharing');
   expect(withOversight('http://h/app/', scope, true)).toBe('http://h/app/#/timeline?as=cedar&owner=cedar&team=Demo+team');
 });
+
+it('opens TIMS batch links and refuses route-changing ids', () => {
+  expect(resolve('upbdb://tims/batch/invented-batch')).toMatchObject({ kind: 'tims-batch', id: 'invented-batch' });
+  expect(resolve('upbdb://tims/batch/%2Fother')).toMatchObject({ kind: 'refused' });
+});

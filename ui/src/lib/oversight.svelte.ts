@@ -5,7 +5,9 @@ export type Filters = Record<'owner' | 'team' | 'project' | 'lab', string>;
 const emptyFilters = (): Filters => ({ owner: '', team: '', project: '', lab: '' });
 
 export class WriteError extends Error {
-  constructor(public status: number, public body: unknown, message: string) { super(message); }
+  constructor(public status: number, public body: unknown, message: string, public retryAfter?: string) { super(message); }
+  get code(): string | undefined { return (this.body as { code?: string } | null)?.code; }
+  get detail(): string | undefined { return (this.body as { detail?: string } | null)?.detail; }
 }
 
 /** Per-window scope. Consent is tied to one rejected operation and never retained. */

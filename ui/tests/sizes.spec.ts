@@ -124,6 +124,8 @@ for (const [w, h] of SIZES) {
       expect(await problems(page, 'Review')).toEqual([]);
       await page.getByRole('tab', { name: 'Reduce' }).click();
       expect(await problems(page, 'Reduce')).toEqual([]);
+      await page.getByRole('tab', { name: 'TIMS', exact: true }).click();
+      expect(await problems(page, 'TIMS')).toEqual([]);
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
       expect(await problems(page, 'Settings')).toEqual([]);
@@ -196,7 +198,7 @@ test(`the smallest window (${MIN[0]} x ${MIN[1]}) has no sideways overflow`, asy
   await desktop(page, { mode: 'server', serverUrl: 'http://localhost:8000' });
   await expect(page.getByRole('heading', { name: 'UPb Lab', exact: true })).toBeVisible();
   expect(await problems(page, 'Home')).toEqual([]);
-  for (const tab of ['Sessions', 'Review', 'Reduce']) {
+  for (const tab of ['Sessions', 'Review', 'Reduce', 'TIMS']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     expect(await problems(page, `${tab} at minimum size`)).toEqual([]);
   }

@@ -55,6 +55,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
             &MenuItem::with_id(app, "tab:sessions", "Sessions", true, Some("CmdOrCtrl+2"))?,
             &MenuItem::with_id(app, "tab:review", "Review", true, Some("CmdOrCtrl+3"))?,
             &MenuItem::with_id(app, "tab:reduce", "Reduce", true, Some("CmdOrCtrl+4"))?,
+            &MenuItem::with_id(app, "tab:tims", "TIMS", true, Some("CmdOrCtrl+5"))?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(
                 app,

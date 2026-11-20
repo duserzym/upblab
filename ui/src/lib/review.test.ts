@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { normalise } from './review-data';
+import { ApiReadError } from './server-error';
 import type { ApiReply } from './platform';
 import { reviewFixtures, table, rows, mountResults, session } from '../../tests/fixtures/review';
 vi.mock('./identity.svelte', () => ({ identity: { target: { server: 'http://h' }, signedIn: true, revision: 0, get: vi.fn() } }));
@@ -312,7 +314,7 @@ describe('Review refresh speed', () => {
     await vi.waitFor(() => expect(review.sessions).toHaveLength(1));
   });
 
-  it('keeps rows, run, selection and depth visible and reads only results and runs with fresh lists', async () => {
+  it('keeps rows, run, selection and depth visible and revalidates results, runs and one mount fraction list with fresh lists', async () => {
     await review.open({ kind: 'session', id: session.id });
     review.select(review.rows[3], false);
     await vi.waitFor(() => expect(review.depthState).toBe('ready'));
@@ -332,7 +334,7 @@ describe('Review refresh speed', () => {
     expect(review.selectedKey).toBe('acq-4');
     expect(review.rows[3].label).toBe('Zircon_4 updated');
     expect(review.depth).toBe(depth);
-    expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/sessions/${session.id}/results?run=preferred`, `/v1/sessions/${session.id}/reductions`]);
+    expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/sessions/${session.id}/results?run=preferred`, `/v1/sessions/${session.id}/reductions`, `/v1/fractions?limit=500&mount=mount-demo`]);
   });
 
   it('keeps old rows on a failed refresh, which rejects, and logs a failed quiet load', async () => {
@@ -373,7 +375,7 @@ describe('Review refresh speed', () => {
     get.mockClear();
     await review.refresh();
     expect(review.rows[8].sampleName).toBe('Canonical reference');
-    expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/sessions/${session.id}/results?run=preferred`, `/v1/sessions/${session.id}/reductions`]);
+    expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/sessions/${session.id}/results?run=preferred`, `/v1/sessions/${session.id}/reductions`, `/v1/fractions?limit=500&mount=mount-demo`]);
     get.mockResolvedValueOnce({ status: 200, body: { ...table, rows: rows.map(row => ({ ...row, reference_material_name: 'Updated reference' })) } } as never);
     await review.refresh();
     expect(review.rows[8].sampleName).toBe('Updated reference');
@@ -434,4 +436,124 @@ it('keeps an acquisition selected when a submitted-run link changes the session 
   await review.open({ kind: 'session', id: session.id, run: 'run-newer' });
   expect(review.selectedKey).toBe('acq-4');
   expect(review.selected?.runId).toBe('run-newer');
+});
+
+import { timsReviewFixtures, timsFraction, timsBatch } from '../../tests/fixtures/review';
+it('reads one fraction list per distinct mount and one detail per selected batch, with revalidation on reload', async () => {
+  const previous = get.getMockImplementation()!;
+  get.mockImplementation(async path => path in timsReviewFixtures ? { status: 200, body: timsReviewFixtures[path] } as never : previous(path));
+  await review.open({ kind: 'session', id: session.id });
+  await vi.waitFor(() => expect(review.batches[timsBatch.id]).toBeDefined());
+  expect(get.mock.calls.filter(([p]) => p.startsWith('/v1/fractions?'))).toHaveLength(1);
+  expect(get.mock.calls.filter(([p]) => p === `/v1/tims/batches/${timsBatch.id}`)).toHaveLength(1);
+  review.select(review.rows[1], false); await review.loadSelectedBatches();
+  expect(get.mock.calls.filter(([p]) => p === `/v1/tims/batches/${timsBatch.id}`)).toHaveLength(1);
+  await review.loadFractions();
+  expect(get.mock.calls.filter(([p]) => p.startsWith('/v1/fractions?'))).toHaveLength(2);
+  expect(get.mock.calls.filter(([p]) => p === `/v1/tims/batches/${timsBatch.id}`)).toHaveLength(2);
+  // Multiple rows on another mount still produce one list, never one read per spot.
+  review.rows = [...review.rows, ...review.rows.slice(0, 3).map((r, i) => ({ ...r, key: `other-${i}`, mountId: 'other-mount' }))];
+  get.mockClear(); await review.loadFractions();
+  expect(get.mock.calls.filter(([p]) => p.startsWith('/v1/fractions?')).map(([p]) => p)).toEqual(['/v1/fractions?limit=500&mount=mount-demo', '/v1/fractions?limit=500&mount=other-mount']);
+});
+it('keeps results usable after a fraction read fails and discards stale scope replies', async () => {
+  const previous = get.getMockImplementation()!;
+  get.mockImplementation(path => path.startsWith('/v1/fractions?')
+    ? Promise.resolve({ status: 503, body: { detail: 'Synthetic chemistry maintenance.' } } as never) : previous(path));
+  await review.open({ kind: 'mount', id: 'mount-demo' }); await review.loadFractions();
+  expect(review.state).toBe('ready'); expect(review.rows.length).toBeGreaterThan(0);
+  expect(review.fractionError).toContain('503'); expect(review.fractionError).toContain('Synthetic chemistry maintenance.');
+  let finish!: (reply: ApiReply<unknown>) => void;
+  get.mockImplementation(path => path.startsWith('/v1/fractions?') ? new Promise(resolve => { finish = resolve; }) : previous(path));
+  const pending = review.loadFractions(); review.clear();
+  finish({ status: 200, body: [timsFraction] }); await pending; expect(review.fractions).toEqual([]);
+});
+it.each([404, 405])('treats fraction HTTP %i as no TIMS records in session and mount scopes, without logging', async status => {
+  const previous = get.getMockImplementation()!;
+  get.mockImplementation(async path => path in timsReviewFixtures ? { status: 200, body: timsReviewFixtures[path] } as never : previous(path));
+  for (const scope of [{ kind: 'session' as const, id: session.id }, { kind: 'mount' as const, id: 'mount-demo' }]) {
+    await review.open(scope); await review.loadFractions();
+    expect(review.fractions.length).toBeGreaterThan(0);
+    const supported = get.getMockImplementation()!;
+    get.mockImplementation(path => path.startsWith('/v1/fractions?')
+      ? Promise.resolve({ status, body: { detail: 'Synthetic older server.' } } as never) : supported(path));
+    vi.mocked(logWarn).mockClear();
+    await review.loadFractions();
+    expect(review.state).toBe('ready'); expect(review.rows.length).toBeGreaterThan(0);
+    expect(review.fractions).toEqual([]); expect(review.fractionNotice).toBe(''); expect(review.fractionError).toBe('');
+    expect(logWarn).not.toHaveBeenCalled();
+    get.mockImplementation(supported);
+  }
+});
+it.each([401, 403, 500])('keeps a fraction HTTP %i diagnostic', async status => {
+  const previous = get.getMockImplementation()!;
+  get.mockImplementation(path => path.startsWith('/v1/fractions?')
+    ? Promise.resolve({ status, body: { detail: 'Synthetic failure.' } } as never) : previous(path));
+  await review.open({ kind: 'session', id: session.id }); await review.loadFractions();
+  expect(review.state).toBe('ready'); expect(review.rows.length).toBeGreaterThan(0);
+  expect(review.fractionError).toContain(String(status));
+});
+it.each([404, 405, 503])('handles non-JSON fraction HTTP %i by status', async status => {
+  const previous = get.getMockImplementation()!;
+  get.mockImplementation(path => path.startsWith('/v1/fractions?')
+    ? Promise.reject(new ApiReadError(status, null, `Server returned ${status}: <html>Invented legacy reply</html>`)) : previous(path));
+  await review.open({ kind: 'session', id: session.id });
+  vi.mocked(logWarn).mockClear(); await review.loadFractions();
+  expect(review.state).toBe('ready'); expect(review.fractions).toEqual([]);
+  expect(review.fractionError).toBe(status === 503 ? 'Error: Server returned 503: <html>Invented legacy reply</html>' : '');
+  expect(logWarn).not.toHaveBeenCalled();
+});
+it('publishes 5000 fractions progressively with ten cursor reads and no per-spot requests', async () => {
+  review.scope = { kind: 'session', id: session.id, run: 'preferred' };
+  review.rows = rows.map(row => normalise(row));
+  const fractions = Array.from({ length: 5000 }, (_, i) => ({ ...timsFraction, id: `synthetic-${i}`, batch_id: null }));
+  const progress: number[] = [];
+  get.mockImplementation(async path => {
+    const query = new URL(path, 'https://synthetic.example').searchParams;
+    const page = Number(query.get('after') ?? 0);
+    expect(path.startsWith('/v1/fractions?')).toBe(true);
+    expect(query.get('limit')).toBe('500'); expect(query.get('mount')).toBe('mount-demo');
+    progress.push(review.fractions.length);
+    return { status: 200, body: fractions.slice(page * 500, (page + 1) * 500), nextCursor: page < 9 ? String(page + 1) : undefined } as never;
+  });
+  const started = performance.now();
+  await review.loadFractions();
+  const elapsed = performance.now() - started;
+  expect(progress).toEqual(Array.from({ length: 10 }, (_, i) => i * 500));
+  expect(review.fractions).toHaveLength(5000); expect(review.fractionError).toBe('');
+  expect(get).toHaveBeenCalledTimes(10);
+  console.info(`Review 5000 fractions: ${get.mock.calls.length} requests, ${elapsed.toFixed(2)} ms (mock network).`);
+});
+it('removes a cached batch when the server revokes permission', async () => {
+  review.rows = rows.map(row => normalise(row)); review.selectedKey = review.rows[0].key;
+  review.fractions = [timsFraction];
+  get.mockResolvedValueOnce({ status: 200, body: timsBatch } as never); await review.loadSelectedBatches(); expect(review.batches[timsBatch.id]).toBeDefined();
+  get.mockResolvedValueOnce({ status: 403, body: { code: 'forbidden', detail: 'Synthetic membership removed.' } } as never);
+  await review.loadSelectedBatches(true); expect(review.batches[timsBatch.id]).toBeUndefined(); expect(review.batchErrors[timsBatch.id]).toContain('Synthetic membership removed.');
+});
+it('does no chemistry reads for unrelated saves, and revalidates only the needed layer', async () => {
+  const previous = get.getMockImplementation()!;
+  get.mockImplementation(async path => path in timsReviewFixtures ? { status: 200, body: timsReviewFixtures[path] } as never : previous(path));
+  await review.open({ kind: 'session', id: session.id });
+  await vi.waitFor(() => expect(review.batches[timsBatch.id]).toBeDefined());
+  get.mockClear(); const before = performance.now();
+  await review.loadFractions(); const beforeMs = performance.now() - before;
+  expect(get).toHaveBeenCalledTimes(2);
+  get.mockClear(); const start = performance.now();
+  for (const key of ['batch:unrelated', 'fraction:unrelated', 'capsule_set:unrelated', 'recipe:unrelated', 'spike_version:unrelated']) await review.outboxSaved(key);
+  expect(get).not.toHaveBeenCalled();
+  const afterMs = performance.now() - start;
+  await review.outboxSaved(`batch:${timsBatch.id}`);
+  expect(get.mock.calls.map(([path]) => path)).toEqual([`/v1/tims/batches/${timsBatch.id}`]);
+  get.mockClear(); await review.outboxSaved(`fraction:${timsFraction.id}`);
+  expect(get.mock.calls.map(([path]) => path)).toEqual(['/v1/fractions?limit=500&mount=mount-demo', `/v1/tims/batches/${timsBatch.id}`]);
+  console.info(`TIMS saved edits: unrelated save before 2 reads / ${beforeMs.toFixed(2)} ms, after 0 reads / ${afterMs.toFixed(2)} ms for 5 saves; batch save after 1 read; fraction save after 2 reads (mock network).`);
+});
+it('does not restore chemistry from a late batch reply after Review is cleared', async () => {
+  review.rows = rows.map(row => normalise(row)); review.selectedKey = review.rows[0].key; review.fractions = [timsFraction];
+  let finish!: (reply: ApiReply<unknown>) => void;
+  get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const pending = review.loadSelectedBatches(); review.clear();
+  finish({ status: 200, body: timsBatch }); await pending;
+  expect(review.batches).toEqual({}); expect(review.batchErrors).toEqual({});
 });

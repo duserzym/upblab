@@ -54,3 +54,26 @@ describe('depth profile channel picker', () => {
       data: { ...profile.data, [percent]: [5] } })).not.toContain(percent);
   });
 });
+
+import { indexFractions, spotFractions, grainFractions, filterTimsSpots, isPlucked } from './review-data';
+import { timsFraction, timsGrainFraction } from '../../tests/fixtures/review';
+it('joins active exact spots and grain-only sources, deduplicates fractions and composes text and plucked filters', () => {
+  const spots = rows.map(r => normalise(r, table));
+  const retired = { ...timsFraction, id: 'retired', retired_at: '2026-11-07' };
+  const retiredSource = { ...timsFraction, id: 'retired-source', sources: [{ ...timsFraction.sources[0], retired_at: '2026-11-07' }] };
+  const index = indexFractions([timsFraction, timsGrainFraction, retired, retiredSource]);
+  expect(spotFractions(spots[0], index).map(m => [m.fraction.name, m.fromGrain])).toEqual([['z1', false], ['z2', true]]);
+  expect(spotFractions(spots[1], index).map(m => m.fraction.name)).toEqual(['z2']);
+  expect(spotFractions(spots[3], index)).toEqual([]); expect(grainFractions(spots.slice(0, 3), index)).toHaveLength(2);
+  expect(spots.filter(s => isPlucked(s, index))).toHaveLength(3);
+  expect(filterTimsSpots(spots, index, '', true)).toHaveLength(3); expect(filterTimsSpots(spots, index, 'K1', true)).toEqual([spots[0]]);
+  expect(filterTimsSpots(spots, index, 'z2', true)).toHaveLength(3); expect(filterTimsSpots(spots, index, 'Sample B', true)).toEqual([]);
+});
+it('indexes and joins 5000 fractions without scanning the fraction list per spot', () => {
+  const fractions = Array.from({ length: 5000 }, (_, i) => ({ ...timsFraction, id: `fraction-${i}`, sources: [{ ...timsFraction.sources[0], id: `source-${i}`, grain_id: `grain-${i}`, spot_id: `spot-${i}` }] }));
+  const spots = fractions.map((_, i) => normalise({ spot_id: `spot-${i}`, grain_id: `grain-${i}`, label: `Synthetic-${i}` }));
+  const start = performance.now(); const index = indexFractions(fractions);
+  expect(spots.map(s => spotFractions(s, index).length).reduce((a, b) => a + b, 0)).toBe(5000);
+  expect(index.spots.size).toBe(5000);
+  console.info(`TIMS index + 5000 joins: ${(performance.now() - start).toFixed(1)} ms, 0 requests.`);
+});

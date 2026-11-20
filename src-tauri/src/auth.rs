@@ -182,6 +182,8 @@ pub struct ApiReply {
     etag: Option<String>,
     #[serde(rename = "nextCursor", skip_serializing_if = "Option::is_none")]
     next_cursor: Option<String>,
+    #[serde(rename = "retryAfter", skip_serializing_if = "Option::is_none")]
+    retry_after: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) error: Option<String>,
     #[serde(skip)]
@@ -206,6 +208,7 @@ impl ApiReply {
                 cached: None,
                 etag: None,
                 next_cursor: None,
+                retry_after: None,
                 revalidated: false,
                 error: None,
             },
@@ -219,6 +222,7 @@ impl ApiReply {
                     cached: None,
                     etag: None,
                     next_cursor: None,
+                    retry_after: None,
                     revalidated: false,
                     error: Some(error),
                 }
@@ -485,6 +489,11 @@ impl Identity {
             .get(reqwest::header::ETAG)
             .and_then(|h| h.to_str().ok())
             .map(str::to_owned);
+        let retry_after = res
+            .headers()
+            .get(reqwest::header::RETRY_AFTER)
+            .and_then(|h| h.to_str().ok())
+            .map(str::to_owned);
         let status = res.status().as_u16();
         let url = res.url().clone();
         // Gzip removes Content-Length because the decoded size is unknown.
@@ -497,6 +506,7 @@ impl Identity {
         reply.offline_copy = offline_copy;
         reply.etag = etag;
         reply.next_cursor = next_cursor;
+        reply.retry_after = retry_after;
         Ok(reply)
     }
 
@@ -726,7 +736,41 @@ impl Identity {
         method: &str,
         body: Value,
         on_behalf: bool,
+        idempotency_key: Option<String>,
     ) -> Result<ApiReply, String> {
+        let req = self.write_request(
+            target,
+            path,
+            method,
+            &body,
+            on_behalf,
+            idempotency_key.as_deref(),
+        )?;
+        let mut reply = self.send_json(target, req).await?;
+        if reply.status == 204 {
+            reply.error = None;
+        }
+        Ok(reply)
+    }
+
+    fn write_request(
+        &self,
+        target: &Target,
+        path: &str,
+        method: &str,
+        body: &Value,
+        on_behalf: bool,
+        idempotency_key: Option<&str>,
+    ) -> Result<reqwest::RequestBuilder, String> {
+        if let Some(key) = idempotency_key {
+            if key.is_empty() || key.len() > 255 || !key.bytes().all(|b| (b'!'..=b'~').contains(&b))
+            {
+                return Err(
+                    "Idempotency-Key must be 1–255 printable ASCII characters without whitespace."
+                        .into(),
+                );
+            }
+        }
         let (base, query) = path.split_once('?').unwrap_or((path, ""));
         if !valid_api_path(base)
             || url::form_urlencoded::parse(query.as_bytes()).any(|(key, _)| key == "as")
@@ -750,15 +794,14 @@ impl Identity {
             .request(method, url)
             .bearer_auth(token)
             .header("Accept", "application/json")
-            .json(&body);
+            .json(body);
         if on_behalf {
             req = req.header("X-UPbDB-Oversight", "on-behalf");
         }
-        let mut reply = self.send_json(target, req).await?;
-        if reply.status == 204 {
-            reply.error = None;
+        if let Some(key) = idempotency_key {
+            req = req.header("Idempotency-Key", key);
         }
-        Ok(reply)
+        Ok(req)
     }
 
     /// GET a read endpoint as the signed-in account (anonymous when signed out).
@@ -803,6 +846,7 @@ impl Identity {
                 error: None,
                 etag: None,
                 next_cursor: entry.next_cursor,
+                retry_after: None,
                 revalidated: false,
             }
         };
@@ -824,6 +868,7 @@ impl Identity {
                     error: None,
                     etag: entry.etag,
                     next_cursor: entry.next_cursor,
+                    retry_after: None,
                     revalidated: true,
                 })
             }
@@ -983,6 +1028,7 @@ pub async fn api_get(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // Backward-compatible named IPC arguments, including optional key.
 pub async fn api_write(
     identity: State<'_, Identity>,
     oversight: State<'_, crate::bridge::OversightState>,
@@ -991,10 +1037,11 @@ pub async fn api_write(
     method: String,
     body: Value,
     on_behalf: bool,
+    idempotency_key: Option<String>,
 ) -> Result<ApiReply, String> {
     oversight.writable()?;
     identity
-        .write(&target, &path, &method, body, on_behalf)
+        .write(&target, &path, &method, body, on_behalf, idempotency_key)
         .await
 }
 
@@ -1672,6 +1719,57 @@ pub(crate) mod tests {
         assert_eq!(t.endpoint("/v1/x").unwrap().as_str(), "http://h:1/p/v1/x");
     }
     #[test]
+    fn write_idempotency_header_is_optional_and_validated_before_network() {
+        let id = identity();
+        let t = target("https://invented.invalid");
+        id.adopt(
+            &t,
+            serde_json::json!({"token": "invented", "account": {"username": "synthetic"}}),
+        )
+        .unwrap();
+        for key in [None, Some("synthetic-key-1")] {
+            let req = id
+                .write_request(
+                    &t,
+                    "/v1/fractions/demo",
+                    "PATCH",
+                    &serde_json::json!({}),
+                    false,
+                    key,
+                )
+                .unwrap()
+                .build()
+                .unwrap();
+            assert_eq!(
+                req.headers()
+                    .get("Idempotency-Key")
+                    .map(|h| h.to_str().unwrap()),
+                key
+            );
+        }
+        for key in [
+            "".to_string(),
+            "a b".into(),
+            "a\t".into(),
+            "a\n".into(),
+            "é".into(),
+            "x".repeat(256),
+        ] {
+            let error = rt()
+                .block_on(id.write(
+                    &t,
+                    "/v1/fractions/demo",
+                    "PATCH",
+                    serde_json::json!({}),
+                    false,
+                    Some(key),
+                ))
+                .unwrap_err();
+            assert!(error.starts_with("Idempotency-Key"));
+        }
+    }
+
+    #[test]
     fn writes_refuse_view_as_queries_and_unrecognized_methods_before_sending() {
         let id = identity();
         let t = target("https://invented.invalid");
@@ -1682,11 +1780,18 @@ pub(crate) mod tests {
             "/outside",
         ] {
             assert!(rt()
-                .block_on(id.write(&t, path, "PATCH", serde_json::json!({}), false))
+                .block_on(id.write(&t, path, "PATCH", serde_json::json!({}), false, None))
                 .is_err());
         }
         assert!(rt()
-            .block_on(id.write(&t, "/v1/samples/demo", "GET", serde_json::json!({}), true))
+            .block_on(id.write(
+                &t,
+                "/v1/samples/demo",
+                "GET",
+                serde_json::json!({}),
+                true,
+                None
+            ))
             .is_err());
     }
 }

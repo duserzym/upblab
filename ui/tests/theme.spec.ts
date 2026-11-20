@@ -38,7 +38,7 @@ async function serveModules(page: Page) {
 
 const shellTheme = (page: Page, theme: string) => expect(page.locator('html')).toHaveAttribute('data-theme', theme);
 async function visitTabs(page: Page, theme: string) {
-  for (const tab of ['Home', 'Sessions', 'Review', 'Reduce']) {
+  for (const tab of ['Home', 'Sessions', 'Review', 'Reduce', 'TIMS']) {
     await page.getByRole('tab', { name: tab, exact: true }).click();
     // grainatlas lives only in Review's SEM images tile.
     if (tab === 'Review') await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();

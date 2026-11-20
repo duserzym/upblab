@@ -195,3 +195,40 @@ export function parseScope(saved: string): ReviewScope | null {
     return null;
   }
 }
+
+/** Build once per scope refresh: joins remain linear in sources + displayed rows. */
+export interface FractionMatch { fraction: import('./tims-api').FractionOut; source: import('./tims-api').SourceOut; fromGrain: boolean }
+export interface FractionIndex { spots: Map<string, FractionMatch[]>; grains: Map<string, FractionMatch[]>; grainOnly: Map<string, FractionMatch[]> }
+export function indexFractions(fractions: readonly import('./tims-api').FractionOut[]): FractionIndex {
+  const index: FractionIndex = { spots: new Map(), grains: new Map(), grainOnly: new Map() };
+  const add = (map: Map<string, FractionMatch[]>, key: string | null, match: FractionMatch) => {
+    if (!key) return; const list = map.get(key); if (list) list.push(match); else map.set(key, [match]);
+  };
+  for (const fraction of fractions) {
+    if (fraction.retired_at) continue;
+    for (const source of fraction.sources) {
+      if (source.retired_at) continue;
+      const match = { fraction, source, fromGrain: !source.spot_id };
+      add(index.grains, source.grain_id, match);
+      if (source.spot_id) add(index.spots, source.spot_id, match);
+      else add(index.grainOnly, source.grain_id, match);
+    }
+  }
+  return index;
+}
+export function spotFractions(spot: Pick<ReviewSpot, 'spotId' | 'grainId'>, index: FractionIndex): FractionMatch[] {
+  const matches = [...(spot.spotId ? index.spots.get(spot.spotId) ?? [] : []), ...(spot.grainId ? index.grainOnly.get(spot.grainId) ?? [] : [])];
+  return [...new Map(matches.map(match => [match.fraction.id, match])).values()];
+}
+export function grainFractions(rows: readonly ReviewSpot[], index: FractionIndex): FractionMatch[] {
+  const matches = rows.flatMap(row => row.grainId ? index.grains.get(row.grainId) ?? [] : spotFractions(row, index));
+  return [...new Map(matches.map(match => [match.fraction.id, match])).values()];
+}
+export function isPlucked(spot: ReviewSpot, index: FractionIndex): boolean {
+  return !!(spot.grainId && index.grains.has(spot.grainId) || spot.spotId && index.spots.has(spot.spotId));
+}
+export function filterTimsSpots(rows: ReviewSpot[], index: FractionIndex, text: string, plucked: boolean): ReviewSpot[] {
+  const query = text.trim().toLowerCase();
+  return rows.filter(row => (!plucked || isPlucked(row, index)) && (!query || [row.label, row.sampleName, row.grainLabel, ...row.flags,
+    ...spotFractions(row, index).flatMap(({ fraction }) => [fraction.name, fraction.capsule_label])].join(' ').toLowerCase().includes(query)));
+}

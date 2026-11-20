@@ -40,6 +40,7 @@ export interface SettingsData {
   homePins: HomePins;
   reviewScope: string;
   reviewSplit: boolean;
+  reviewPlucked: boolean;
   reviewDataWidth: number;
   reviewDockSolo: string;
   reviewDockSplit: string;
@@ -70,6 +71,7 @@ export const DEFAULTS: SettingsData = {
   homePins: {},
   reviewScope: '',
   reviewSplit: false,
+  reviewPlucked: false,
   reviewDataWidth: 42,
   reviewDockSolo: '',
   reviewDockSplit: '',
@@ -167,6 +169,7 @@ export class Settings {
 
   reviewScope = $state(DEFAULTS.reviewScope);
   reviewSplit = $state(DEFAULTS.reviewSplit);
+  reviewPlucked = $state(DEFAULTS.reviewPlucked);
   reviewDataWidth = $state(DEFAULTS.reviewDataWidth);
   reviewDockSolo = $state(DEFAULTS.reviewDockSolo);
   reviewDockSplit = $state(DEFAULTS.reviewDockSplit);
@@ -233,6 +236,7 @@ export class Settings {
       this.homePins = readHomePins(data.homePins);
       this.reviewScope = typeof data.reviewScope === 'string' ? data.reviewScope : '';
       this.reviewSplit = data.reviewSplit === true;
+      this.reviewPlucked = data.reviewPlucked === true;
       this.reviewDataWidth = clampReviewDataWidth(data.reviewDataWidth);
       this.reviewDockSolo = typeof data.reviewDockSolo === 'string' ? data.reviewDockSolo : '';
       this.reviewDockSplit = typeof data.reviewDockSplit === 'string' ? data.reviewDockSplit : '';
@@ -275,6 +279,7 @@ export class Settings {
       homePins: $state.snapshot(this.homePins),
       reviewScope: this.reviewScope,
       reviewSplit: this.reviewSplit,
+      reviewPlucked: this.reviewPlucked,
       reviewDataWidth: this.reviewDataWidth,
       reviewDockSolo: this.reviewDockSolo,
       reviewDockSplit: this.reviewDockSplit,

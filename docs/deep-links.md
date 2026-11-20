@@ -265,3 +265,10 @@ scope (a mount's atlas project, or a session's runs and the atlas projects of
 its rows, at most 8). An item whose request fails waits 10 minutes before the
 next try. Studio also keeps opening `upbdb://run/<id>` after a submit,
 which brings Review to that run on purpose.
+
+## TIMS batches
+
+`upbdb://tims/batch/<id>` opens the shell's TIMS tab on that batch. It uses
+the configured server and current account. The id is a URL-safe batch identifier
+(a UUID on the server); extra path segments and route-changing characters are
+refused. Review's Open batch action uses the same shell navigation.

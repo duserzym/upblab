@@ -1,3 +1,6 @@
+import { mountFractions, tims, TimsReadError, type FractionOut, type BatchDetail } from './tims-api';
+import { batchAffected } from './tims-overlay';
+import { indexFractions, spotFractions } from './review-data';
 import { listPath } from './api-list';
 import type { SpotSelectedEvent, BridgeCommand } from '@lab/bridge';
 import { identity } from './identity.svelte';
@@ -8,7 +11,7 @@ import { moduleSurfaces, sendCommand } from './incoming';
 import type { SessionOut, MountOut, RunOut } from './overview.svelte';
 import { assignSampleColors } from '../components/review/plot-data';
 import { normalise, parseScope, type ReviewScope, type ReviewSpot, type ResultTable, type ResultRow, type RunBrief, type DepthProfile } from './review-data';
-import { apiReplyMessage } from './server-error';
+import { apiReplyMessage, ApiReadError } from './server-error';
 const enc = encodeURIComponent;
 type ScopeInput = {
   kind: 'session';
@@ -28,6 +31,70 @@ export class Review {
   mountCursor = $state<string | null>(null);
   listsLoading = $state(false);
   rows = $state<ReviewSpot[]>([]);
+  fractions = $state.raw<FractionOut[]>([]);
+  fractionIndex = $derived(indexFractions(this.fractions));
+  fractionError = $state('');
+  fractionNotice = $state('');
+  batches = $state.raw<Record<string, BatchDetail>>({});
+  batchErrors = $state<Record<string, string>>({});
+  private fractionGeneration = 0;
+  private batchPending = new Map<string, Promise<void>>();
+  private batchSource = '';
+  private batchGeneration = 0;
+  async outboxSaved(objectKey: string) {
+    if (this.fractions.some(f => objectKey === `fraction:${f.id}`) ||
+      Object.values(this.batches).some(b => objectKey === `capsule_set:${b.capsule_set_id}`)) {
+      await this.loadFractions();
+    } else if (Object.values(this.batches).some(b => batchAffected(b, objectKey))) {
+      await this.loadSelectedBatches(true);
+    }
+  }
+  async loadFractions() {
+    const gen = ++this.fractionGeneration, source = this.currentSource();
+    const current = () => gen === this.fractionGeneration && source === this.currentSource();
+    const mounts = this.scope?.kind === 'mount' ? [this.scope.id] : [...new Set(this.rows.flatMap(row => row.mountId ? [row.mountId] : []))];
+    this.fractionError = ''; this.fractionNotice = '';
+    const loaded = new Map<string, FractionOut[]>(), errors: string[] = [], notices = new Map<string, string>();
+    const publish = () => {
+      if (!current()) return;
+      this.fractions = [...new Map([...loaded.values()].flat().map(f => [f.id, f])).values()];
+      this.fractionNotice = [...notices.values()].filter(Boolean).join('; ');
+    };
+    await Promise.all(mounts.map(async mount => {
+      try {
+        await mountFractions(mount, 10_000, value => { loaded.set(mount, value.items); notices.set(mount, value.showing); publish(); });
+      } catch (error) {
+        // Older UPbDB servers do not provide TIMS endpoints.
+        if (error instanceof ApiReadError && [404, 405].includes(error.status)) {
+          loaded.delete(mount); notices.delete(mount); publish();
+        } else errors.push(String(error));
+      }
+    }));
+    if (current()) { publish(); this.fractionError = errors.join('; '); await this.loadSelectedBatches(true); }
+  }
+  async loadSelectedBatches(revalidate = false) {
+    const source = this.currentSource(), gen = this.batchGeneration;
+    if (this.batchSource !== source) { this.batchSource = source; this.batches = {}; this.batchErrors = {}; this.batchPending.clear(); }
+    const spot = this.selected;
+    if (!spot) return;
+    const batches = [...new Set(spotFractions(spot, this.fractionIndex).flatMap(m => m.fraction.batch_id ? [m.fraction.batch_id] : []))];
+    await Promise.all(batches.map(batch => {
+      if (this.batchPending.has(batch)) return this.batchPending.get(batch);
+      if (!revalidate && this.batches[batch]) return;
+      const pending = tims.batch(batch).then(detail => {
+        if (source === this.currentSource() && gen === this.batchGeneration) { this.batches = { ...this.batches, [batch]: detail }; delete this.batchErrors[batch]; }
+      }).catch(error => {
+        if (source !== this.currentSource() || gen !== this.batchGeneration) return;
+        if (error instanceof TimsReadError && [401, 403, 404].includes(error.status)) {
+          this.batches = Object.fromEntries(Object.entries(this.batches).filter(([id]) => id !== batch));
+        }
+        this.batchErrors[batch] = String(error);
+      })
+        .finally(() => { if (this.batchPending.get(batch) === pending) this.batchPending.delete(batch); });
+      this.batchPending.set(batch, pending); return pending;
+    }));
+  }
+
   runs = $state<RunOut[]>([]);
   run = $state<RunBrief | null>(null);
   runInfo = $state<Record<string, RunBrief>>({});
@@ -48,6 +115,8 @@ export class Review {
   private listsPending: Promise<void> | null = null;
   private listGeneration = 0;
   clear() {
+    this.batchGeneration++; this.batchPending.clear();
+    this.fractionGeneration++; this.fractions = []; this.fractionError = ''; this.fractionNotice = ''; this.batches = {}; this.batchErrors = {};
     this.generation++; this.depthGeneration++; this.selectionGeneration++; this.listGeneration++;
     this.listsPending = null; this.listsAt = -Infinity;
     this.sessions = []; this.mounts = []; this.sessionCursor = null; this.mountCursor = null;
@@ -135,6 +204,7 @@ export class Review {
     const source = this.currentSource();
     if (source !== this.source || !identity.target || !identity.signedIn) {
       this.source = source;
+      this.batches = {}; this.batchErrors = {}; this.batchPending.clear(); this.batchSource = source;
       this.listGeneration++;
       this.listsPending = null;
       this.listsAt = -Infinity;
@@ -150,6 +220,7 @@ export class Review {
       this.depthGeneration++;
       this.depth = null;
       this.depthState = 'idle';
+      this.fractionGeneration++; this.fractions = []; this.fractionError = ''; this.fractionNotice = '';
       this.rows = [];
       this.hoveredKey = null;
       this.runs = [];
@@ -194,6 +265,7 @@ export class Review {
         this.selectedKey = rows.some(r => r.key === this.selectedKey) ? this.selectedKey : rows.find(r => !r.isReference)?.key ?? rows[0]?.key ?? null;
       }
       this.state = 'ready';
+      void this.loadFractions();
       if (!quiet || !selected || (!keepExternal && !rows.some(r => r.key === selected.key))
         || selected.acquisitionId !== this.selected?.acquisitionId || selected.runId !== this.selected?.runId)
         void this.loadDepth();
@@ -275,6 +347,7 @@ export class Review {
     this.externalSpot = this.rows.some(r => r.key === spot.key) ? null : spot;
     this.scrollVersion++;
     void this.loadDepth();
+    void this.loadSelectedBatches();
     if (focus)
       void this.focus(spot);
   }

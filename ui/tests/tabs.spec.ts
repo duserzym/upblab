@@ -16,18 +16,18 @@ async function web(page: Page) {
 test('web: no Images tab; a stored Images tab opens Home and Sessions is shortcut 2', async ({ page }) => {
   await web(page);
   await selected(page, 'Home');
-  expect(await tabNames(page)).toEqual(['Home', 'Sessions', 'Review', 'Reduce']);
+  expect(await tabNames(page)).toEqual(['Home', 'Sessions', 'Review', 'Reduce', 'TIMS']);
   await expect(page.getByRole('tab', { name: 'Images' })).toHaveCount(0);
-  for (const [i, name] of ['Home', 'Sessions', 'Review', 'Reduce'].entries())
+  for (const [i, name] of ['Home', 'Sessions', 'Review', 'Reduce', 'TIMS'].entries())
     await expect(page.getByRole('tab', { name, exact: true })).toHaveAttribute('title', new RegExp(`\\(Ctrl/⌘ ${i + 1}\\)$`));
 });
 
 // App.svelte defines onKey (and the web drop handlers) but no <svelte:window>
 // attaches them since e31c936, so web page shortcuts do nothing. Un-fixme once wired.
-test.fixme('web: Ctrl/⌘ 1 to 4 open Home, Sessions, Review and Reduce', async ({ page }) => {
+test.fixme('web: Ctrl/⌘ 1 to 5 open Home, Sessions, Review, Reduce and TIMS', async ({ page }) => {
   await web(page);
   await selected(page, 'Home');
-  for (const [key, name] of [['2', 'Sessions'], ['3', 'Review'], ['4', 'Reduce'], ['1', 'Home']]) {
+  for (const [key, name] of [['2', 'Sessions'], ['3', 'Review'], ['4', 'Reduce'], ['5', 'TIMS'], ['1', 'Home']]) {
     await page.keyboard.press(`ControlOrMeta+${key}`);
     await selected(page, name);
   }
@@ -42,11 +42,13 @@ async function desktop(page: Page) {
 const menu = (page: Page, id: string) => page.evaluate(id =>
   (window as unknown as { __emit(e: string, p: unknown): Promise<void> }).__emit('shell://menu', id), id);
 
-test('desktop: the Tabs menu opens Sessions second; there is no Images tab', async ({ page }) => {
+test('desktop: the Tabs menu opens Sessions second and TIMS fifth; there is no Images tab', async ({ page }) => {
   await desktop(page);
-  expect(await tabNames(page)).toEqual(['Home', 'Sessions', 'Review', 'Reduce']);
+  expect(await tabNames(page)).toEqual(['Home', 'Sessions', 'Review', 'Reduce', 'TIMS']);
   await menu(page, 'tab:sessions');
   await selected(page, 'Sessions');
+  await menu(page, 'tab:tims');
+  await selected(page, 'TIMS');
   await menu(page, 'tab:home');
   await selected(page, 'Home');
 });

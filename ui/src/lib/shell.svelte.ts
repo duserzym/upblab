@@ -13,7 +13,7 @@ import { appWatch } from './app-watch.svelte';
 import { review } from './review.svelte';
 import { overlays } from './overlays.svelte';
 
-export type View = TabId | 'settings' | 'account';
+export type View = TabId | 'settings' | 'account' | 'tims';
 
 /** Placeholder while the local service starts (its usual port). */
 const LOCAL_PENDING = 'http://127.0.0.1:8000';
@@ -100,6 +100,9 @@ export interface ModuleTarget {
 
 class Shell {
   view = $state<View>('home');
+  timsBatch = $state<string | null>(null);
+  timsRequest = $state(0);
+  async openTimsBatch(batchId: string) { this.timsBatch = batchId; this.timsRequest++; return this.show('tims'); }
   modules = $state<InstalledModule[]>([]);
   links = $state<LinkRecord[]>([]);
   targets = $state<Record<ModuleTab, ModuleTarget | null>>({ images: null, sessions: null, people: null });
@@ -278,6 +281,8 @@ class Shell {
         await logInfo(`[links] ${url} -> ${r.tab} ${r.route}`);
         return true;
       }
+      case 'tims-batch':
+        await this.openTimsBatch(r.id); this.record(url, from, `TIMS batch ${r.id}`); return true;
       case 'review-run': {
         try {
           const reply = await identity.get<{ session_id: string }>(`/v1/runs/${encodeURIComponent(r.id)}`);

@@ -32,6 +32,7 @@ export type Resolution =
   | { kind: 'tab'; tab: Exclude<ModuleTab, 'images'>; route: string; url: string }
   | { kind: 'studio'; tab: 'reduce'; object: 'session' | 'run'; id: string; url: string }
   | { kind: 'atlas'; project: string; spot?: string; url: string }
+  | { kind: 'tims-batch'; id: string; url: string }
   | { kind: 'review-run'; id: string; url: string }
   | { kind: 'auth'; code: string; url: string; state?: string }
   | { kind: 'auth-error'; error: string; url: string; state?: string }
@@ -111,6 +112,7 @@ export function resolve(input: string): Resolution {
         if (!/^[A-Z]{2}(-[A-Z0-9]{1,16}){0,3}$/.test(code)) return refuse(url, 'invalid method code');
         return { kind: 'tab', tab: 'sessions', route: `/app/method-codes/${code}`, url };
       }
+      if (kind === 'tims' && id === 'batch' && parts.length === 3 && ID.test(sub)) return { kind: 'tims-batch', id: sub, url };
       if (kind === 'run' && parts.length === 2) return { kind: 'review-run', id, url };
       const routes: Record<string, string> = {
         acquisition: 'acquisitions',
