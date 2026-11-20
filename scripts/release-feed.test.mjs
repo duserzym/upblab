@@ -30,9 +30,9 @@ beforeEach(async () => {
   keyId = randomBytes(8);
   const key = pair.publicKey.export({ format: 'der', type: 'spki' }).subarray(-32);
   pubkey = Buffer.from(`untrusted comment: minisign public key: TEST\n${Buffer.concat([Buffer.from('Ed'), keyId, key]).toString('base64')}\n`).toString('base64');
-  await writeFile(join(root, 'src-tauri/tauri.conf.json'), JSON.stringify({ version: '1.2.3', plugins: { updater: { pubkey } } }));
+  await writeFile(join(root, 'src-tauri/tauri.conf.json'), JSON.stringify({ productName: 'UPb Lab', version: '1.2.3', plugins: { updater: { pubkey } } }));
   await writeFile(join(root, 'release-notes/1.2.3.md'), '- Print sheets fit A4 and Letter.\n');
-  artifact = join(root, 'UPb.Lab.app.tar.gz');
+  artifact = join(root, 'UPb Lab.app.tar.gz');
   bytes = Buffer.from('invented build bytes');
   await writeFile(artifact, bytes);
   await writeFile(`${artifact}.sig`, signature());
@@ -47,15 +47,63 @@ test('writes the default version, notes, ISO date, URL and verified signature', 
   assert.equal(feed.version, '1.2.3');
   assert.equal(feed.notes, '- Print sheets fit A4 and Letter.');
   assert.equal(new Date(feed.pub_date).toISOString(), feed.pub_date);
-  assert.equal(feed.platforms['darwin-aarch64'].url, 'https://github.com/duserzym/upblab/releases/download/v1.2.3/UPb.Lab.app.tar.gz');
+  assert.equal(feed.platforms['darwin-aarch64'].url, 'https://github.com/duserzym/upblab/releases/download/v1.2.3/UPb-Lab_1.2.3_aarch64.app.tar.gz');
   assert.equal(feed.platforms['darwin-aarch64'].signature, await readFile(`${artifact}.sig`, 'utf8'));
 });
+test('copies an archive with a space and its signature to safe names beside the feed', async () => {
+  const outputDir = join(root, 'feed');
+  const feed = await releaseFeed({ ...options(), out: join(outputDir, 'latest.json') });
+  const copied = join(outputDir, 'UPb-Lab_1.2.3_aarch64.app.tar.gz');
+  assert.deepEqual(await readFile(copied), bytes);
+  assert.deepEqual(await readFile(`${copied}.sig`), await readFile(`${artifact}.sig`));
+  assert.deepEqual(await readFile(artifact), bytes);
+  assert.ok(!feed.platforms['darwin-aarch64'].url.includes('%'));
+  await verifyArtifact(copied, await readFile(`${copied}.sig`, 'utf8'), pubkey);
+});
+test('uses --assets-dir for copies and lists all upload files including the safe DMG', async t => {
+  const assetsDir = join(root, 'upload files', 'release');
+  const dmg = join(root, 'UPb Lab_1.2.3_aarch64.dmg');
+  await writeFile(dmg, 'invented disk image');
+  const windows = join(root, 'UPb Lab-setup.exe');
+  await writeFile(windows, bytes);
+  await writeFile(`${windows}.sig`, signature());
+  const output = [];
+  t.mock.method(console, 'log', message => output.push(message));
+  await releaseFeed({ ...options(), assetsDir, dmg, platforms: { 'darwin-aarch64': artifact, 'windows-x86_64': windows } });
+  const names = ['UPb-Lab_1.2.3_aarch64.app.tar.gz', 'UPb-Lab_1.2.3_aarch64.app.tar.gz.sig',
+    'UPb-Lab_1.2.3_x64-setup.exe', 'UPb-Lab_1.2.3_x64-setup.exe.sig', 'UPb-Lab_1.2.3_aarch64.dmg'];
+  assert.deepEqual(output, [`Files to upload:\n${[...names.map(name => join(assetsDir, name)), out].join('\n')}`]);
+  assert.equal(await readFile(join(assetsDir, names[4]), 'utf8'), 'invented disk image');
+  assert.deepEqual(await readFile(join(assetsDir, names[2])), bytes);
+  assert.deepEqual(await readFile(join(assetsDir, names[3])), await readFile(`${windows}.sig`));
+});
+test('accepts an archive already at its final upload path', async () => {
+  await releaseFeed(options());
+  const copied = join(root, 'UPb-Lab_1.2.3_aarch64.app.tar.gz');
+  await releaseFeed({ ...options(), platforms: { 'darwin-aarch64': copied } });
+  assert.deepEqual(await readFile(copied), bytes);
+});
+test('refuses a final asset name containing a space', async () => {
+  const spacedOut = join(root, 'latest feed.json');
+  await writeFile(spacedOut, 'keep');
+  await assert.rejects(releaseFeed({ ...options(), out: spacedOut }), /Final asset name contains a space/);
+  assert.equal(await readFile(spacedOut, 'utf8'), 'keep');
+});
+test('derives the stem from productName and refuses names requiring URL encoding', async () => {
+  const configPath = join(root, 'src-tauri/tauri.conf.json');
+  const config = JSON.parse(await readFile(configPath, 'utf8'));
+  await writeFile(configPath, JSON.stringify({ ...config, productName: 'Other App' }));
+  const feed = await releaseFeed(options());
+  assert.ok(feed.platforms['darwin-aarch64'].url.endsWith('/Other-App_1.2.3_aarch64.app.tar.gz'));
+  await writeFile(configPath, JSON.stringify({ ...config, productName: 'UPb#Lab' }));
+  await assert.rejects(releaseFeed(options()), /not URL-safe/);
+});
 test('verifies raw Ed signatures and optional Windows artifacts', async () => {
-  const windows = join(root, 'UPb.Lab-setup.exe');
+  const windows = join(root, 'UPb Lab-setup.exe');
   await writeFile(windows, bytes);
   await writeFile(`${windows}.sig`, signature('Ed'));
   const feed = await releaseFeed({ ...options(), platforms: { 'darwin-aarch64': artifact, 'windows-x86_64': windows } });
-  assert.match(feed.platforms['windows-x86_64'].url, /v1.2.3\/UPb.Lab-setup.exe$/);
+  assert.match(feed.platforms['windows-x86_64'].url, /v1.2.3\/UPb-Lab_1.2.3_x64-setup.exe$/);
 });
 test('uses an explicit version', async () => {
   await writeFile(join(root, 'release-notes/2.0.0.md'), 'A clearer sample view.');
@@ -82,7 +130,9 @@ test('refuses missing notes and missing signatures', async () => {
 });
 test('refuses tampered artifacts', async () => {
   await writeFile(artifact, 'changed');
-  await assert.rejects(releaseFeed(options()), /Artifact signature/);
+  await writeFile(out, 'keep');
+  await assert.rejects(releaseFeed(options()), /Artifact signature did not verify: UPb-Lab_1.2.3_aarch64.app.tar.gz/);
+  assert.equal(await readFile(out, 'utf8'), 'keep');
 });
 for (const [label, edit, message] of [
   ['key id', lines => { const p = Buffer.from(lines[1], 'base64'); p[2] ^= 1; lines[1] = p.toString('base64'); }, /key ids/],
@@ -109,6 +159,7 @@ test('refuses invalid signature base64', async () => {
 });
 test('parses CLI inputs and rejects missing, duplicate and unknown flags', () => {
   assert.deepEqual(parseArgs(['--version', '1.2.3', '--darwin-aarch64', artifact, '--out', out]), { version: '1.2.3', platforms: { 'darwin-aarch64': artifact }, out });
+  assert.deepEqual(parseArgs(['--assets-dir', 'uploads', '--dmg', 'UPb Lab.dmg']), { platforms: {}, assetsDir: 'uploads', dmg: 'UPb Lab.dmg' });
   for (const args of [['--out'], ['--oops', 'x'], ['--out', '--version'], ['--out', 'a', '--out', 'b']]) assert.throws(() => parseArgs(args));
 });
 test('requires macOS, output and a stable version', async () => {

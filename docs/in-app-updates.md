@@ -69,21 +69,36 @@ UPb Lab implementation.
    TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/upblab-updater.key)" cargo tauri build --config src-tauri/tauri.release.conf.json
    ```
 
-3. Generate the feed from the signed artifacts:
+3. Generate the feed and upload copies from the signed artifacts:
 
    ```bash
-   node scripts/release-feed.mjs --darwin-aarch64 path/to/UPb.Lab.app.tar.gz --out latest.json
+   node scripts/release-feed.mjs --darwin-aarch64 "path/to/UPb Lab.app.tar.gz" --dmg "path/to/UPb Lab_0.1.3_aarch64.dmg" --assets-dir release-assets --out release-assets/latest.json
    ```
 
    The version defaults to `src-tauri/tauri.conf.json`; `--version X.Y.Z`
-   overrides it. Add `--windows-x86_64 path/to/UPb.Lab-setup.exe` when available.
-   Each artifact needs its `.sig` beside it. The script refuses missing,
+   overrides it. Add `--windows-x86_64 "path/to/UPb Lab-setup.exe"` when available.
+   Each updater artifact needs its `.sig` beside it. `--assets-dir DIR`
+   defaults to the folder containing `--out`. The script copies the archives
+   and signatures there, replacing spaces in `productName` with `-` for the
+   filename stem. For UPb Lab, the upload names are
+   `UPb-Lab_<version>_aarch64.app.tar.gz` and
+   `UPb-Lab_<version>_x64-setup.exe`, each with a matching `.sig`.
+   With `--dmg PATH`, it also copies the disk image as
+   `UPb-Lab_<version>_aarch64.dmg`.
+
+   The script refuses missing,
    empty or oversized notes, an empty pubkey, mismatched key ids, and failed
-   artifact or global minisign signatures. It verifies locally before writing
-   `latest.json`; no new dependencies are needed.
-4. Upload the `.dmg`, `.app.tar.gz`, its `.sig`, and `latest.json` to the
-   matching `v<version>` GitHub release. Include the Windows installer and its
-   `.sig` when supplied to the script. Publish as a stable release; installed
+   artifact or global minisign signatures. It verifies the copied updater
+   files locally before writing `latest.json`. Every final upload filename,
+   including the feed filename, must contain no spaces and use only ASCII
+   letters, digits, `.`, `_` and `-`. The feed URLs use the safe names without
+   percent-encoding; GitHub renames uploaded assets containing spaces, which
+   would otherwise break the updater URLs. No new dependencies are needed.
+4. Upload exactly the files printed under `Files to upload` to the matching
+   `v<version>` GitHub release: the safe-named updater archives and `.sig`
+   files, `latest.json`, and the safe-named disk image when `--dmg` was supplied.
+   Include `--dmg` when preparing a macOS release so the list includes it.
+   Publish as a stable release; installed
    copies see it on their next check. Keep the versions and the release tag
    consistent (`make check-version`).
 

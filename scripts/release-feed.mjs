@@ -1,8 +1,8 @@
 // Build a release feed only after verifying both minisign signatures locally.
 import { createHash, createPublicKey, verify } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
-import { basename, resolve } from 'node:path';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -44,7 +44,17 @@ export async function verifyArtifact(path, signature, pubkey) {
   }
 }
 
-export async function releaseFeed({ version, platforms, out, root = repoRoot }) {
+function checkAssetName(name) {
+  if (name.includes(' ')) throw new Error(`Final asset name contains a space: ${name}`);
+  if (!/^[A-Za-z0-9._-]+$/.test(name)) throw new Error(`Final asset name is not URL-safe: ${name}`);
+  return name;
+}
+
+async function copyAsset(source, destination) {
+  if (resolve(source) !== resolve(destination)) await copyFile(source, destination);
+}
+
+export async function releaseFeed({ version, platforms, out, assetsDir, dmg, root = repoRoot }) {
   const config = JSON.parse(await readFile(resolve(root, 'src-tauri/tauri.conf.json'), 'utf8'));
   version ??= config.version;
   if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Version must be a stable x.y.z version');
@@ -55,18 +65,41 @@ export async function releaseFeed({ version, platforms, out, root = repoRoot }) 
   if (!notes || [...rawNotes].length > 600) throw new Error('Release notes must be non-empty and at most 600 characters');
   if (!platforms?.['darwin-aarch64']) throw new Error('--darwin-aarch64 is required');
   if (!out) throw new Error('--out is required');
+  checkAssetName(basename(out));
+  if (!config.productName?.trim()) throw new Error('Product name is empty');
+  const stem = config.productName.replaceAll(' ', '-');
+  const names = {
+    'darwin-aarch64': checkAssetName(`${stem}_${version}_aarch64.app.tar.gz`),
+    'windows-x86_64': checkAssetName(`${stem}_${version}_x64-setup.exe`),
+  };
+  const dmgName = checkAssetName(`${stem}_${version}_aarch64.dmg`);
+  assetsDir ??= dirname(out);
+  await mkdir(assetsDir, { recursive: true });
+  const uploads = [];
   const entries = {};
   for (const [platform, path] of Object.entries(platforms)) {
     if (!['darwin-aarch64', 'windows-x86_64'].includes(platform)) throw new Error(`Unsupported platform: ${platform}`);
-    const signature = (await readFile(`${path}.sig`, 'utf8')).trim();
-    await verifyArtifact(path, signature, pubkey);
+    const name = names[platform];
+    const copied = resolve(assetsDir, name);
+    await copyAsset(path, copied);
+    await copyAsset(`${path}.sig`, `${copied}.sig`);
+    const signature = (await readFile(`${copied}.sig`, 'utf8')).trim();
+    await verifyArtifact(copied, signature, pubkey);
+    uploads.push(copied, `${copied}.sig`);
     entries[platform] = {
-      url: `https://github.com/duserzym/upblab/releases/download/v${version}/${encodeURIComponent(basename(path))}`,
+      url: `https://github.com/duserzym/upblab/releases/download/v${version}/${name}`,
       signature,
     };
   }
+  if (dmg) {
+    const copied = resolve(assetsDir, dmgName);
+    await copyAsset(dmg, copied);
+    uploads.push(copied);
+  }
   const feed = { version, notes, pub_date: new Date().toISOString(), platforms: entries };
   await writeFile(out, JSON.stringify(feed, null, 2) + '\n');
+  uploads.push(resolve(out));
+  console.log(`Files to upload:\n${uploads.join('\n')}`);
   return feed;
 }
 
@@ -75,12 +108,14 @@ export function parseArgs(args) {
   const seen = new Set();
   for (let i = 0; i < args.length; i += 2) {
     const flag = args[i], value = args[i + 1];
-    if (!['--version', '--darwin-aarch64', '--windows-x86_64', '--out'].includes(flag) || !value || value.startsWith('--') || seen.has(flag)) {
+    if (!['--version', '--darwin-aarch64', '--windows-x86_64', '--out', '--assets-dir', '--dmg'].includes(flag) || !value || value.startsWith('--') || seen.has(flag)) {
       throw new Error(`Invalid argument: ${flag}`);
     }
     seen.add(flag);
     if (flag === '--version') parsed.version = value;
     else if (flag === '--out') parsed.out = value;
+    else if (flag === '--assets-dir') parsed.assetsDir = value;
+    else if (flag === '--dmg') parsed.dmg = value;
     else parsed.platforms[flag.slice(2)] = value;
   }
   return parsed;
