@@ -12,6 +12,7 @@ body { min-height: 0; overflow: hidden; }
 /* Fixed height: module webviews are laid out from the content box below it. */
 .bar {
   flex: none;
+  min-width: 0;
   height: 48px;
   display: flex;
   align-items: center;
@@ -43,14 +44,19 @@ body { min-height: 0; overflow: hidden; }
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 45%, transparent);
 }
-.tab.icon { display: inline-grid; place-items: center; padding: 0.35rem; }
+.tab.icon { display: inline-grid; place-items: center; padding: 0.35rem; flex: none; }
 .tab.account { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* Reserve room for scope controls before truncating the caller's name. */
+.bar:has(.view-as-control) .account { flex: 0 1 12rem; max-width: 12rem; }
 @media (max-width:1100px) {
   .bar {gap:8px;padding:0 8px;}
   .brand {padding:0 4px;}
   .tab:not(.icon) {padding-inline:0.65rem;}
   .tab.account {max-width:12rem;}
+  .bar:has(.view-as-control) .account { flex-basis: 8rem; max-width: 8rem; }
+  /* The version remains in the updates button's title and its popover. */
+  .bar:has(.view-as-control) .version { display: none; }
 }
 .tab.account:not(.signed-in) { border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text); }
 

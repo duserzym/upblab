@@ -172,7 +172,10 @@ test('view-as is read-only, and top-level tab switches preserve a selected capsu
   await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Recipes', exact: true }).click();
   await page.evaluate(() => (window as unknown as { __emit(event: string, payload: unknown): Promise<void> }).__emit('lab-bridge://open', { source: 'sessions', url: 'upbdb://tims/batch/batch-synthetic' }));
   await expect(page.getByRole('heading', { name: 'Krogh (K) · 2026-11-06', exact: true })).toBeVisible();
-  await page.getByLabel('View as', { exact: true }).selectOption('invented-viewer'); await expect(page.getByTestId('tims-view')).toContainText('Viewing as another account is read-only.'); await expect(page.getByRole('button', { name: 'Edit batch', exact: true })).toBeDisabled(); expect(await writes(page)).toHaveLength(0);
+  await page.locator('header.bar').getByLabel('View as', { exact: true }).selectOption('invented-viewer');
+  await expect(page.locator('header.bar').getByTestId('view-as-banner')).toBeVisible();
+  await expect(page.locator('.oversight-bar')).toHaveCount(0);
+  await expect(page.getByTestId('tims-view')).toContainText('Viewing as another account is read-only.'); await expect(page.getByRole('button', { name: 'Edit batch', exact: true })).toBeDisabled(); expect(await writes(page)).toHaveLength(0);
 });
 test('delivering an unrelated queued recipe does not refresh a mounted chemistry batch', async ({ page }) => {
   await start(page, { cached: { asOf: '2026-11-06T10:00:00Z', reason: 'unreachable' }, apiReplies: { [`PATCH /v1/tims/recipes/${recipe.id}`]: { status: 200, body: { ...recipe, notes: 'Saved elsewhere' } } } });
@@ -211,7 +214,7 @@ test('a late pick-note preview cannot appear in a different account view', async
   await start(page, { apiReplies: { 'POST /v1/tims/pick-notes/preview': { status: 200, body: plan } } });
   await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Import pick notes', exact: true }).click();
   await gate(page, 'POST /v1/tims/pick-notes/preview'); await page.getByLabel('Pick-note text', { exact: true }).fill('K1-z1:S 1'); await page.getByRole('button', { name: 'Preview pick notes' }).click();
-  await expect.poll(() => writes(page)).toHaveLength(1); await page.getByLabel('View as', { exact: true }).selectOption('invented-viewer');
+  await expect.poll(() => writes(page)).toHaveLength(1); await page.locator('header.bar').getByLabel('View as', { exact: true }).selectOption('invented-viewer');
   await expect(page.getByTestId('tims-view')).toContainText('Viewing as another account is read-only.'); await gate(page, 'POST /v1/tims/pick-notes/preview', true);
   await expect(page.getByRole('region', { name: 'Pick-note plan' })).toHaveCount(0); await expect(page.getByRole('button', { name: 'Preview pick notes' })).toBeDisabled();
 });

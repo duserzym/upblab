@@ -5,6 +5,7 @@
   import { onMount, untrack } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import Oversight from './components/Oversight.svelte';
+  import ViewAsControl from './components/ViewAsControl.svelte';
   import { oversight } from './lib/oversight.svelte';
   import { clearRecords } from './lib/records.svelte';
   import { apps } from './lib/apps.svelte';
@@ -238,6 +239,7 @@
       {/each}
     </div>
     <span class="spacer"></span>
+    <ViewAsControl />
     <CheckUpdatesButton />
     {#if opener.dragging}
       <span class="drop-hint" role="status">Drop to open: images go to grainatlas, Qtegra exports to Sessions</span>

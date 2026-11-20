@@ -11,6 +11,9 @@ export interface FakeOptions {
   fixtures?: Record<string, unknown>;
   standards?: { warning: boolean; message: string; changed: string[] };
   signedIn?: boolean;
+  accountName?: string;
+  /** Native package version; the default is an invented test version. */
+  appVersion?: string;
   canViewAs?: boolean;
   apiPassthrough?: boolean;
   offline?: boolean;
@@ -148,6 +151,8 @@ export function installFakeTauri(opts: FakeOptions) {
     async invoke(cmd: string, args?: Record<string, unknown>) {
       calls.push([cmd, args]);
       switch (cmd) {
+        case 'plugin:app|version':
+          return opts.appVersion ?? '0.0.0-test';
         case 'plugin:event|listen': {
           const event = args!.event as string;
           listeners.set(event, [...(listeners.get(event) ?? []), args!.handler as number]);
@@ -200,7 +205,10 @@ export function installFakeTauri(opts: FakeOptions) {
         case 'standards_check':
           return opts.standards ?? null;
         case 'auth_restore':
-          return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { id: 'invented-account', username: 'demo', display_name: 'Demo analyst', can_view_as: opts.canViewAs ?? false, can_manage_people: opts.peopleAllowed ?? false } : null, offline: opts.offline ?? false, offlineCopy: opts.offlineCopy };
+          return { signedIn: opts.signedIn ?? false, account: opts.signedIn ? { id: 'invented-account', username: 'demo', display_name: opts.accountName ?? 'Demo analyst', can_view_as: opts.canViewAs ?? false, can_manage_people: opts.peopleAllowed ?? false } : null, offline: opts.offline ?? false, offlineCopy: opts.offlineCopy };
+        case 'auth_logout':
+          opts.signedIn = false;
+          return { signedIn: false, account: null, offline: false };
         case 'auth_handoff':
           if (opts.apiPassthrough) {
             const res = await fetch(String((args!.target as { server: string }).server) + '/v1/auth/handoff', { method: 'POST', headers: { Authorization: 'Bearer DEMO-SCREENSHOTS-TOKEN', ...(args!.onBehalf ? { 'X-UPbDB-Oversight': 'on-behalf' } : {}) }, body: '{}' });
