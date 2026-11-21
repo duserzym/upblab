@@ -63,13 +63,18 @@ UPb Lab implementation.
    or at most 5 short `- ` bullets, at most 600 characters, with no headings.
    Describe what changes for lab users. The UI bundles the running version's
    file at build time, including for manual reinstalls.
-2. Build with the signing key set (keep it private):
+2. Refresh the embedded GrainAtlas module: build `../grainatlas` (`make ui-build`
+   on its current main), then run `node scripts/fetch-modules.mjs --prefer local`
+   and check that `ui/public/modules/manifest.json` records that grainatlas
+   commit with `dirty: false`. The Tauri build does not refresh it on its own,
+   so skipping this step ships whatever module was copied last.
+3. Build with the signing key set (keep it private):
 
    ```bash
    TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/upblab-updater.key)" cargo tauri build --config src-tauri/tauri.release.conf.json
    ```
 
-3. Generate the feed and upload copies from the signed artifacts:
+4. Generate the feed and upload copies from the signed artifacts:
 
    ```bash
    node scripts/release-feed.mjs --darwin-aarch64 "path/to/UPb Lab.app.tar.gz" --dmg "path/to/UPb Lab_0.1.3_aarch64.dmg" --assets-dir release-assets --out release-assets/latest.json
