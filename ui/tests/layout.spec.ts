@@ -57,7 +57,8 @@ for (const [width, height] of [[1512, 982], [1280, 800]]) {
       await restore.click();
       await expect(page.locator('[data-review-panel]:visible')).toHaveCount(4);
       expect(await tile(page, name).boundingBox()).toEqual(original);
-      await tile(page, name).locator('header .tile-title').dblclick();
+      // Double-click the title’s start, before the images mount button.
+      await tile(page, name).locator(':scope > header .tile-title').dblclick({ position: { x: 5, y: 8 } });
       await expect(restore).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('button', { name: `Maximise ${name}`, exact: true })).toBeVisible();

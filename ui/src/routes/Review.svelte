@@ -27,6 +27,9 @@
   import ConcordiaPlot from '../components/review/ConcordiaPlot.svelte';
   import GeochemistryPlot from '../components/review/GeochemistryPlot.svelte';
   import DepthPlot from '../components/review/DepthPlot.svelte';
+  import RegionSummary from '../components/review/RegionSummary.svelte';
+  import { atlasSync } from '../lib/atlas-sync.svelte';
+  import { imageMount, regionLabel } from '../lib/region-summary';
   import SpotDetails from '../components/review/SpotDetails.svelte';
   import { plural } from '../lib/plural';
   let { active, split = false, images }: {
@@ -42,6 +45,15 @@
     const atlas = overview.mounts.find(row => row.mount.id === mount)?.atlas;
     return { project: project ?? (atlas && atlas !== 'error' ? atlas.projectId : null), mount };
   });
+  const imageHeading = $derived(imageMount(atlasSync.status, imageTarget, review.rows, [
+    ...review.mounts.map(mount => ({ ...mount, project: mount.atlas?.project_id })),
+    ...overview.mounts.map(row => ({ ...row.mount, project: row.atlas && row.atlas !== 'error' ? row.atlas.projectId : null })),
+  ]));
+  function summariseMount() {
+    if (!imageHeading.mount) return;
+    void review.showRegion({ type: 'lab.viewer.region', kind: 'mount', project: imageHeading.project ?? '',
+      mount: imageHeading.mount, mountLabel: imageHeading.label, area: null, areaLabel: null, sample: null, spots: [] }, 'header');
+  }
   const editTitle = $derived(!imageTarget.project ? 'No published atlas for this spot or mount (E)'
     : imageTarget.spot ? 'Edit this spot in grainatlas (E)' : 'Edit the whole mount in grainatlas (E)');
   // Edit in UPbRPy Studio: the selected spot's analysis, else the run shown.
@@ -338,6 +350,9 @@
   {/if}
   <GrainAtlasLocalNotice {active} view="review" />
   <ReviewDock {active} {split} ready={review.state==='ready'} {images} bind:this={dock}>
+    {#snippet imagesTitle()}
+      <span class="image-heading" title={imageHeading.full}>SEM images{#if imageHeading.label}{' · '}<button class="mount-title" aria-label={`Summarise mount ${imageHeading.label}`} onclick={summariseMount}>{imageHeading.label}</button>{#if imageHeading.samples}{' · '}{imageHeading.samples}{/if}{/if}</span>
+    {/snippet}
     {#snippet headerActions(pane)}
       {#if pane === 'images'}
         <button class="btn atlas-edit edit-action" aria-label="Edit in grainatlas" disabled={!!oversight.viewAs || !imageTarget.project} title={oversight.viewAs ? READ_ONLY_REASON : editTitle}
@@ -349,7 +364,9 @@
     {/snippet}
     {#snippet detailsRail(expand)}
       <div class="details-summary">
-        {#if selectedSpot}
+        {#if review.region}
+          <button class="summary-name region-rail" title="Region summary: expand Spot metadata to see sessions and counts" onclick={expand}>{review.mounts.find(mount => mount.id === review.region?.mount)?.label ?? review.region.mountLabel}{' · '}{review.region.kind === 'mount' ? 'whole mount' : regionLabel(review.region)}</button>
+        {:else if selectedSpot}
           <span class="summary-name" title={selectedSpot.label}>{selectedSpot.label}</span><span aria-hidden="true">·</span>
           <span class="summary-date" title="Preferred date">{dateLabel(selectedSpot)}{selectedSpot.date ? ' Ma' : ''}</span><span aria-hidden="true">·</span>
           <button class="btn edit-action" aria-label="Edit in grainatlas" disabled={!!oversight.viewAs || !imageTarget.project} title={oversight.viewAs ? READ_ONLY_REASON : editTitle}
@@ -387,16 +404,23 @@
       </div>
     {/snippet}
     {#snippet details()}
-      <aside class="details stack" aria-label="Spot details" data-testid="review-details"><SpotDetails /></aside>
+      <aside class="details stack" aria-label="Spot details" data-testid="review-details">{#if review.region}<RegionSummary />{:else}<SpotDetails />{/if}</aside>
     {/snippet}
   </ReviewDock>
 </section>
 <style>
   .review {overflow:hidden;}
+  .image-heading {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:0.73rem;}
+  .mount-title {display:inline;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;}
+  .mount-title:hover {text-decoration:underline;}
+  .mount-title:focus-visible {outline:2px solid var(--accent);outline-offset:1px;}
   .atlas-edit {font-size:0.72rem;padding:2px 8px;gap:4px;white-space:nowrap;}
   .edit-short {display:none;}
   .details-summary {display:flex;align-items:center;gap:5px;min-width:0;height:100%;padding:0 4px;background:var(--accent-soft);font-size:0.73rem;white-space:nowrap;}
   .summary-name {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+  .region-rail {border:0;background:transparent;color:inherit;font:inherit;padding:0;text-align:left;cursor:pointer;}
+  .region-rail:hover {text-decoration:underline;}
+  .region-rail:focus-visible {outline:2px solid var(--accent);outline-offset:1px;}
   .summary-date,.details-summary .btn {flex:none;}
   .details-summary .btn {font-size:0.7rem;padding:1px 4px;}
   @container (max-width:360px) {

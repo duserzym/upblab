@@ -2,7 +2,9 @@ import { mountFractions, tims, TimsReadError, type FractionOut, type BatchDetail
 import { batchAffected } from './tims-overlay';
 import { indexFractions, spotFractions } from './review-data';
 import { listPath } from './api-list';
-import type { SpotSelectedEvent, BridgeCommand } from '@lab/bridge';
+import { RegionResults } from './region-results';
+import type { ViewerRegion } from './region-summary';
+import type { ViewerRegionEvent, SpotSelectedEvent, BridgeCommand } from '@lab/bridge';
 import { identity } from './identity.svelte';
 import { logWarn } from './platform';
 import { shell } from './shell.svelte';
@@ -22,6 +24,45 @@ type ScopeInput = {
   id: string;
 };
 export class Review {
+  region = $state<ViewerRegion | null>(null);
+  regionRows = $state.raw<ReviewSpot[]>([]);
+  regionFractions = $state.raw<FractionOut[]>([]);
+  regionLoading = $state(false);
+  regionError = $state('');
+  regionFractionNotice = $state('');
+  regionBack = $state<ReviewSpot | null>(null);
+  private regionGeneration = 0;
+  private regionResults = new RegionResults();
+  private fractionMounts = new Set<string>();
+  closeRegion() { this.regionGeneration++; this.region = null; this.regionBack = null; this.regionLoading = false; }
+  async showRegion(event: ViewerRegionEvent, source: ViewerRegion['source']) {
+    this.selectionGeneration++;
+    const mount = event.mount ?? this.rows.find(row => row.atlasProjectId === event.project)?.mountId
+      ?? this.mounts.find(mount => mount.atlas?.project_id === event.project)?.id ?? null;
+    this.regionBack = this.region ? this.regionBack : this.selected;
+    this.region = { ...event, mount, source };
+    const gen = ++this.regionGeneration, account = this.currentSource();
+    const current = () => gen === this.regionGeneration && account === this.currentSource();
+    this.regionError = ''; this.regionFractionNotice = ''; this.regionFractions = []; this.regionLoading = false;
+    if (!mount) { this.regionRows = []; this.regionError = 'Mount not linked to UPbDB.'; return; }
+    const inScope = this.scope?.kind === 'mount' && this.scope.id === mount;
+    this.regionRows = inScope ? this.rows : this.regionResults.peek(account, mount);
+    this.regionLoading = !inScope;
+    const results = inScope ? Promise.resolve() : this.regionResults.load(account, mount, path => identity.get(path))
+      .then(rows => { if (current()) this.regionRows = rows; })
+      .catch(error => { if (current()) this.regionError = String(error); })
+      .finally(() => { if (current()) this.regionLoading = false; });
+    const fractions = this.fractionMounts.has(mount) ? Promise.resolve().then(() => {
+      if (current()) { this.regionFractions = this.fractions; this.regionFractionNotice = this.fractionNotice; }
+    }) : mountFractions(mount, 10_000, value => {
+      if (current()) { this.regionFractions = value.items; this.regionFractionNotice = value.showing; }
+    }).catch(error => {
+      if (!current()) return;
+      this.regionFractionNotice = error instanceof ApiReadError && [404, 405].includes(error.status)
+        ? 'TIMS not available on this server' : `Could not read TIMS fractions: ${String(error)}`;
+    });
+    await Promise.all([results, fractions]);
+  }
   scope = $state<ReviewScope | null>(null);
   state = $state<'idle' | 'signed-out' | 'loading' | 'ready' | 'error'>('idle');
   error = $state('');
@@ -53,7 +94,7 @@ export class Review {
     const gen = ++this.fractionGeneration, source = this.currentSource();
     const current = () => gen === this.fractionGeneration && source === this.currentSource();
     const mounts = this.scope?.kind === 'mount' ? [this.scope.id] : [...new Set(this.rows.flatMap(row => row.mountId ? [row.mountId] : []))];
-    this.fractionError = ''; this.fractionNotice = '';
+    this.fractionError = ''; this.fractionNotice = ''; this.fractionMounts.clear();
     const loaded = new Map<string, FractionOut[]>(), errors: string[] = [], notices = new Map<string, string>();
     const publish = () => {
       if (!current()) return;
@@ -70,7 +111,7 @@ export class Review {
         } else errors.push(String(error));
       }
     }));
-    if (current()) { publish(); this.fractionError = errors.join('; '); await this.loadSelectedBatches(true); }
+    if (current()) { this.fractionMounts = new Set(loaded.keys()); publish(); this.fractionError = errors.join('; '); await this.loadSelectedBatches(true); }
   }
   async loadSelectedBatches(revalidate = false) {
     const source = this.currentSource(), gen = this.batchGeneration;
@@ -115,6 +156,7 @@ export class Review {
   private listsPending: Promise<void> | null = null;
   private listGeneration = 0;
   clear() {
+    this.closeRegion(); this.regionResults.clear(); this.regionRows = []; this.regionFractions = []; this.fractionMounts.clear();
     this.batchGeneration++; this.batchPending.clear();
     this.fractionGeneration++; this.fractions = []; this.fractionError = ''; this.fractionNotice = ''; this.batches = {}; this.batchErrors = {};
     this.generation++; this.depthGeneration++; this.selectionGeneration++; this.listGeneration++;
@@ -179,6 +221,7 @@ export class Review {
     return r.body;
   }
   async open(scope: ScopeInput) {
+    this.closeRegion();
     this.groupView = true;
     this.selectionGeneration++;
     this.scope = scope.kind === 'session' ? { ...scope, run: scope.run ?? 'preferred' } : scope;
@@ -211,6 +254,7 @@ export class Review {
   async load({ quiet = false, strict = false } = {}) {
     const source = this.currentSource();
     if (source !== this.source || !identity.target || !identity.signedIn) {
+      this.closeRegion(); this.regionResults.clear(); this.fractionMounts.clear();
       this.source = source;
       this.batches = {}; this.batchErrors = {}; this.batchPending.clear(); this.batchSource = source;
       this.listGeneration++;
@@ -312,6 +356,15 @@ export class Review {
           info[t.run.run_id] = t.run;
         return t.rows.filter(r => r.mount_id ? r.mount_id === scope.id : !!r.atlas_spot_id && atlasIds.has(r.atlas_spot_id)).map(r => normalise({ ...r, mount_id: r.mount_id ?? scope.id }, t));
       });
+      const summaries = new Map(mount.spots.map(row => [normalise(row).key, row]));
+      rows = rows.map(row => {
+        const summary = summaries.get(row.key);
+        if (!summary) return row;
+        const optional = Object.fromEntries(['session_started_at', 'sample_id', 'sample_name']
+          .filter(key => row.values[key] == null && typeof summary[key] === 'string').map(key => [key, summary[key] as string]));
+        return { ...row, sampleName: row.sampleName === 'No sample' && typeof optional.sample_name === 'string' ? optional.sample_name : row.sampleName,
+          values: { ...row.values, ...optional } };
+      });
       const keys = new Set(rows.map(r => r.key));
       // Preserve mount spots absent from any results table (including unmeasured ones).
       for (const summary of mount.spots) {
@@ -349,6 +402,7 @@ export class Review {
     }
   }
   select(spot: ReviewSpot, focus = true) {
+    this.closeRegion();
     this.groupView = false;
     this.selectionGeneration++;
     this.selectedKey = spot.key;
@@ -380,6 +434,7 @@ export class Review {
   async fromImages(event: SpotSelectedEvent) {
     if (event.via === 'shell')
       return;
+    this.closeRegion();
     const request = ++this.selectionGeneration;
     const scopeGen = this.generation;
     const matches = this.rows.filter(r => r.atlasSpotId === event.spot && (!r.atlasProjectId || r.atlasProjectId === event.project));

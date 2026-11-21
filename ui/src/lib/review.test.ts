@@ -577,3 +577,46 @@ it('indexes thousands of stored spots, preserves first-match selection and follo
   review.clear();
   expect(review.selected).toBeNull();
 });
+
+describe('Review region lifecycle', () => {
+  const region = { type: 'lab.viewer.region' as const, kind: 'mount' as const, project: 'project-demo', mount: 'mount-demo', mountLabel: 'Demo', area: null, areaLabel: null, sample: null, spots: [] };
+  it('makes one mount read outside mount scope, revalidates on reopening and restores the prior spot', async () => {
+    await review.open({ kind: 'session', id: session.id });
+    const prior = review.selected!;
+    get.mockClear();
+    await review.showRegion(region, 'images');
+    expect(review.region).toMatchObject({ ...region, source: 'images' });
+    expect(review.regionRows).toHaveLength(13);
+    expect(review.regionBack?.key).toBe(prior.key);
+    expect(get.mock.calls.filter(([path]) => path.endsWith('/results'))).toHaveLength(1);
+    expect(get.mock.calls.some(([path]) => path.includes('/sessions/'))).toBe(false);
+    expect(review.regionFractionNotice).toBe('TIMS not available on this server');
+    review.select(review.regionBack!, false);
+    expect(review.region).toBeNull();
+    await review.showRegion(region, 'header');
+    expect(get.mock.calls.filter(([path]) => path.endsWith('/results'))).toHaveLength(2);
+    review.closeRegion(); expect(review.region).toBeNull();
+  });
+  it('reuses loaded mount rows and clears the summary on scope changes and viewer spot picks', async () => {
+    await review.open({ kind: 'mount', id: 'mount-demo' });
+    get.mockClear();
+    await review.showRegion(region, 'header');
+    expect(review.regionRows).toEqual(review.rows);
+    expect(get.mock.calls.some(([path]) => path.includes('/results'))).toBe(false);
+    await review.fromImages(event('atlas-2'));
+    expect(review.region).toBeNull();
+    await review.showRegion(region, 'header');
+    await review.open({ kind: 'session', id: session.id });
+    expect(review.region).toBeNull();
+  });
+  it('ignores late mount results after sign-out clears the review', async () => {
+    await review.open({ kind: 'session', id: session.id });
+    let resolve!: (reply: ApiReply<unknown>) => void;
+    const previous = get.getMockImplementation()!;
+    get.mockImplementation(path => path.endsWith('/mount-demo/results') ? new Promise(r => { resolve = r as typeof resolve; }) as never : previous(path));
+    const pending = review.showRegion(region, 'images');
+    review.clear();
+    resolve({ status: 200, body: mountResults }); await pending;
+    expect(review.region).toBeNull(); expect(review.regionRows).toEqual([]);
+  });
+});

@@ -86,3 +86,21 @@ export const timsReviewFixtures: Record<string, unknown> = {
   [`/v1/fractions?limit=500&mount=${mount.id}`]: [timsFraction, timsGrainFraction],
   [`/v1/tims/batches/${timsBatch.id}`]: timsBatch,
 };
+
+// Region summaries exercise repeated measurements without changing older spot fixtures.
+export const regionSession = { ...session, id: 'session-region', session_key: 'Zircon_demo_followup', started_at: '2026-11-12T09:00:00Z', acquisition_count: 2 };
+export const regionRows = rows.slice(0, 2).map((row, i) => ({ ...row, acquisition_id: `region-acq-${i}`, session_id: regionSession.id,
+  session_key: regionSession.session_key, session_started_at: regionSession.started_at, run_id: 'run-region' }));
+export const regionMountResults = { ...mountResults, spots: [...mountResults.spots.map((row, i) => ({ ...row,
+  ...('acquisition_id' in row && row.acquisition_id ? { ...rows[i], session_id: session.id, session_key: session.session_key, session_started_at: session.started_at } : {}),
+})), ...regionRows] };
+export const regionReviewFixtures: Record<string, unknown> = {
+  ...timsReviewFixtures,
+  '/v1/sessions': [regionSession, session],
+  [`/v1/mounts/${mount.id}/results`]: regionMountResults,
+  [`/v1/sessions/${regionSession.id}/reductions`]: [{ ...runs[0], id: 'run-region', session_id: regionSession.id }],
+  [`/v1/sessions/${regionSession.id}/results?run=preferred`]: { ...table, session_id: regionSession.id, session_key: regionSession.session_key,
+    run: { ...runBrief, run_id: 'run-region' }, rows: regionRows },
+};
+export const sampleRegion = { type: 'lab.viewer.region', kind: 'sample', project: 'project-demo', mount: mount.id,
+  mountLabel: mount.label, area: 'area-a', areaLabel: 'Area A', sample: 'Sample A', spots: ['atlas-1', 'atlas-2', 'atlas-3', 'atlas-4'] };

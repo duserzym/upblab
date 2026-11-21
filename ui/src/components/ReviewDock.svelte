@@ -4,9 +4,10 @@
   import { settings } from '../lib/settings.svelte';
   import { defaultRatio, dock, edgeAt, gap, geometry, panes, presetLayout, readLayout, resize, type Preset, type Edge, type Layout, type Pane, type Rect } from '../lib/review-layout';
 
-  let { active, ready, split, spots, plots, details, images, headerActions, detailsRail }: {
+  let { active, ready, split, spots, plots, details, images, headerActions, detailsRail, imagesTitle }: {
     active: boolean; ready: boolean; split: boolean;
     spots: Snippet; plots: Snippet; details: Snippet; images: Snippet<[boolean, string]>;
+    imagesTitle?: Snippet;
     headerActions?: Snippet<[Pane]>; detailsRail?: Snippet<[() => void]>;
   } = $props();
 
@@ -172,7 +173,7 @@
       <header hidden={!!rail} ondblclick={event => headerDoubleClick(event, pane)}>
         <div class="heading"><button class="grip" title="Drag to another panel edge to move" aria-label={`Drag ${title[pane]}`}
           onpointerdown={e => grab(e, pane)} onpointermove={slide} onpointerup={release}
-          onpointercancel={release} onlostpointercapture={release}><span aria-hidden="true">⠿</span></button><span class="tile-title" title={title[pane]}>{title[pane]}</span></div>
+          onpointercancel={release} onlostpointercapture={release}><span aria-hidden="true">⠿</span></button><div class="tile-title">{#if pane === 'images' && imagesTitle}{@render imagesTitle()}{:else}<span title={title[pane]}>{title[pane]}</span>{/if}</div></div>
         <div class="header-actions">{#if headerActions}{@render headerActions(pane)}{/if}<button class="dock-menu maximise" aria-label={`${maximised === pane ? 'Restore' : 'Maximise'} ${title[pane]}`} aria-pressed={maximised === pane} title={maximised === pane ? 'Restore panel' : 'Maximise panel'} onclick={() => maximise(pane)}>{maximised === pane ? 'Restore' : '⛶'}</button>
         {#if pane === 'images'}
           <button class="dock-menu" aria-label="Move SEM images" title="Move panel" aria-expanded={imagesMenu} aria-controls="dock-images" onclick={() => imagesMenu = !imagesMenu}>⋯</button>

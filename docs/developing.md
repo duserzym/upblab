@@ -16,7 +16,7 @@ appears only as Review’s read-only SEM images panel.
 | --- | --- | --- |
 | Home | the shell | a tiled board: action tiles (Open folder, Open files, Upload LA-ICP-MS session, Upload image set; anything dropped on the window goes to Sessions or standalone GrainAtlas by content), module status, then Sessions, Mounts and Atlases as searchable, sortable card grids (spot-count bar by acquisition kind and run status dot per session; grain and spot counts, atlas badge and thumbnail per mount), link box and log |
 | Sessions | UPbDB | `/app/` in a native webview, from a lab server or from the UPbDB the app runs on this computer |
-| Review | the shell | stored results by session or mount with sample chips; Concordia, a multi-panel geochemistry board with mineral presets, depth profiles and spot details linked to the optional SEM images panel, a pinned GrainAtlas build bundled into the app (`modules.lock.json`) in a read-only viewer presentation |
+| Review | the shell | stored results by session or mount with sample chips; Concordia, a multi-panel geochemistry board with mineral presets, depth profiles and spot details linked to the optional SEM images panel, with a mount title and read-only inset region summaries, a pinned GrainAtlas build bundled into the app (`modules.lock.json`) in a read-only viewer presentation |
 | Reduce | UPbRPy Studio | launched as its own application with a `upbr://` link and a one-time sign-in code |
 | People & access | UPbDB | `/app/#/people` in its own module webview, after Reduce, for accounts allowed to manage people |
 

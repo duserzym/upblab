@@ -30,6 +30,10 @@ const timeline = [
 export const demoApi: Record<string, unknown> = {
   ...demoHomeFixtures,
   '/v1/accounts/me': account,
+  '/v1/server': { version: 'demo', public_url: 'http://localhost:8000', atlas_viewer: true, desk: true, max_upload_mb: 512 },
+  '/v1/labs': [{ id: 'synthetic-lab', handle: 'demo-lab', name: 'Demo lab', my_role: 'member' }],
+  // No invented TIMS fractions: the demo mount has none plucked.
+  '/v1/fractions': [],
   '/v1/auth/providers': { password_registration: false, orcid: false, google: false, github: false, google_domains: [] },
   '/v1/instruments': [demoInstrument],
   '/v1/projects': [{ id: 'project-demo-lab', code: 'DEMO', title: 'Demo zircon workflow' }],

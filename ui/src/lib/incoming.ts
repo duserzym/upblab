@@ -10,9 +10,10 @@
 import { oversight } from './oversight.svelte';
 import { dispatchSpotAction } from './spot-actions';
 import { presentationFor } from './presentation';
+import { review } from './review.svelte';
 import { atlasSync } from './atlas-sync.svelte';
 import { atlasSyncedNotice } from './atlas-refresh';
-import { EVENTS, atlasStatus, spotSelection, isBridgeCommand, viewerInset, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
+import { EVENTS, atlasStatus, spotSelection, isBridgeCommand, viewerInset, viewerRegion, type BridgeCommand, type BridgeEvent } from '@lab/bridge';
 import { createFrameHost, pushOpenFiles, pushCommand, pushOversight } from '@lab/bridge/host';
 import { fileUrlToPath } from './drop';
 import { identity, SIGN_OUT_EVENTS } from './identity.svelte';
@@ -65,6 +66,8 @@ export function onModuleEvent(event: BridgeEvent, source: string) {
     }
     void dispatchSpotAction(event, source).catch(err => shell.note('Images spot action', 'review', String(err), true));
     // v5.1: the viewer cannot write storage, so the shell remembers its inset.
+    const region = viewerRegion(event);
+    if (region && shell.view === 'review' && settings.reviewSplit) void review.showRegion(region, 'images');
     const inset = viewerInset(event);
     if (inset && settings.loaded) void settings.update({ reviewInset: { width: inset.width, collapsed: inset.collapsed } });
     if (synced) void atlasSyncedNotice(synced).catch(err => logWarn(`[atlas] refresh after a sync notice failed: ${String(err)}`));

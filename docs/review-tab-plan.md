@@ -256,3 +256,27 @@ published atlas (grainatlas then waits on its Open screen for the package,
 which was exercised only by grainatlas's Playwright spec), and grainatlas's
 own layout in a 740 px half window (its top bar and right panel are clipped;
 grainatlas's to fix).
+
+## Mount name and region summary (2026-11-21)
+
+Review’s SEM images title names the mount open in the viewer, followed by up
+to two unknown sample names and a count of the rest. Its tooltip includes all
+loaded sample and standard names. The selected spot’s mount is the fallback
+when the viewer has not reported a known project. The mount label is a button
+that opens a whole-mount summary in Spot metadata.
+
+Clicking the mount title, an area or a sample region in GrainAtlas’s inset
+moves the image view there and opens the corresponding summary. It counts
+distinct grains and physical spots, analysed spots and grains with TIMS
+fractions; lists the LA-ICP-MS sessions newest first and up to 20 fractions;
+and offers Review session, Review this mount, Close and Back to the previous
+spot. Picking a spot or changing scope clears the summary. This is a read-only
+view, including View as mode.
+
+The summary uses the current mount rows or one cached, revalidated mount
+results read, plus the existing bounded TIMS fraction reader. It makes no
+per-spot or per-session reads. Area and sample membership comes from the
+viewer’s atlas spot ids; a sample with no matching ids falls back to its
+stored sample name and says so. UPbDB’s additive `session_started_at`,
+`sample_id` and `sample_name` fields are optional. Session dates fall back to
+the loaded session list, and unavailable dates and TIMS endpoints are stated.

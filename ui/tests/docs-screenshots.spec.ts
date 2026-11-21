@@ -25,7 +25,7 @@ const contentTypes: Record<string, string> = { '.html': 'text/html', '.js': 'tex
   '.json': 'application/json', '.geojson': 'application/geo+json', '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2', '.woff': 'font/woff', '.png': 'image/png', '.webp': 'image/webp' };
 const screens = ['home', 'sessions', 'images', 'review-concordia', 'review-geochemistry',
-  'review-depth', 'review-images', 'review-groups', 'reduce', 'settings'] as const;
+  'review-depth', 'review-images', 'review-groups', 'review-region', 'reduce', 'settings'] as const;
 type Screen = typeof screens[number];
 let bundle: Map<string, Buffer>;
 
@@ -210,7 +210,7 @@ for (const theme of ['light', 'dark'] as const) for (const [width, height] of [[
     for (const screen of screens) test(`${screen}`, async ({ page, context }) => {
       test.skip(screen === 'sessions' && !existsSync(resolve(upbdbDist, 'index.html')),
         'Sessions screenshot skipped: build the read-only ../upbdb/ui/dist UI first.');
-      test.skip((screen === 'images' || screen === 'review-images' || screen === 'review-groups') && !existsSync(atlasEntry),
+      test.skip((screen === 'images' || screen === 'review-images' || screen === 'review-groups' || screen === 'review-region') && !existsSync(atlasEntry),
         'Atlas screenshot skipped: fetch/build ui/public/modules/grainatlas first.');
       test.setTimeout(60_000);
       const demo = await serveDemo(context);
@@ -219,7 +219,7 @@ for (const theme of ['light', 'dark'] as const) for (const [width, height] of [[
         store: { mode: 'server', serverUrl: server, lastTab: screen.startsWith('review-') || screen === 'images' ? 'review' : screen === 'settings' || screen === 'reduce' ? 'home' : screen,
           theme, themeChosen: true, updateAuto: false, reviewSplit: false,
           reviewScope: JSON.stringify({ kind: 'session', id: scope.session, run: 'preferred' }),
-          reviewInset: { width: screen === "review-groups" ? 300 : 200, collapsed: false } },
+          reviewInset: { width: (screen === "review-groups" || screen === "review-region") ? 300 : 200, collapsed: false } },
         fixtures: api, signedIn: true, studioFound: true, renderModules: true,
       });
       await page.goto('./');
@@ -236,7 +236,10 @@ for (const theme of ['light', 'dark'] as const) for (const [width, height] of [[
 async function showFocus(page: Page) {
   const spot = page.locator(`[data-spot-key="${scope.focusKey}"]`);
   if (!await spot.isVisible()) {
-    const sample = scope.focusLabel.replace(/_\d+$/, '');
+    const table = api[`/v1/sessions/${scope.session}/results?run=preferred`] as { rows: Record<string, unknown>[] };
+    const row = table.rows.find(row => (row.acquisition_id ?? row.spot_id ?? row.atlas_spot_id ?? row.label) === scope.focusKey);
+    const sample = row?.sample_name;
+    expect(sample, `Sample for fixture spot ${scope.focusKey}`).toBeTruthy();
     await page.getByRole('button', { name: `Expand ${sample}`, exact: true }).click();
   }
   await expect(spot).toBeVisible();
@@ -246,7 +249,7 @@ async function showFocus(page: Page) {
 
 async function prepareScreen(page: Page, screen: Screen, demo: Awaited<ReturnType<typeof serveDemo>>, theme: string) {
   if (screen.startsWith('review-')) {
-    if (screen === 'review-groups') {
+    if (screen === 'review-groups' || screen === 'review-region') {
       await page.getByRole('checkbox', { name: 'Group unregistered by spot name', exact: true }).check();
       await page.getByRole('button', { name: 'All', exact: true }).click();
       const samples = page.getByRole('treeitem', { name: 'Samples', exact: true });
@@ -261,6 +264,35 @@ async function prepareScreen(page: Page, screen: Screen, demo: Awaited<ReturnTyp
       const enlarge = frame.getByTestId('mount-inset-enlarge');
       if (await enlarge.isEnabled() && await enlarge.getAttribute('aria-label') === 'Larger mount map') await enlarge.click();
       await readyAtlas(page, demo, theme, false);
+      if (screen === 'review-region') {
+        const supportsRegion = await frame.evaluate(async () => {
+          const scripts = new Set([...document.scripts].map(script => script.src).filter(Boolean));
+          for (const entry of performance.getEntriesByType('resource')) {
+            if (new URL(entry.name).pathname.endsWith('.js')) scripts.add(entry.name);
+          }
+          const sources = await Promise.all([...scripts].map(async src => (await fetch(src)).text()));
+          return sources.some(source => source.includes('lab.viewer.region'));
+        });
+        if (supportsRegion) {
+          await frame.getByTestId('mount-inset-group').first().click();
+        } else {
+          console.info('review-region: GrainAtlas build predates lab.viewer.region; emitting a sample-region event.');
+          const result = api[`/v1/sessions/${scope.session}/results?run=preferred`] as { rows: Record<string, unknown>[] };
+          const first = result.rows.find(row => row.sample_name && row.kind === 'sample') ?? result.rows[0];
+          const mounts = api['/v1/mounts'] as { id: string; label: string }[];
+          const event = { type: 'lab.viewer.region', kind: 'sample', project: scope.project,
+            mount: first.mount_id ?? mounts[0]?.id ?? null, mountLabel: mounts.find(mount => mount.id === first.mount_id)?.label ?? mounts[0]?.label ?? '',
+            area: 'screenshot-area', areaLabel: 'Sample region', sample: String(first.sample_name ?? 'Sample'),
+            spots: result.rows.filter(row => row.sample_name === first.sample_name).flatMap(row => typeof row.atlas_spot_id === 'string' ? [row.atlas_spot_id] : []) };
+          await page.evaluate(event => (window as unknown as { __emit(name: string, payload: unknown): Promise<void> })
+            .__emit('lab-bridge://notify', { event, source: 'images' }), event);
+        }
+        await page.getByRole('button', { name: 'Restore SEM images', exact: true }).click();
+        const expand = page.getByRole('button', { name: 'Expand Spot metadata', exact: true });
+        if (await expand.isVisible()) await expand.click();
+        await expect(page.getByTestId('region-summary')).toBeVisible();
+        await expect(page.getByTestId('region-summary').getByText('Loading…', { exact: true })).toHaveCount(0);
+      }
     } else {
       await (await showFocus(page)).click();
     }
@@ -286,8 +318,8 @@ async function prepareScreen(page: Page, screen: Screen, demo: Awaited<ReturnTyp
         .getByRole('button', { name: 'Edit in grainatlas', exact: true })).toBeVisible();
     }
     // Shell plots are uPlot canvases, not SVG. Wait for their real renderers.
-    if (screen !== 'review-groups') await expect(page.getByTestId('review-view').locator('.uplot canvas').first()).toBeVisible();
-    if (screen !== 'review-depth' && screen !== 'review-groups') await expect(page.getByTestId('review-view').locator(`[data-point-key="${scope.focusKey}"]`).first()).toBeAttached();
+    if (screen !== 'review-groups' && screen !== 'review-region') await expect(page.getByTestId('review-view').locator('.uplot canvas').first()).toBeVisible();
+    if (screen !== 'review-depth' && screen !== 'review-groups' && screen !== 'review-region') await expect(page.getByTestId('review-view').locator(`[data-point-key="${scope.focusKey}"]`).first()).toBeAttached();
     return;
   }
   if (screen === 'images') {

@@ -4,6 +4,7 @@ import { atlasStatusFixture } from '../../tests/fixtures/atlas-sync';
 import { atlasSync } from './atlas-sync.svelte';
 import { MESSAGE_TAG, PROTOCOL_VERSION, type BridgeCommand } from '@lab/bridge';
 
+vi.mock('./review.svelte', () => ({ review: { showRegion: vi.fn(async () => {}) } }));
 vi.mock('./platform', () => ({
   isDesktop: false,
   logInfo: vi.fn(async () => {}),
@@ -239,5 +240,29 @@ describe('Images presentation delivery', () => {
     expect(dispatchSpotAction).not.toHaveBeenCalled();
     onModuleEvent(action, 'images');
     expect(dispatchSpotAction).toHaveBeenCalledWith(action, 'grainatlas');
+  });
+});
+
+const { review } = await import('./review.svelte');
+describe('viewer regions', () => {
+  const region = { type: 'lab.viewer.region', kind: 'sample', project: 'p', mount: 'm', mountLabel: 'Demo',
+    area: 'a', areaLabel: 'Area A', sample: 'Sample A', spots: ['s'] };
+  it('accepts a validated images event while the split Review is active', () => {
+    shell.view = 'review'; settings.reviewSplit = true;
+    onModuleEvent(region, 'images');
+    expect(review.showRegion).toHaveBeenCalledExactlyOnceWith(region, 'images');
+  });
+  it('ignores malformed events and events from other modules', () => {
+    shell.view = 'review'; settings.reviewSplit = true;
+    onModuleEvent({ ...region, spots: [1] }, 'images');
+    onModuleEvent(region, 'sessions');
+    expect(review.showRegion).not.toHaveBeenCalled();
+  });
+  it('ignores inactive Review and solo Review', () => {
+    shell.view = 'home'; settings.reviewSplit = true;
+    onModuleEvent(region, 'images');
+    shell.view = 'review'; settings.reviewSplit = false;
+    onModuleEvent(region, 'images');
+    expect(review.showRegion).not.toHaveBeenCalled();
   });
 });

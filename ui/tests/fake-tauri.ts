@@ -6,7 +6,6 @@
 export interface FakeOptions {
   /** Stored settings (plugin-store); mode '' shows the first-run wizard. */
   store: Record<string, unknown>;
-  appVersion?: string;
   update?: { version: string; currentVersion: string; notes: string | null; date: string | null; ready: boolean };
   fixtures?: Record<string, unknown>;
   standards?: { warning: boolean; message: string; changed: string[] };
