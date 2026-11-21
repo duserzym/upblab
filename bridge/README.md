@@ -41,11 +41,12 @@ inside a module webview is intercepted and routed like `open()`.
 
 The shell side of the `postMessage` transport is `createFrameHost` from
 `@lab/bridge/host`. The wire format is in `src/protocol.ts`
-(`PROTOCOL_VERSION` 5, `PROTOCOL_MINOR` 2; version 1 had `open`, `token` and
+(`PROTOCOL_VERSION` 5, `PROTOCOL_MINOR` 4; version 1 had `open`, `token` and
 `notify`, version 2 added `open-files`, version 3 added commands and spot
 selection, version 3.1 added theme, version 4 added atlas sync, version 5 the
-viewer presentation and spot actions, version 5.1 the viewer's inset, and
-version 5.2 Review sample groups in that inset).
+viewer presentation and spot actions, version 5.1 the viewer's inset,
+version 5.2 Review sample groups in that inset, version 5.3 oversight scope,
+and version 5.4 viewer region events).
 
 ## `review-spots`: Review overlays and mount inset
 
@@ -456,6 +457,33 @@ viewer never writes storage, so the shell remembers the inset for the user:
   `notify({ type: 'lab.viewer.inset', width, collapsed })`
   (`ATLAS_EVENTS.viewerInset`, normalised by `viewerInset()`). It does not
   send one when it applies a received inset. An older shell ignores the event.
+
+## Viewer region (protocol 5.4)
+
+After the user clicks the viewer's mount inset title, an area or a sample
+region, the viewer zooms there and sends this event through `notify`:
+
+```ts
+await notify({
+  type: ATLAS_EVENTS.viewerRegion, kind: 'sample', project, mount, mountLabel,
+  area, areaLabel, sample, spots,
+});
+```
+
+`ViewerRegionEvent.kind` is `'mount'`, `'area'` or `'sample'`. `project` is
+the GrainAtlas project id; `mount` is the UPbDB mount id or null when unknown.
+`mountLabel` is for display only and may be the project name. `area` and
+`areaLabel` are null for a mount, otherwise its area id and label. `sample`
+is the Review sample-group name for a sample region, otherwise null.
+
+The shell uses the region to summarise counts, LA-ICP-MS sessions and TIMS
+fractions. `spots` contains the region's atlas spot ids; for a mount it is
+empty and the shell takes every spot of that mount. `viewerRegion(event)`
+returns a clean copy with deduplicated spots or null for malformed input.
+Ids have 1–200 characters, labels and sample names at most 500, and the input
+spot array at most `VIEWER_REGION_MAX_SPOTS` (20000) entries before
+deduplication. Extra fields are ignored. Older shells ignore this event;
+newer shells never require it.
 
 ## Adopting the bridge in a module
 

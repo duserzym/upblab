@@ -21,9 +21,11 @@
 //   5.2 review-spots may carry `groups` for sample-coloured mount inset outlines.
 //   5.3 oversight read and change event: viewAs and per-operation onBehalf.
 //       A newer module on an older shell gets null; older modules ignore the event.
+//   5.4 lab.viewer.region: the viewer reports a clicked mount, area or sample
+//       region for the shell to summarise. Older shells ignore the event.
 
 export const PROTOCOL_VERSION = 5;
-export const PROTOCOL_MINOR = 3;
+export const PROTOCOL_MINOR = 4;
 
 export interface OversightState {
   viewAs: { username: string; name: string } | null;
@@ -111,6 +113,8 @@ export const ATLAS_EVENTS = {
   spotAction: 'lab.spot.action',
   /** v5.1: the viewer's mount inset was resized, collapsed or expanded; the shell stores it. */
   viewerInset: 'lab.viewer.inset',
+  /** v5.4: the user clicked the viewer's mount inset (title, area or sample region); the shell summarises it. */
+  viewerRegion: 'lab.viewer.region',
 } as const;
 
 /** A module event for the shell (timeline entries, status, title changes). */
@@ -307,6 +311,28 @@ export interface SetPresentationCommand {
   inset?: ViewerInset;
 }
 export interface ViewerInsetEvent extends BridgeEvent, ViewerInset { type: 'lab.viewer.inset' }
+
+export type ViewerRegionKind = 'mount' | 'area' | 'sample';
+export interface ViewerRegionEvent extends BridgeEvent {
+  type: 'lab.viewer.region';
+  kind: ViewerRegionKind;
+  /** GrainAtlas project (atlas) id. */
+  project: string;
+  /** UPbDB mount id when the viewer knows it, else null. */
+  mount: string | null;
+  /** Mount label as the viewer shows it (may be the project name), for display only. */
+  mountLabel: string;
+  /** Area id and its label; null for kind 'mount'. */
+  area: string | null;
+  areaLabel: string | null;
+  /** Review sample-group name for kind 'sample'; null otherwise. */
+  sample: string | null;
+  /** Atlas spot ids inside the region (deduplicated, at most VIEWER_REGION_MAX_SPOTS);
+   *  empty for kind 'mount' (the shell takes every spot of the mount). */
+  spots: string[];
+}
+export const VIEWER_REGION_MAX_SPOTS = 20000;
+
 function isInset(value: unknown): value is ViewerInset {
   return isRecord(value) && typeof value.collapsed === 'boolean' && Number.isInteger(value.width) &&
     (value.width as number) >= INSET_WIDTH.min && (value.width as number) <= INSET_WIDTH.max;
@@ -452,6 +478,32 @@ export function spotAction(event: unknown): SpotActionEvent | null {
 export function viewerInset(event: unknown): ViewerInsetEvent | null {
   if (!isRecord(event) || event.type !== ATLAS_EVENTS.viewerInset || !isInset(event)) return null;
   return { type: ATLAS_EVENTS.viewerInset, width: event.width, collapsed: event.collapsed };
+}
+
+/** v5.4: normalise a viewer region report; anything malformed is null. */
+export function viewerRegion(value: unknown): ViewerRegionEvent | null {
+  const isRegionId = (x: unknown): x is string => typeof x === 'string' && x.length >= 1 && x.length <= 200;
+  const isLabel = (x: unknown): x is string => typeof x === 'string' && x.length <= 500;
+  if (!isRecord(value) || value.type !== ATLAS_EVENTS.viewerRegion ||
+      (value.kind !== 'mount' && value.kind !== 'area' && value.kind !== 'sample') ||
+      !isRegionId(value.project) || (value.mount !== null && !isRegionId(value.mount)) ||
+      !isLabel(value.mountLabel) ||
+      (value.area !== null && !isRegionId(value.area)) ||
+      (value.areaLabel !== null && !isLabel(value.areaLabel)) ||
+      (value.sample !== null && !isLabel(value.sample)) ||
+      (value.kind === 'mount' ? value.area !== null || value.areaLabel !== null :
+        value.area === null || value.areaLabel === null) ||
+      (value.kind === 'sample' ? value.sample === null : value.sample !== null) ||
+      !Array.isArray(value.spots) || value.spots.length > VIEWER_REGION_MAX_SPOTS ||
+      (value.kind === 'mount' && value.spots.length !== 0)) return null;
+  const spots = new Set<string>();
+  for (const spot of value.spots) {
+    if (!isRegionId(spot)) return null;
+    spots.add(spot);
+  }
+  return { type: ATLAS_EVENTS.viewerRegion, kind: value.kind, project: value.project,
+    mount: value.mount, mountLabel: value.mountLabel, area: value.area,
+    areaLabel: value.areaLabel, sample: value.sample, spots: [...spots] };
 }
 
 /** Normalise current and legacy spot selections; reject malformed ids and fields. */
