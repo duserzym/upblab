@@ -99,7 +99,7 @@ UPb Lab implementation.
    letters, digits, `.`, `_` and `-`. The feed URLs use the safe names without
    percent-encoding; GitHub renames uploaded assets containing spaces, which
    would otherwise break the updater URLs. No new dependencies are needed.
-4. Upload exactly the files printed under `Files to upload` to the matching
+5. Upload exactly the files printed under `Files to upload` to the matching
    `v<version>` GitHub release: the safe-named updater archives and `.sig`
    files, `latest.json`, and the safe-named disk image when `--dmg` was supplied.
    Include `--dmg` when preparing a macOS release so the list includes it.
