@@ -84,6 +84,24 @@ makes to it follows these rules:
 - **Measure** request count and time before and after a change that touches
   server calls, and test with a large mocked list (thousands of rows).
 
+## UPb Mobile parity
+
+UPb Mobile (`../upbmobile`, private) is UPb Lab on the iPhone and iPad, view
+and control only. Every change to what desktop UPb Lab shows or lets people
+do must be reflected there, in the same piece of work:
+
+- update the parity table in upbmobile `ROADMAP.md` (the row for the feature,
+  its priority and the UPbDB API behind it), and the app itself once the
+  screen exists; or
+- when the mobile side cannot be done now, add a dated entry to upbmobile
+  `SYNC_BACKLOG.md` naming the UPb Lab commit, what changed and what the
+  phone should show.
+
+Mobile parity is read-only: a desktop feature that edits, uploads, reduces or
+changes access appears on the phone as a view of its result (or "Desktop
+only"), never as an edit. The supervisor commits the upbmobile change in that
+repository; Codex in this repository only notes it in its final message.
+
 ## After a major update
 
 Rust and PyInstaller builds fill the disk quickly. Once the work is pushed and
