@@ -147,6 +147,13 @@ for (const desktop of [true, false]) for (const [width, height] of [[1280, 800],
     await page.getByLabel('Lab', { exact: true }).selectOption('demo-lab');
     await expect(page.getByTestId('session-card')).toHaveCount(1);
     await expect.poll(() => requests.some(r => r.path === '/v1/sessions' && ['owner=cedar', 'team=Demo+team', 'project=DEMO', 'lab=demo-lab'].every(q => r.query.includes(q)))).toBe(true);
+    await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
+    const sessionsFrame = page.locator(desktop ? 'iframe[data-fake-module="sessions"]' : 'iframe[title="UPbDB"]');
+    await expect(sessionsFrame).toBeVisible();
+    await expect(sessionsFrame).toHaveAttribute('src', /#\/timeline\?owner=cedar&team=Demo\+team&project=DEMO&lab=demo-lab$/);
+    await expect(page.getByRole('region', { name: 'Narrow data by person, team and project' })).toHaveCount(0);
+    expect(await sessionsFrame.boundingBox()).toEqual({ x: 0, y: 48, width, height: height - 48 });
+    await page.getByRole('tab', { name: 'Home', exact: true }).click();
     await page.getByRole('button', { name: 'Records · Samples and Projects', exact: true }).click();
     await expect(page.getByTestId('samples-row')).toContainText('Owner: Cedar Analyst');
     await expect(page.getByTestId('projects-row')).toContainText('Owner: Moss Analyst');
@@ -156,8 +163,9 @@ for (const desktop of [true, false]) for (const [width, height] of [[1280, 800],
     expect(requests.some(r => r.path === '/v1/samples' && r.query.includes('after=sample%2Fnext'))).toBe(true);
     await page.getByTestId('samples-row').first().getByRole('button').click();
     await expect(page.getByRole('tab', { name: 'Sessions', exact: true })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByLabel('Person', { exact: true }).filter({ visible: true })).toHaveValue('cedar');
+    await expect(sessionsFrame).toHaveAttribute('src', /#\/samples\/sample-one$/);
     await page.getByRole('tab', { name: 'Home', exact: true }).click();
+    await expect(page.getByLabel('Person', { exact: true })).toHaveValue('cedar');
     await page.getByRole('button', { name: 'Overview', exact: true }).click();
     await expect(page.getByTestId('home-pins')).toBeVisible();
     await page.getByLabel('View as', { exact: true }).selectOption('cedar');

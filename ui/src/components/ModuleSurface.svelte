@@ -48,6 +48,7 @@
     return { x: Math.round(r.left), y: Math.round(r.top), width: Math.round(r.width), height: Math.round(r.height), viewportHeight: window.innerHeight };
   }
 
+  // UPbDB renders the Timeline filters. Pass in the initial scope from Home.
   const scopedHome = $derived(module === 'sessions' || module === 'people' ? withOversight(home, oversight, module === 'sessions') : home);
   const scopedTarget = $derived(target && (module === 'sessions' || module === 'people') ? { ...target, url: withOversight(target.url, oversight) } : target);
   let lastScope = '';
