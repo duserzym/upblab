@@ -1,6 +1,6 @@
 [package]
 name = "upbstudio"
-version = "0.1.5"
+version = "0.1.6"
 description = "UPb Lab: the unified desktop shell for the lab's LA-ICP-MS workflow"
 authors = ["Yiming Zhang"]
 license = "MIT"
