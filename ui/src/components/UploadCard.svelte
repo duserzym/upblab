@@ -39,7 +39,7 @@
     {#if !isDesktop && sessions}<button class="btn" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => filesInput?.click()}>Choose session files…</button>{/if}
     {#if card.open || card.error}<button class="btn" aria-label="Dismiss {sessions ? 'session' : 'image'} upload" onclick={() => { card.close(); card.error = ''; }}>Dismiss</button>{/if}
   </div>
-  <p class="muted small">{sessions ? 'Rich CSV, per-spot folder, or both. Opens the ingest dialog in Sessions.' : isDesktop ? 'SEM package folder, .grainatlas folder or .gaproj file. Opens in standalone grainatlas.' : 'Open grainatlas in a new browser tab and drop the files there.'}</p>
+  <p class="muted small">{sessions ? 'Upload a Rich CSV, a per-spot folder, or both in Sessions. Then choose mounts and review the spot pairs.' : isDesktop ? 'SEM package folder, .grainatlas folder or .gaproj file. Opens in standalone grainatlas.' : 'Open grainatlas in a new browser tab and drop the files there.'}</p>
   {#if !sessions && !isDesktop}<a class="btn" href={shell.homeUrl('images')} target="_blank" rel="noopener">Open grainatlas</a>{/if}
   {#if !isDesktop}
     <input bind:this={folderInput} aria-label="{sessions ? 'Session' : 'Image set'} folder" type="file" webkitdirectory multiple hidden onchange={() => chosen(folderInput)} />
