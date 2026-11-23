@@ -1,5 +1,6 @@
 import type { OutboxEntry } from './outbox.svelte';
 import type { BatchDetail, FractionStepRecord, SpikeAddition } from './tims-api';
+import { spikeMassUsed } from './tims-spiking';
 /** Shared by Review and TIMS so unrelated outbox deliveries never refresh chemistry. */
 export function batchAffected(batch: BatchDetail, objectKey: string) {
   return objectKey === `batch:${batch.id}` || objectKey === `capsule_set:${batch.capsule_set_id}` ||
@@ -34,7 +35,11 @@ export function overlayBatch(base: BatchDetail, entries: readonly OutboxEntry[])
         const common = { id: `local:${entry.id}`, created_at: entry.createdAt, updated_at: entry.createdAt, created_by_id: entry.accountId, fraction_id, step_id };
         if (path[9] === 'spike') {
           const previous = batch.spikes.find(r => r.fraction_id === fraction_id && r.step_id === step_id);
-          const spike = { ...common, id: previous?.id ?? common.id, spike_version_id: String(body.spike_version_id ?? batch.steps.find(s => s.id === step_id)?.parameters.spike_version ?? ''), spike_weight_g: String(body.spike_weight_g), bottle_before_g: null, bottle_after_g: null, bottle_difference_g: null, notes: '', warnings: [], ...body } as SpikeAddition;
+          const spike = { ...common, id: previous?.id ?? common.id, created_at: previous?.created_at ?? common.created_at,
+            spike_version_id: String(body.spike_version_id ?? batch.steps.find(s => s.id === step_id)?.parameters.spike_version ?? ''),
+            spike_weight_g: String(body.spike_weight_g), bottle_before_g: null, bottle_after_g: null,
+            bottle_difference_g: spikeMassUsed(String(body.bottle_before_g ?? ''), String(body.bottle_after_g ?? '')) || null,
+            notes: '', warnings: previous?.warnings ?? [], ...body } as SpikeAddition;
           batch.spikes = [...batch.spikes.filter(r => r !== previous), spike]; mark(`spike:${fraction_id}:${step_id}`);
         } else {
           const previous = batch.fraction_step_records.find(r => r.fraction_id === fraction_id && r.step_id === step_id);

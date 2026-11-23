@@ -7,6 +7,8 @@
   import { recipeDefaults } from '../../lib/tims-defaults';
   import { outbox, onlineOnlyReason } from '../../lib/outbox.svelte';
   import { OnlineAction, ReplyScope } from '../../lib/tims-requests';
+  import ColumnProtocol from './ColumnProtocol.svelte';
+  import { columnProtocol } from '../../lib/tims-protocol';
   import ParameterFields from './ParameterFields.svelte';
   import History from './History.svelte';
   let { lab, methods }: { lab: string; methods: MethodCode[] } = $props();
@@ -42,6 +44,7 @@
 <button class="btn" type="button" disabled={!editable || !recipeDefaults(selected?.mineral ?? mineral).length} onclick={() => steps = recipeDefaults(selected?.mineral ?? mineral)}>Reset to guidebook defaults</button>
 {#each steps as step, index}<section class="panel stack"><div class="row"><h4>{index + 1}. {methods.find(m => m.code === step.method_code)?.name ?? step.method_code}</h4><button type="button" class="btn" disabled={!editable || index === 0} onclick={() => steps = reorder(steps, index, -1)} aria-label={`Move recipe step ${index + 1} up`}>↑</button><button type="button" class="btn" disabled={!editable || index === steps.length - 1} onclick={() => steps = reorder(steps, index, 1)} aria-label={`Move recipe step ${index + 1} down`}>↓</button><button type="button" class="btn" disabled={!editable} onclick={() => steps = steps.filter((_, i) => i !== index)}>Remove step {index + 1}</button></div>
 <ParameterFields definitions={recipeParameters(step, methods)} values={withDefaults(recipeParameters(step, methods), step.parameters)} onchange={v => steps = steps.map((s, i) => i === index ? { ...s, parameters: v } : s)} disabled={!editable} {lab} />
+{#if step.method_code === "SP-TIMS-COL"}<ColumnProtocol reference={columnProtocol(step.parameters.scheme, selected?.mineral ?? mineral)} context={name} />{/if}
 </section>{/each}
 <label>Recipe step method <select bind:value={method} disabled={!editable}><option value="">Choose method</option>{#each methods as m}<option value={m.code}>{m.name}</option>{/each}</select></label><button class="btn" type="button" disabled={!editable || !method} onclick={() => steps = [...steps, { method_code: method, parameters: withDefaults(methods.find(m => m.code === method)?.parameters ?? []) }]}>Add recipe step</button>
 <button class="btn primary" disabled={!editable || saving || creating && !!onlineOnlyReason()}>{creating ? 'Create recipe' : 'Save recipe here'}</button>

@@ -1,9 +1,23 @@
 import { expect, it } from 'vitest';
-import { capsulePucks, grainOutline, sourceOutline } from './tims-geometry';
+import { capsulePucks, grainOutline, puckSlotCoordinates, sourceOutline } from './tims-geometry';
 import { timsFraction } from '../../tests/fixtures/review';
 it('lays out default and partial pucks using the set dimensions', () => {
   expect(capsulePucks()).toEqual([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10], [11, 12, 13, 14, 15]]);
   expect(capsulePucks(7, 3)).toEqual([[1, 2, 3], [4, 5, 6], [7]]); expect(capsulePucks(0)).toEqual([]);
+});
+it('runs clockwise from the front left to the front right, leaving the sixth position at the notch', () => {
+  const [one, two, three, four, five] = Array.from({ length: 5 }, (_, index) => puckSlotCoordinates(index, 5));
+  expect(one.x).toBeLessThan(50);
+  expect(two.x).toBeCloseTo(one.x);
+  expect(three.x).toBeCloseTo(50);
+  expect(four.x).toBeCloseTo(five.x);
+  expect(one.x + five.x).toBeCloseTo(100);
+  expect(five.x).toBeGreaterThan(50);
+  expect(one.y).toBeCloseTo(five.y);
+  expect(two.y).toBeCloseTo(four.y);
+  expect(three.y).toBeLessThan(two.y);
+  expect(two.y).toBeLessThan(one.y);
+  expect(Math.hypot(one.x - 50, one.y - 50)).toBeCloseTo(33);
 });
 it('scales a grain with equal aspect ratio and projects its LA spot, or returns a neutral placeholder', () => {
   expect(grainOutline([[100, 200], [300, 200], [300, 300], [100, 300]], { x_um: 200, y_um: 250 })).toEqual({ points: '10,30 90,30 90,70 10,70', dot: [50, 50] });

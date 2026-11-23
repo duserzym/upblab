@@ -8,13 +8,77 @@ TIMS section. Opening a batch also selects its lab when that lab is loaded.
 
 Batches lists one page at a time. Capsule set, inclusive start dates and fraction
 status are remembered per account and server, outside the URL. New batch forms
-use active capsule sets and mineral-specific active recipes. The batch page
-shows stored chemistry, a capsule grid, sources, step records and spike additions.
-Selecting a capsule opens a drawer inside the grid. The step-by-capsule matrix
-shows effective values and opens the corresponding capsule record. Status changes
-are explicit; chemistry writes do not change fraction status.
+use active capsule sets and mineral-specific active recipes. On a five-position
+puck, numbering starts at the front left and proceeds clockwise to the front
+right. The top view shows the centre stem hole and the notch facing front
+between the first and last positions on each puck. See the
+[Boise State shop drawing](https://www.boisestate.edu/earth-isotope/labshare/design-instructions-shop-drawings/).
 
-Grain thumbnails in capsule cells (72 px), the capsule drawer (180 px) and
+Select an empty capsule and choose **GrainAtlas**. Choose a mount and click
+a grain image. All registered associated LA spots are selected by default.
+Loading the capsule creates one fraction with the selected sources in one
+request. In an occupied capsule, **Browse GrainAtlas** links an additional source.
+UPbDB accepts one source per request on an existing fraction. The picker
+pages searchable mount lists, reuses the selected mount's element snapshot
+and shows grain thumbnails progressively. UPbDB supplies elements as a single
+mount snapshot rather than a paged grain list.
+
+For an unmounted sample, register it in UPbDB with its project and metadata.
+In an empty capsule, choose **TIMS only**, search by sample name or IGSN and
+select the registered record. This list includes all registered samples except
+those whose **Material** is **Lab blank** (ignoring case and surrounding spaces).
+The sample's **Purpose** does not affect the list.
+Choose the mineral and assign the fraction to the capsule. UPb Lab creates
+the fraction with an empty source list and displays its TIMS-only preparation.
+
+For process blanks, register a reusable sample for the lab or project with
+**Lab blank** in **Material** and include “blank” in the sample name. Choose
+**Lab blank** on an empty capsule and select that sample. Each assignment
+creates a separate fraction and opens Spiking when the batch has a Spiking
+step. Use the usual bottle readings and comments. The blank consumes spike
+in the same bottle sequence as the other capsules in the session.
+
+Sample registration uses UPbDB's staff admin form. The capsule assignment
+uses the existing fraction API, with the preparation stored alongside fraction
+notes. The API requires a registered sample for both kinds of source-free
+fraction.
+
+Select an occupied capsule and choose a step in the side panel to view or
+edit its date, parameters, skipped state, outcome and notes. Batch defaults
+can be overridden per capsule. The matrix opens the corresponding capsule
+record. Chemistry writes leave the explicit fraction status alone.
+
+Open **Batch steps** and edit **Spiking** to log the session date. Choose each
+registered spike version and enter the beginning weight of its bottle. In a
+capsule's **Spiking** pane, choose the bottle, check its composition and enter
+the full bottle weight in grams after dispensing. Record entries in weighing
+order. Each bottle carries its last ending weight forward as the next starting
+weight within that batch session. The capsule records both readings and their
+difference. Use **Spike comment** to record missed drops, uncertain retained
+amounts or other observations alongside the balance readings.
+
+Use **Add another spike entry** when you return to a capsule. The first repeat
+may require an online connection to create a linked step. Each addition has
+its own readings and comment. Once a later entry uses a reading as its starting
+weight, the earlier entry remains available for comment edits. Create a new
+Spiking step in **Batch steps** for a separate session.
+
+UPbDB stores each addition's registered version, measured loss, balance
+readings, comment and creation time. The session's bottle starts are saved in
+its step notes. A future lab-wide usage view can group the additions by
+registered bottle and apply supervisor access on the server.
+
+Use **Column protocol** within **Column chemistry** to open the
+[Boise State U-Th-Pb Lab Guidebook](https://www.boisestate.edu/earth-isotope/labshare/laboratory-handbooks/)
+reference for the selected U–Pb scheme in the system browser. The public
+repository includes the reference only. **Add protocol copy** starts an empty
+editable copy; save it in the batch-step or capsule notes using the usual save
+action. A capsule inherits the batch-step copy unless it has its own copy or
+uses a different scheme. Saved copies can be edited and printed, with guidebook
+attribution retained on the printout. Printing is unavailable without a saved
+copy. Recipes shows the guidebook reference for each column scheme.
+
+Grain thumbnails in capsule positions (36 px), the capsule inspector (104 px) and
 Review's TIMS fractions (120 px) show the published SEM image clipped to the
 stored segmented polygon. They preserve the grain's aspect ratio in a square,
 leave 10 % padding around its bounding box, and draw a thin outline above the

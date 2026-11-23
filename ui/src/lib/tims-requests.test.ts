@@ -4,8 +4,9 @@ vi.mock('./tims-rights.svelte', () => ({ timsRights: { recordReason: () => '', r
 vi.mock('./outbox.svelte', () => ({ outbox: {}, onlineOnlyReason: () => '' }));
 import { identity } from './identity.svelte';
 import { grainImages } from './tims-grain-image-cache';
-import { read } from './tims-api';
-import { batchGeometry, clearTimsNames, operatorAccounts, OnlineAction, ReplyScope } from './tims-requests';
+import { firstPage, read } from './tims-api';
+import { mountGrainChoices } from './tims-capsule-import';
+import { batchGeometry, clearTimsNames, operatorAccounts, OnlineAction, ReplyScope, mountElements } from './tims-requests';
 import { timsBatch, timsFraction } from '../../tests/fixtures/review';
 beforeEach(() => { vi.resetAllMocks(); clearTimsNames(); grainImages.clear(); identity.revision = 1; identity.target = { server: 'https://invented.example' } as typeof identity.target; identity.account!.id = 'invented'; });
 it('requests outlines and missing labels once per distinct mount and publishes progressively for thousands of sources', async () => {
@@ -81,4 +82,25 @@ it('scopes replies to the identity, lab and form, including changes before effec
   identity.target!.server = 'https://other.example'; expect(settled()).toBe(false); identity.target!.server = 'https://invented.example';
   identity.revision++; expect(settled()).toBe(false);
   const reopened = scope.capture(); scope.invalidate(); expect(reopened()).toBe(false); expect(scope.capture()()).toBe(true);
+});
+
+it('opens one mount page and reuses one element snapshot for 5000 grain choices', async () => {
+  const grains = Array.from({ length: 5000 }, (_, n) => ({ id: `a${n}`, server_id: `g${n}`, polygon_um: null }));
+  const elements = { current_project_uuid: 'project', grains, spots: grains.map((grain, n) => ({ id: null, grain_id: grain.id, server_id: `s${n}`, x_um: 0, y_um: 0 })) };
+  const before = performance.now();
+  vi.mocked(identity.get).mockResolvedValue({ status: 200, body: elements });
+  await mountElements('mount');
+  const baseline = performance.now() - before;
+  vi.mocked(identity.get).mockClear();
+  vi.mocked(identity.get).mockResolvedValueOnce({ status: 200, body: [{ id: 'mount' }], nextCursor: 'next' });
+  const start = performance.now();
+  const page = await firstPage<{ id: string }>('/v1/mounts', { limit: '50', q: 'Invented' });
+  const options = mountGrainChoices(await mountElements(page.items[0].id));
+  expect(options).toHaveLength(5000);
+  expect(options.at(-1)?.spots[0]?.server_id).toBe('s4999');
+  expect(page.nextCursor).toBe('next');
+  expect(identity.get).toHaveBeenCalledExactlyOnceWith('/v1/mounts?limit=50&q=Invented');
+  expect(await mountElements('mount')).toBe(elements);
+  expect(identity.get).toHaveBeenCalledTimes(1);
+  console.info(`TIMS picker, 5000 grains and spots: baseline 1 mounted snapshot in ${baseline.toFixed(2)} ms; picker 1 additional paged list and no per-grain requests in ${(performance.now() - start).toFixed(2)} ms (mock network).`);
 });

@@ -1,14 +1,14 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { identity } from '../../lib/identity.svelte';
-  import { read, type SourceOut } from '../../lib/tims-api';
-  import { grainOutline, sourceGeometry, type MountGeometry } from '../../lib/tims-geometry';
+  import { read } from '../../lib/tims-api';
+  import { grainOutline, sourceGeometry, type GrainImageSource, type MountGeometry } from '../../lib/tims-geometry';
   import { grainCrop, type GrainCrop } from '../../lib/tims-grain-image';
   import { grainImages, grainTiles, type AtlasListing, type PublishedGrainAtlas } from '../../lib/tims-grain-image-cache';
   import { grainImageScope, mountElements } from '../../lib/tims-requests';
 
   let { source, mount, size = 72, lazy = false, loadGeometry = false, enabled = true, geometryError = '' }: {
-    source?: SourceOut; mount?: MountGeometry; size?: number; lazy?: boolean; loadGeometry?: boolean; enabled?: boolean; geometryError?: string;
+    source?: GrainImageSource; mount?: MountGeometry; size?: number; lazy?: boolean; loadGeometry?: boolean; enabled?: boolean; geometryError?: string;
   } = $props();
   const uid = $props.id();
   const clipId = `${uid}-grain`;

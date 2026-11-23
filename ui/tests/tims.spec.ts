@@ -3,7 +3,11 @@ import { installFakeTauri, type FakeOptions } from './fake-tauri';
 import { fixtures, batch, lab, plan, recipe, version, solutions } from './fixtures/tims';
 import { routeTimsAtlas } from './tims-atlas-helpers';
 import { problems } from './problems';
-import { fractionStatuses } from '../src/lib/tims-model';
+import { fractionStatuses, statusWords } from '../src/lib/tims-model';
+import { inventedElements } from './fixtures/tims-atlas';
+import { writeCapsulePreparation } from '../src/lib/tims-capsule-intake';
+import { writeSpikingSession } from '../src/lib/tims-spiking';
+import { writeColumnNotes } from '../src/lib/tims-protocol';
 // Preserve the stack in the supervisor's run if a Svelte runtime error recurs.
 const pageErrors = new WeakMap<Page, string[]>();
 test.beforeEach(({ page }) => { const errors: string[] = []; pageErrors.set(page, errors); page.on('pageerror', error => errors.push(error.stack ?? String(error))); });
@@ -30,6 +34,11 @@ async function openBatch(page: Page) {
   await page.getByRole('region', { name: 'Batch list', exact: true }).getByRole('button', { name: 'Krogh · 2026-11-06', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Krogh (K) · 2026-11-06', exact: true })).toBeVisible();
 }
+async function openStep(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Batch steps', exact: true }).click();
+  await page.getByRole('group', { name: 'Choose a batch step' }).getByRole('button', { name: new RegExp(name + '$') }).click();
+  return page.getByRole('article', { name, exact: true });
+}
 async function reply(page: Page, path: string, status: number, body: unknown) {
   await page.evaluate(({ path, status, body }) => { (window as unknown as { __fake: { apiReplies: Record<string, unknown> } }).__fake.apiReplies[path] = { status, body }; }, { path, status, body });
 }
@@ -54,14 +63,101 @@ test('grid has 15 cells, shared atlas crops, labels and per-capsule records', as
   const cellImage = page.getByRole('button', { name: 'K1 z1', exact: true }).getByTestId('tims-grain-image');
   await expect(cellImage).toHaveAttribute('data-image-state', 'ready');
   await expect(cellImage.locator('clipPath polygon')).toHaveCount(1); await expect(cellImage.locator('image[href]')).not.toHaveCount(0);
-  await expect(cellImage.locator('circle')).not.toHaveClass(/\bdot\b/); await expect(page.getByTestId('tims-capsule').last()).toContainText('empty');
+  await expect(cellImage.locator('circle')).not.toHaveClass(/\bdot\b/); await expect(page.getByRole('button', { name: 'K15 empty', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'K1 z1', exact: true }).click(); const drawer = page.getByRole('region', { name: 'Capsule details' }); await expect(drawer).toContainText('Invented mount S'); await expect(drawer).toContainText('Invented grain one');
   await expect(drawer.locator('clipPath polygon')).toHaveCount(1); await expect(drawer.locator('image[href]')).not.toHaveCount(0);
-  expect(await cellImage.locator('clipPath').getAttribute('id')).not.toBe(await drawer.locator('clipPath').getAttribute('id')); await drawer.getByRole('button', { name: 'Chemical abrasion', exact: true }).click(); await expect(drawer).toContainText('overridden');
+  expect(await cellImage.locator('clipPath').getAttribute('id')).not.toBe(await drawer.locator('clipPath').getAttribute('id')); await drawer.getByLabel('Capsule step', { exact: true }).selectOption('ca-step'); await expect(drawer).toContainText('overridden');
   expect(await readCount(page, '/v1/mounts/mount-demo/atlas')).toBe(1);
   await page.getByRole('button', { name: 'Step × capsule matrix' }).click(); await expect(page.getByLabel('Capsule record matrix')).toContainText('180 °C');
   expect(await page.evaluate(() => (window as unknown as { __fake: { calls: [string, { path?: string }][] } }).__fake.calls.filter(([c, a]) => c === 'api_get' && a?.path === '/v1/mounts/mount-demo/elements').length)).toBe(1);
   await page.getByRole('button', { name: 'History', exact: true }).click(); await expect(page.getByRole('region', { name: 'History' })).toContainText('notes: old → new');
+});
+test('loading a grain creates the empty capsule and its selected LA spots with one write', async ({ page }) => {
+  const grain = { ...inventedElements.grains[0], label: 'Invented selectable grain', sample: 'Synthetic-A' };
+  const spot = { ...inventedElements.spots[0], grain_id: grain.id, name: 'Invented spot 1' };
+  const extra = { ...spot, id: 'atlas-2', server_id: 'spot-2', name: 'Invented spot 2' };
+  const template = batch.fractions[0], source = template.sources[0];
+  const added = { ...template, id: 'new-fraction', name: 'z3', status: 'picked', capsule_number: 3, capsule_label: 'K3',
+    sources: [{ ...source, spot_label: spot.name }, { ...source, id: 'source-2', spot_id: extra.server_id, atlas_spot_id: extra.id, spot_label: extra.name }] };
+  await start(page, {
+    fixtures: { '/v1/mounts?limit=50': [{ id: 'mount-demo', label: 'Invented mount S', atlas: { project_id: 'project-demo' } }],
+      '/v1/mounts/mount-demo/elements': { ...inventedElements, grains: [grain], spots: [spot, extra] } },
+    apiReplies: { 'POST /v1/fractions': { status: 201, body: added } },
+  });
+  await openBatch(page);
+  await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
+  await page.getByRole('button', { name: 'GrainAtlas', exact: true }).click();
+  const picker = page.getByRole('region', { name: 'GrainAtlas picker' });
+  await picker.getByRole('combobox', { name: 'Mount', exact: true }).selectOption('mount-demo');
+  await picker.getByRole('button', { name: /Invented selectable grain/ }).click();
+  await expect(picker.getByLabel('Invented spot 1')).toBeChecked();
+  await expect(picker.getByLabel('Invented spot 2')).toBeChecked();
+  await picker.getByRole('button', { name: 'Load into K3' }).click();
+  await expect(page.getByRole('button', { name: 'K3 z3', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Linked LA spots')).toContainText('Invented spot 2');
+  expect(await writes(page)).toMatchObject([{ method: 'POST', path: '/v1/fractions', body: {
+    lab_id: lab, batch_id: batch.id, capsule_number: 3, mineral: 'zircon',
+    sources: [{ grain_id: 'grain-1', spot_id: 'spot-1' }, { grain_id: 'grain-1', spot_id: 'spot-2' }],
+  } }]);
+  expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(1);
+  expect(await readCount(page, `/v1/tims/batches/${batch.id}`)).toBe(1);
+});
+test('assigns an existing sample directly to TIMS without a mount or laser spot', async ({ page }) => {
+  const sample = { id: 'sample-direct', name: 'Invented unmounted sample', material: 'Zircon', igsn: null, project: { code: 'DEMO' } };
+  const notes = writeCapsulePreparation('tims-only', 'Picked by hand');
+  const added = { ...batch.fractions[0], id: 'fraction-direct', sample, name: 'z3', status: 'transferred', capsule_number: 3, capsule_label: 'K3', notes, sources: [] };
+  const path = '/v1/samples?limit=50&q=Invented';
+  await start(page, { fixtures: { [path]: [sample] }, apiReplies: { 'POST /v1/fractions': { status: 201, body: added } } });
+  await openBatch(page);
+  await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
+  await page.getByRole('button', { name: 'TIMS only', exact: true }).click();
+  const form = page.getByRole('region', { name: 'TIMS only setup' });
+  await form.getByRole('searchbox', { name: 'Find a sample' }).fill('Invented');
+  await form.getByRole('button', { name: 'Search', exact: true }).click();
+  await form.getByRole('combobox', { name: 'Sample', exact: true }).selectOption(sample.id);
+  await form.getByLabel('Fraction notes').fill('Picked by hand');
+  await form.getByRole('button', { name: 'Assign sample to K3' }).click();
+  await expect(page.getByRole('button', { name: 'K3 z3 · TIMS only', exact: true })).toBeVisible();
+  expect(await writes(page)).toMatchObject([{ method: 'POST', path: '/v1/fractions', body: { sample_id: sample.id, batch_id: batch.id, capsule_number: 3, sources: [], notes } }]);
+  expect(await readCount(page, path)).toBe(1);
+  expect(await readCount(page, '/v1/mounts?limit=50')).toBe(0);
+});
+test('opens the Spiking pane for a source-free lab blank and saves its measured use', async ({ page }) => {
+  const sample = { id: 'sample-blank', name: 'Invented lab blank', material: 'Lab blank', igsn: null, project: { code: 'DEMO' } };
+  const ordinary = { ...sample, id: 'sample-other', name: 'Invented ordinary sample', material: 'Zircon' };
+  const steps = batch.steps.map(s => s.id === 'spike-step' ? { ...s, notes: writeSpikingSession('', { before: '', after: '' }, [
+    { bottleId: version.subfraction_id, versionId: version.id, label: version.solution_name, before: '25.0000' },
+  ]) } : s);
+  const added = { ...batch.fractions[0], id: 'fraction-blank', sample, name: 'o1', mineral: 'other', status: 'transferred', capsule_number: 3, capsule_label: 'K3',
+    notes: writeCapsulePreparation('lab-blank', ''), sources: [] };
+  const put = `/v1/tims/batches/${batch.id}/fractions/${added.id}/steps/spike-step/spike`;
+  const addition = { ...batch.spikes[0], id: 'spike-blank', fraction_id: added.id, spike_weight_g: '0.0080',
+    bottle_before_g: '25.0000', bottle_after_g: '24.9920', bottle_difference_g: '0.0080', notes: 'Process blank' };
+  const batchPath = `/v1/tims/batches/${batch.id}`;
+  await start(page, { fixtures: { [batchPath]: { ...batch, steps }, '/v1/samples?limit=50&q=blank': [sample, ordinary] },
+    apiReplies: { 'POST /v1/fractions': { status: 201, body: added }, [`PUT ${put}`]: { status: 200, body: addition } } });
+  await openBatch(page);
+  await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
+  await page.getByRole('button', { name: 'Lab blank', exact: true }).click();
+  const form = page.getByRole('region', { name: 'Lab blank setup' });
+  await form.getByRole('button', { name: 'Search', exact: true }).click();
+  const picker = form.getByRole('combobox', { name: 'Lab blank sample' });
+  await expect(picker.getByRole('option')).toHaveCount(2);
+  await picker.selectOption(sample.id);
+  await form.getByRole('button', { name: 'Set K3 as a lab blank' }).click();
+  await expect(page.getByRole('button', { name: 'K3 o1 · Lab blank', exact: true })).toBeVisible();
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  await expect(capsule.getByLabel('Capsule step')).toHaveCount(1);
+  await expect(capsule.getByLabel('Capsule step')).toHaveValue('spike-step');
+  await expect(capsule.getByRole('heading', { name: 'Spiking', exact: true })).toBeVisible();
+  await capsule.getByRole('textbox', { name: 'Bottle after this capsule (g)' }).fill('24.9920');
+  await capsule.getByRole('textbox', { name: 'Spike comment' }).fill('Process blank');
+  await reply(page, batchPath, 200, { ...batch, steps, fractions: [...batch.fractions, added], capsule_map: { ...batch.capsule_map, 3: added.id }, spikes: [...batch.spikes, addition] });
+  await capsule.getByRole('button', { name: 'Save spike here' }).click();
+  await expect.poll(async () => (await writes(page)).map(({ method, path, body }) => ({ method, path, body }))).toMatchObject([
+    { method: 'POST', path: '/v1/fractions', body: { sample_id: sample.id, mineral: 'other', sources: [] } },
+    { method: 'PUT', path: put, body: { spike_weight_g: '0.0080', bottle_before_g: '25.0000', bottle_after_g: '24.9920', notes: 'Process blank' } },
+  ]);
 });
 test('capsules render while atlas metadata is pending, then tiles fill in', async ({ page }) => {
   await start(page);
@@ -108,26 +204,18 @@ test('missing source and operator labels use shared cached names', async ({ page
   await expect(page.getByRole('region', { name: 'Capsule details' })).toContainText('Mount: Shared invented mount · Grain: 3');
   expect(await readCount(page, '/v1/accounts?limit=500')).toBe(1); expect(await readCount(page, '/v1/mounts/mount-demo')).toBe(1); expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(1);
 });
-for (const [width, height] of [[1280, 800], [1024, 640]]) test(`all 15 populated capsule status chips keep words intact at ${width} × ${height}`, async ({ page }) => {
+for (const [width, height] of [[1280, 800], [1024, 640]]) test(`all 15 populated capsule buttons expose their status at ${width} × ${height}`, async ({ page }) => {
   const fractions = Array.from({ length: 15 }, (_, i) => ({ ...batch.fractions[0], id: `invented-capsule-${i + 1}`, name: `z${i + 1}`, capsule_number: i + 1, capsule_label: `K${i + 1}`, status: fractionStatuses[i % fractionStatuses.length] }));
   const populated = { ...batch, fractions, capsule_map: Object.fromEntries(fractions.map(f => [String(f.capsule_number), f.id])) };
   await page.setViewportSize({ width, height }); await start(page, { fixtures: { [`/v1/tims/batches/${batch.id}`]: populated } }); await openBatch(page);
-  await expect(page.getByTestId('tims-capsule').locator('.chip')).toHaveCount(15);
-  expect(await page.getByTestId('tims-capsule').locator('.chip').evaluateAll(chips => chips.flatMap(chip => {
-    const errors: string[] = [];
-    if (chip.scrollWidth > chip.clientWidth + 1) errors.push(`${chip.textContent}: overflow`);
-    const node = chip.firstChild;
-    if (node) for (const word of (node.textContent ?? '').matchAll(/\S+/g)) {
-      const range = document.createRange(); range.setStart(node, word.index!); range.setEnd(node, word.index! + word[0].length);
-      if (range.getClientRects().length !== 1) errors.push(`${word[0]}: broken word`);
-    }
-    return errors;
-  }))).toEqual([]);
+  for (const fraction of fractions) {
+    await expect(page.getByRole('button', { name: `${fraction.capsule_label} ${fraction.name}`, exact: true })).toHaveAttribute('title', new RegExp(statusWords(fraction.status)));
+  }
   expect(await problems(page, 'Populated capsule grid')).toEqual([]);
 });
 test('step edits are durable while offline, then sent with an Idempotency-Key', async ({ page }) => {
   await start(page, { cached: { asOf: '2026-11-06T10:00:00Z', reason: 'unreachable' } }); await openBatch(page);
-  const step = page.getByRole('article', { name: 'Chemical abrasion', exact: true }); await step.getByRole('button', { name: 'Edit step', exact: true }).click(); await step.getByLabel('Temperature (°C)').fill('195'); await step.getByRole('button', { name: 'Save step here' }).click();
+  const step = await openStep(page, 'Chemical abrasion'); await step.getByRole('button', { name: 'Edit step', exact: true }).click(); await step.getByLabel('Temperature (°C)').fill('195'); await step.getByRole('button', { name: 'Save step here' }).click();
   await expect(page.getByRole('complementary', { name: 'Saved edits' })).toContainText('1 edit not sent yet'); expect(await writes(page)).toHaveLength(0);
   const changed = { ...batch, steps: batch.steps.map(s => s.id === 'ca-step' ? { ...s, parameters: { ...s.parameters, temperature_c: 195 } } : s) };
   await reply(page, `PATCH /v1/tims/batches/${batch.id}/steps/ca-step`, 200, changed.steps[0]); await reply(page, `/v1/tims/batches/${batch.id}`, 200, changed); await reply(page, '/v1/accounts/me', 200, { id: 'invented-account', username: 'demo' });
@@ -137,11 +225,11 @@ test('step edits are durable while offline, then sent with an Idempotency-Key', 
 });
 test('422 attention shows the server reason with Retry and Discard', async ({ page }) => {
   await start(page, { apiReplies: { [`PATCH /v1/tims/batches/${batch.id}/steps/ca-step`]: { status: 422, body: { code: 'validation_failed', detail: 'Invented temperature refusal.' } } } }); await openBatch(page);
-  const step = page.getByRole('article', { name: 'Chemical abrasion', exact: true }); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByLabel('Temperature (°C)').fill('195'); await step.getByRole('button', { name: 'Save step here' }).click();
+  const step = await openStep(page, 'Chemical abrasion'); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByLabel('Temperature (°C)').fill('195'); await step.getByRole('button', { name: 'Save step here' }).click();
   const edits = page.getByRole('complementary', { name: 'Saved edits' }); await expect(edits).toContainText('1 needs your attention'); await edits.getByText('1 needs your attention').click(); await expect(edits).toContainText('422'); await expect(edits).toContainText('Invented temperature refusal.'); await expect(edits.getByRole('button', { name: 'Retry' })).toBeVisible(); await edits.getByRole('button', { name: 'Discard' }).click(); await expect(edits).toHaveCount(0);
 });
 test('spike picker reviews composition and non-current warning before applying a registered version', async ({ page }) => {
-  await start(page); await openBatch(page); const step = page.getByRole('article', { name: 'Spiking', exact: true }); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByRole('button', { name: 'Choose spike version' }).click();
+  await start(page); await openBatch(page); const step = await openStep(page, 'Spiking'); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByRole('button', { name: 'Choose spike version' }).click();
   const picker = page.getByRole('region', { name: 'Spike version picker' }); await expect(picker.getByLabel('Solution', { exact: true }).getByRole('option')).toHaveCount(solutions.length + 1); await picker.getByLabel('Solution', { exact: true }).selectOption('synthetic-solution'); await picker.getByLabel('Subfraction', { exact: true }).selectOption('synthetic-bottle'); await picker.getByLabel('Version', { exact: true }).selectOption(version.id);
   await expect(picker.getByRole('region', { name: 'Spike composition' })).toContainText('0.001 mol/g'); await expect(picker).toContainText('uncertainty not given'); await expect(picker).toContainText('not current'); expect(await writes(page)).toHaveLength(0);
   await picker.getByRole('button', { name: 'Apply reviewed version' }).click(); await expect(picker).toHaveCount(0); expect(await writes(page)).toHaveLength(0);
@@ -151,9 +239,95 @@ test('spike picker reviews composition and non-current warning before applying a
   expect(await readCount(page, '/v1/tims/spikes?limit=500')).toBe(1);
 });
 test('new recipes and reset fill guidebook defaults for review before saving', async ({ page }) => {
-  await start(page); await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Recipes', exact: true }).click(); await page.getByRole('button', { name: 'New recipe', exact: true }).click(); const editor = page.getByRole('region', { name: 'Recipe editor' }); await expect(editor.getByLabel('Temperature (°C)').first()).toHaveValue('900'); await expect(editor.getByLabel('Duration (h)').first()).toHaveValue('60'); expect(await writes(page)).toHaveLength(0);
+  await start(page); await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Recipes', exact: true }).click(); await page.getByRole('button', { name: 'New recipe', exact: true }).click(); const editor = page.getByRole('region', { name: 'Recipe editor' }); await expect(editor.getByLabel('Temperature (°C)').first()).toHaveValue('900'); await expect(editor.getByLabel('Duration (h)').first()).toHaveValue('60');
+  await editor.getByText('Column protocol', { exact: true }).click();
+  await expect(editor.getByRole('link', { name: 'Boise State U-Th-Pb Lab Guidebook, U-Pb separation (HCl anion)', exact: true })).toHaveAttribute('href', guidebookUrl);
+  await expect(editor.getByRole('button', { name: 'Print column protocol' })).toHaveCount(0);
+  expect(await writes(page)).toHaveLength(0);
   await editor.getByRole('button', { name: 'Close recipe' }).click(); await page.getByRole('button', { name: recipe.name, exact: true }).click(); await editor.getByRole('button', { name: 'Reset to guidebook defaults' }).click(); await expect(editor.getByLabel('Temperature (°C)').first()).toHaveValue('900'); expect(await writes(page)).toHaveLength(0);
 });
+const guidebookUrl = 'https://www.boisestate.edu/earth-isotope/labshare/laboratory-handbooks/';
+const columnStep = {
+  ...batch.steps[0], id: 'column-step', ordinal: 4, method_code: 'SP-TIMS-COL', method_name: 'Column chemistry',
+  parameters: { scheme: 'HCl anion' },
+  parameter_definitions: [{ name: 'scheme', meaning: 'Scheme', type: 'choice', choices: ['HCl anion', 'HBr-HCl'] }],
+  notes: 'Invented batch note',
+};
+
+test('column reference opens externally and starts an empty batch copy that can be saved and printed', async ({ page }) => {
+  const populated = { ...batch, steps: [...batch.steps, columnStep] };
+  const copy = 'Invented batch protocol\nChecklist:\nRecord the trial identifier.';
+  const saved = { ...columnStep, notes: writeColumnNotes(columnStep.notes, copy) };
+  await start(page, { fixtures: { [`/v1/tims/batches/${batch.id}`]: populated }, apiReplies: {
+    [`PATCH /v1/tims/batches/${batch.id}/steps/${columnStep.id}`]: { status: 200, body: saved },
+  } });
+  await openBatch(page);
+  const step = await openStep(page, 'Column chemistry');
+  await step.getByText('Column protocol', { exact: true }).click();
+  const link = step.getByRole('link', { name: 'Boise State U-Th-Pb Lab Guidebook, U-Pb separation (HCl anion)', exact: true });
+  await expect(link).toHaveAttribute('href', guidebookUrl);
+  await expect(step.getByRole('button', { name: 'Print column protocol' })).toHaveCount(0);
+  await expect(step.locator('.column-protocol')).toHaveCount(0);
+  await link.click();
+  await expect.poll(() => page.evaluate(url => (window as unknown as { __fake: { calls: [string, { url?: string }][] } }).__fake.calls.some(([command, args]) => command === 'plugin:opener|open_url' && args?.url === url), guidebookUrl)).toBe(true);
+  await step.getByRole('button', { name: 'Edit step', exact: true }).click();
+  await step.getByText('Column protocol', { exact: true }).click();
+  await step.getByRole('button', { name: 'Add protocol copy', exact: true }).click();
+  await expect(step.getByLabel('Protocol text')).toHaveValue('');
+  expect(await writes(page)).toHaveLength(0);
+  await step.getByLabel('Protocol text').fill(copy);
+  await expect(step.getByRole('button', { name: 'Print column protocol' })).toHaveCount(0);
+  await reply(page, `/v1/tims/batches/${batch.id}`, 200, { ...populated, steps: [...batch.steps, saved] });
+  await step.getByRole('button', { name: 'Save step here' }).click();
+  await expect.poll(() => writes(page)).toHaveLength(1);
+  expect((await writes(page))[0]).toMatchObject({ method: 'PATCH', path: `/v1/tims/batches/${batch.id}/steps/${columnStep.id}`, body: { notes: saved.notes } });
+  await step.getByText('Column protocol · edited', { exact: true }).click();
+  await expect(step.getByRole('heading', { name: 'Invented batch protocol', exact: true })).toBeVisible();
+  await expect(step.locator('.column-protocol')).toContainText('Record the trial identifier.');
+  await expect(step.locator('.attribution')).toHaveText('Boise State Isotope Geology Laboratory · U-Th-Pb Lab Guidebook · edited copy');
+  await page.evaluate(() => { window.print = () => { window.dispatchEvent(new Event('protocol-print-requested')); }; });
+  await step.getByRole('button', { name: 'Print column protocol' }).click();
+  await expect(step.locator('.column-protocol')).toHaveAttribute('data-print', '');
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')));
+  await expect(step.locator('.column-protocol')).not.toHaveAttribute('data-print', '');
+});
+
+test('capsules retain inherited and saved copies and start empty when their scheme has no copy', async ({ page }) => {
+  const batchCopy = 'Invented inherited protocol\nBatch checklist.';
+  const capsuleCopy = 'Invented capsule protocol\nCapsule checklist.';
+  const populated = { ...batch, steps: [...batch.steps, { ...columnStep, notes: writeColumnNotes(columnStep.notes, batchCopy) }] };
+  const record = { ...batch.fraction_step_records[0], id: 'invented-column-record', step_id: columnStep.id, parameters: {}, outcome: '', outcome_note: writeColumnNotes('Invented capsule note', capsuleCopy) };
+  await start(page, { fixtures: { [`/v1/tims/batches/${batch.id}`]: populated }, apiReplies: {
+    [`PUT /v1/tims/batches/${batch.id}/fractions/${record.fraction_id}/steps/${columnStep.id}`]: { status: 200, body: record },
+  } });
+  await openBatch(page);
+  await page.getByRole('button', { name: 'K1 z1', exact: true }).click();
+  const drawer = page.getByRole('region', { name: 'Capsule details' });
+  await drawer.getByLabel('Capsule step', { exact: true }).selectOption(columnStep.id);
+  await drawer.getByText('Column protocol · edited', { exact: true }).click();
+  await expect(drawer.getByRole('heading', { name: 'Invented inherited protocol', exact: true })).toBeVisible();
+  await expect(drawer.getByRole('button', { name: 'Print column protocol' })).toBeVisible();
+  await drawer.getByRole('button', { name: 'Edit protocol copy', exact: true }).click();
+  await expect(drawer.getByLabel('Protocol text')).toHaveValue(batchCopy);
+  await drawer.getByLabel('Protocol text').fill(capsuleCopy);
+  await drawer.getByLabel('Step note', { exact: true }).fill('Invented capsule note');
+  await reply(page, `/v1/tims/batches/${batch.id}`, 200, { ...populated, fraction_step_records: [...batch.fraction_step_records, record] });
+  await drawer.getByRole('button', { name: 'Save capsule record here' }).click();
+  await expect.poll(() => writes(page)).toHaveLength(1);
+  expect((await writes(page))[0]).toMatchObject({ method: 'PUT', body: { outcome_note: writeColumnNotes('Invented capsule note', capsuleCopy) } });
+  await drawer.getByRole('button', { name: 'Preview protocol', exact: true }).click();
+  await expect(drawer.getByRole('heading', { name: 'Invented capsule protocol', exact: true })).toBeVisible();
+  await drawer.getByRole('button', { name: 'Use inherited protocol', exact: true }).click();
+  await expect(drawer.getByRole('heading', { name: 'Invented inherited protocol', exact: true })).toBeVisible();
+  await drawer.getByLabel('Override Scheme', { exact: true }).check();
+  await drawer.getByRole('combobox', { name: 'Scheme', exact: true }).selectOption('HBr-HCl');
+  await expect(drawer.getByRole('link', { name: 'Boise State U-Th-Pb Lab Guidebook, U-Pb separation (HBr-HCl)', exact: true })).toHaveAttribute('href', guidebookUrl);
+  await expect(drawer.getByRole('button', { name: 'Print column protocol' })).toHaveCount(0);
+  await drawer.getByRole('button', { name: 'Add protocol copy', exact: true }).click();
+  await expect(drawer.getByLabel('Protocol text')).toHaveValue('');
+  expect(await writes(page)).toHaveLength(1);
+});
+
 test('BSU defaults need an explicit confirm and create only missing sets with separate keys', async ({ page }) => {
   await start(page, { apiReplies: { 'POST /v1/tims/capsule-sets': { status: 200, body: { ...batch.capsule_set, id: 'invented-created' } } } }); await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Capsule sets', exact: true }).click(); await page.getByRole('button', { name: 'Add BSU-IGL defaults' }).click(); const dialog = page.getByRole('dialog', { name: 'Add BSU-IGL defaults' }); await expect(dialog).toContainText('Becquerel B'); await expect(dialog).not.toContainText('Krogh K'); expect(await writes(page)).toHaveLength(0);
   await page.evaluate(() => (window as unknown as { __emit(event: string, payload: unknown): Promise<void> }).__emit('shell://menu', 'tab:home'));
@@ -221,6 +395,17 @@ test('a late pick-note preview cannot appear in a different account view', async
 for (const [width, height] of [[1280, 800], [1440, 900], [1024, 640]]) for (const theme of ['light', 'dark']) {
   test(`TIMS panels fit ${width} × ${height}, ${theme}`, async ({ page }) => {
     await page.setViewportSize({ width, height }); await start(page, { store: { theme, themeChosen: true } }); await openBatch(page); await page.getByRole('button', { name: 'K1 z1', exact: true }).click(); await expect(page.getByRole('img', { name: 'Grain outline and LA spot' }).first()).toBeAttached(); expect(await problems(page, 'TIMS batch')).toEqual([]);
+    const capsule = page.getByRole('region', { name: 'Capsule details' });
+    await capsule.getByText('Fraction status and notes', { exact: true }).click();
+    expect(await problems(page, 'TIMS fraction form')).toEqual([]);
+    const saveFraction = capsule.getByRole('button', { name: 'Save fraction here', exact: true });
+    // Centre it: aligning to the scroller's edge leaves a sub-pixel clip at 1280 x 800.
+    await saveFraction.evaluate(button => button.scrollIntoView({ block: 'center' }));
+    await expect(saveFraction).toBeInViewport({ ratio: 1 });
+    const saveBox = await saveFraction.boundingBox(), capsuleBox = await capsule.boundingBox();
+    expect(saveBox).not.toBeNull(); expect(capsuleBox).not.toBeNull();
+    expect(saveBox!.y).toBeGreaterThanOrEqual(capsuleBox!.y);
+    expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(capsuleBox!.y + capsuleBox!.height);
     for (const name of ['Recipes', 'Capsule sets', 'Spikes', 'Import pick notes']) { await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name, exact: true }).click(); expect(await problems(page, `TIMS ${name}`)).toEqual([]); }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });

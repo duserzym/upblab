@@ -15,7 +15,7 @@
   <div class="stack field">
     {#if fraction}<label class="small"><input type="checkbox" checked={override} {disabled} onchange={e => set(key, e.currentTarget.checked ? value ?? d.default ?? (d.type === 'multi_choice' ? [] : '') : undefined)} /> Override {parameterLabel(d)}{override ? ' · overridden' : ''}</label>{/if}
     {#if d.type === 'spike_version'}
-      <span>{parameterLabel(d)}</span><SpikePicker value={String(value ?? '')} disabled={disabled || fraction && !override} {lab} {knownVersions} onchange={v => set(key, v)} />
+      <span>{parameterLabel(d)}</span><SpikePicker value={String(value ?? '')} disabled={disabled || fraction && !override} {lab} {knownVersions} showComposition onchange={v => set(key, v)} />
     {:else if d.type === 'multi_choice'}
       <fieldset disabled={disabled || fraction && !override}><legend>{parameterLabel(d)}</legend>{#each choices(d) as c}<label><input type="checkbox" checked={Array.isArray(value) && value.includes(c.value)} onchange={e => set(key, e.currentTarget.checked ? [...(Array.isArray(value) ? value : []), c.value] : (Array.isArray(value) ? value : []).filter(v => v !== c.value))} />{c.label ?? c.value}</label>{/each}</fieldset>
     {:else}

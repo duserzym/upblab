@@ -33,6 +33,26 @@ it('pages 5000 invented fractions over ten bounded reads, publishes progressivel
   vi.mocked(identity.get).mockClear(); const bounded = await mountFractions('synthetic-mount', 2500);
   expect(bounded.items).toHaveLength(2500); expect(bounded.showing).toBe('Showing first 2500 fractions'); expect(bounded.truncated).toBe(true); expect(identity.get).toHaveBeenCalledTimes(5);
 });
+it('searches a large sample directory with one bounded request per page and preserves the search on more', async () => {
+  const catalog = Array.from({ length: 3000 }, (_, index) => ({
+    id: `sample-${index}`, name: `Invented sample ${index}`, material: '', igsn: null, project: null,
+  }));
+  vi.mocked(identity.get).mockImplementation(async path => {
+    const params = new URL(path, 'https://synthetic.example').searchParams;
+    const offset = Number(params.get('after') ?? 0), limit = Number(params.get('limit'));
+    expect(params.get('q')).toBe('Invented sample');
+    expect(limit).toBe(50);
+    return { status: 200, body: catalog.slice(offset, offset + limit), nextCursor: String(offset + limit) } as never;
+  });
+  const start = performance.now();
+  const page = await tims.sampleChoices('Invented sample');
+  expect(page.items).toHaveLength(50);
+  expect(identity.get).toHaveBeenCalledTimes(1);
+  const next = await page.more();
+  expect(next?.items[0]?.id).toBe('sample-50');
+  expect(identity.get).toHaveBeenCalledTimes(2);
+  console.info(`TIMS sample picker: 2 requested pages from 3000 invented rows, ${(performance.now() - start).toFixed(1)} ms (mock network). Previous capsule setup made 0 sample requests.`);
+});
 it('refuses cursor cycles and retains status and server sentence for reads', async () => {
   vi.mocked(identity.get).mockResolvedValue({ status: 200, body: [], nextCursor: 'repeat' });
   await expect(mountFractions('synthetic')).rejects.toThrow('repeated a list cursor');

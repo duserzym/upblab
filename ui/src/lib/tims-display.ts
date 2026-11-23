@@ -1,6 +1,9 @@
 import { parameterSummary, statusWords, type BatchDetail, type FractionOut } from './tims-api';
+import { readCapsuleNotes, readColumnNotes } from './tims-protocol';
+import { readSpikingSession, spikingSessionId } from './tims-spiking';
 export function fractionChemistry(batch: BatchDetail, fraction: FractionOut) {
-  return batch.steps.map(step => {
+  return batch.steps.filter(step => spikingSessionId(step) === step.id ||
+    batch.spikes.some(row => row.step_id === step.id && row.fraction_id === fraction.id)).map(step => {
     const record = batch.fraction_step_records.find(r => r.fraction_id === fraction.id && r.step_id === step.id);
     const addition = batch.spikes.find(r => r.fraction_id === fraction.id && r.step_id === step.id);
     const parameters = { ...step.parameters, ...record?.parameters };
@@ -14,11 +17,21 @@ export function fractionChemistry(batch: BatchDetail, fraction: FractionOut) {
       values.push(`Spike weight: ${addition.spike_weight_g} g`);
       if (addition.bottle_before_g !== null) values.push(`Bottle before: ${addition.bottle_before_g} g`);
       if (addition.bottle_after_g !== null) values.push(`Bottle after: ${addition.bottle_after_g} g`);
+      if (addition.notes) values.push(`Spike comment: ${addition.notes}`);
     }
-    return { id: step.id, name: step.method_name, values, skipped: record?.skipped ?? false,
-      outcome: record?.outcome ? statusWords(record.outcome) : '', outcomeNote: record?.outcome_note ?? '',
-      note: step.notes, performedOn: step.performed_on,
-      spike: version ? `${version.solution_name} · ${version.subfraction_name} · ${version.version} · ${version.is_current ? 'current' : statusWords(version.status)}`
+    const column = step.method_code === 'SP-TIMS-COL';
+    const parent = spikingSessionId(step);
+    const root = parent === step.id ? step : batch.steps.find(s => s.id === parent);
+    const session = step.method_code === 'SP-TIMS-SPIKE' && root ? readSpikingSession(root.notes) : null;
+    const bottle = session?.bottles.find(b => b.versionId === versionId || b.bottleId === version?.subfraction_id);
+    if (bottle) values.push(`Session bottle begin: ${bottle.before} g`);
+    if (!session?.bottles.length && session?.before) values.push(`Session bottle begin: ${session.before} g`);
+    if (!session?.bottles.length && session?.after) values.push(`Session bottle end: ${session.after} g`);
+    const capsule = readCapsuleNotes(column ? readColumnNotes(record?.outcome_note ?? '').notes : record?.outcome_note ?? '');
+    return { id: step.id, name: parent === step.id ? step.method_name : `${step.method_name} · additional entry`, values, skipped: record?.skipped ?? false,
+      outcome: record?.outcome ? statusWords(record.outcome) : '', outcomeNote: capsule.notes,
+      note: column ? readColumnNotes(step.notes).notes : session?.notes ?? step.notes, performedOn: capsule.date || (root ?? step).performed_on,
+      spike: version ? `${version.solution_name} · ${version.subfraction_name} · ${version.version} · ${version.is_current ? 'current' : statusWords(version.status)}` : bottle ? bottle.label
         : versionId ? 'Spike version details unavailable in this batch reply' : '',
     };
   });

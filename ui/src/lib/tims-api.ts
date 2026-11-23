@@ -4,6 +4,7 @@ import { apiReplyMessage, ApiReadError } from './server-error';
 import { timsRights } from './tims-rights.svelte';
 import { oversight } from './oversight.svelte';
 import { outbox, onlineOnlyReason } from './outbox.svelte';
+import type { CapsuleSample } from './tims-capsule-intake';
 export interface BaseOut { id: string; created_at: string; updated_at: string; created_by_id: string | null }
 export type Mineral = 'zircon' | 'baddeleyite' | 'titanite' | 'rutile' | 'apatite' | 'monazite' | 'xenotime' | 'other';
 export type FractionStatus = 'picked' | 'transferred' | 'abraded' | 'spiked' | 'dissolved' | 'columns' | 'loaded' | 'measured' | 'lost' | 'dissolved_in_ca';
@@ -31,7 +32,7 @@ export interface PickNoteLine { number: number; text: string; kind: 'date' | 'se
 export interface PickNotePlan { lab_id: string; filename: string; first_line: number; last_line: number; lines: PickNoteLine[]; summary: Record<string, number>; batches: { set_id: string; started_on: string; action: 'create' | 'reuse'; id: string | null; recipe: Parameters | null; explanation?: string }[] }
 export interface HistoryRow { id: string; [key: string]: unknown }
 export interface SourceInput { grain_id?: string; spot_id?: string; is_fragment?: boolean; fragment_note?: string; note?: string }
-export interface FractionInput { sample_id: string; mineral: Mineral; name?: string; lab_id?: string; batch_id?: string | null; capsule_number?: number | null; status?: FractionStatus; notes?: string; sources?: SourceInput[] }
+export interface FractionInput { sample_id?: string; mineral: Mineral; name?: string; lab_id?: string; batch_id?: string | null; capsule_number?: number | null; status?: FractionStatus; notes?: string; sources?: SourceInput[] }
 export type FractionPatch = Partial<Pick<FractionOut, 'name' | 'mineral' | 'batch_id' | 'capsule_number' | 'status' | 'notes'>>;
 export type CapsuleInput = Pick<CapsuleOut, 'lab_id' | 'name'> & Partial<Pick<CapsuleOut, 'facility' | 'code' | 'positions' | 'positions_per_puck' | 'active' | 'notes'>>;
 export type CapsulePatch = Partial<Pick<CapsuleOut, 'name' | 'code' | 'positions' | 'active' | 'notes'>>;
@@ -112,6 +113,7 @@ export function onlineForm<T>(path: string, method: 'POST' | 'DELETE', body?: un
   } };
 }
 export const tims = {
+  sampleChoices: (query: string) => firstPage<CapsuleSample>('/v1/samples', { limit: '50', q: query }),
   fractions: (filters: Record<string, string> = {}) => firstPage<FractionOut>('/v1/fractions', filters),
   grainFractions: (grain: string, atlas = false) => firstPage<FractionOut>(`/v1/grains/${atlas ? 'by-atlas/' : ''}${id(grain)}/fractions`),
   spotFractions: (spot: string, atlas = false) => firstPage<FractionOut>(`/v1/spots/${atlas ? 'by-atlas/' : ''}${id(spot)}/fractions`),
@@ -150,7 +152,7 @@ export const tims = {
   history: (kind: 'fraction' | 'batch' | 'capsule_set' | 'recipe' | 'spike_solution' | 'spike_version', object: string) => firstPage<HistoryRow>(`/v1/history/${kind}/${id(object)}`),
 };
 export const capsuleLabel = (fraction: Pick<FractionOut, 'capsule_label'>) => fraction.capsule_label ?? 'No capsule';
-export const statusWords = (value: string) => value === 'dissolved_in_ca' ? 'dissolved during CA' : value.replaceAll('_', ' ');
+export { statusWords } from './tims-model';
 export const mineralWords = (value: Mineral) => value.charAt(0).toUpperCase() + value.slice(1);
 const displayUnit = (unit?: string | null) => unit?.trim().toLowerCase().replaceAll('°', '') === 'c' ? '°C' : unit?.trim();
 function parameterName(def: ParameterDefinition): string {

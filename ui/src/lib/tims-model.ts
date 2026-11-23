@@ -1,5 +1,6 @@
 import type { BatchDetail, FractionStepRecord, ParameterDefinition, Parameters, PickNotePlan, RecipeStep } from './tims-api';
 import { plural } from './plural';
+export const statusWords = (value: string) => value === 'dissolved_in_ca' ? 'dissolved during CA' : value.replaceAll('_', ' ');
 export const fractionStatuses = ['picked', 'transferred', 'abraded', 'spiked', 'dissolved', 'columns', 'loaded', 'measured', 'lost', 'dissolved_in_ca'] as const;
 export const minerals = ['zircon', 'titanite', 'rutile', 'apatite', 'monazite', 'xenotime', 'baddeleyite', 'other'] as const;
 export const parameterKey = (d: ParameterDefinition) => d.config_key ?? d.name;
