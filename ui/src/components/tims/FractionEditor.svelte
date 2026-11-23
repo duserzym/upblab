@@ -12,6 +12,7 @@
   import GrainImage from './GrainImage.svelte';
   import ParameterFields from './ParameterFields.svelte';
   import SpikePicker from './SpikePicker.svelte';
+  import { labProtocol, labProtocols, useLabProtocols } from '../../lib/tims-lab-protocols.svelte';
   import ColumnProtocol from './ColumnProtocol.svelte';
 
   let { batch, fraction, editable, geometry, geometryError = '', activeStep, onstep, onbatchstep, onpick, createSpikeStep }: {
@@ -19,6 +20,7 @@
     activeStep: string; onstep: (id: string) => void; onbatchstep: (id: string) => void; onpick: () => void;
     createSpikeStep: (session: StepOut) => Promise<StepOut>;
   } = $props();
+  useLabProtocols(() => batch.lab_id);
   let status = $state<FractionStatus>(untrack(() => fraction.status)), notes = $state(untrack(() => readCapsulePreparation(fraction.notes).notes));
   const preparation = $derived(readCapsulePreparation(fraction.notes).preparation);
   const isBlank = $derived(preparation === 'lab-blank');
@@ -308,6 +310,7 @@
           {/if}
           {#if column}
             <ColumnProtocol reference={columnProtocol(overrides.scheme ?? step.parameters.scheme, fraction.mineral)}
+              loadError={labProtocols.state(batch.lab_id).error} labProtocol={labProtocol(batch.lab_id, columnProtocol(overrides.scheme ?? step.parameters.scheme, fraction.mineral)?.scheme)} layer="capsule"
               inherited={inheritedProtocol} saved={!!(savedProtocol || inheritedProtocol)}
               value={protocolDraft} onchange={editable && !busy ? value => protocolDraft = value : undefined}
               context={`${batch.capsule_set.name} · ${fraction.capsule_label} · ${date || step.performed_on || 'Date unrecorded'}`} />

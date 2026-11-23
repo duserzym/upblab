@@ -68,15 +68,36 @@ readings, comment and creation time. The session's bottle starts are saved in
 its step notes. A future lab-wide usage view can group the additions by
 registered bottle and apply supervisor access on the server.
 
-Use **Column protocol** within **Column chemistry** to open the
+Use **Column protocol** within **Column chemistry** to view the lab's saved
+protocol for the selected U–Pb scheme. UPbDB holds one protocol per lab and
+scheme (HCl anion or HBr-HCl), including its title, text, attribution, source URL,
+revision and last updated time. No guidebook text is bundled in this public
+repository. Without a lab protocol, including on older servers without this
+endpoint, the panel links to the
 [Boise State U-Th-Pb Lab Guidebook](https://www.boisestate.edu/earth-isotope/labshare/laboratory-handbooks/)
-reference for the selected U–Pb scheme in the system browser. The public
-repository includes the reference only. **Add protocol copy** starts an empty
-editable copy; save it in the batch-step or capsule notes using the usual save
-action. A capsule inherits the batch-step copy unless it has its own copy or
-uses a different scheme. Saved copies can be edited and printed, with guidebook
-attribution retained on the printout. Printing is unavailable without a saved
-copy. Recipes shows the guidebook reference for each column scheme.
+in the system browser.
+
+**Recipes → Lab column protocols** lists both schemes. Lab owners and
+superusers can create or edit a protocol; other members see it read-only.
+**History** shows the protocol's versioned server history. Saves require a
+reachable writable server and include the revision loaded by the editor; they
+never enter the outbox. If someone saved a newer revision, reload it before
+editing again. View as remains read-only.
+
+The displayed text uses this order: capsule copy, batch-step copy, lab protocol,
+then reference link only. A capsule using a different scheme skips the batch
+copy and uses that scheme's lab protocol. **Add protocol copy** starts from the
+inherited text, or empty text when no saved text exists. Save a copy in the
+batch-step or capsule notes with the usual save action. **Use inherited
+protocol** removes that layer's copy and returns to the next layer.
+
+Lab protocols and saved copies can be printed. Lab text prints its stored
+attribution; edited copies use that attribution with “edited copy” appended,
+or the existing guidebook attribution when none was stored. Recipes also shows
+the lab protocol read-only within each column step. Lab protocol lists share
+one bounded read per lab, including across capsule panels, and reuse identity's
+account-and-server-scoped ETag cache and desktop offline mirror. After saving,
+the list is revalidated so the saved protocol can be viewed and printed offline.
 
 Grain thumbnails in capsule positions (36 px), the capsule inspector (104 px) and
 Review's TIMS fractions (120 px) show the published SEM image clipped to the
@@ -136,8 +157,8 @@ warning, including any warning returned with a spike addition. Bottle difference
 come from the server. Members may edit private version status and notes; public
 versions require a superuser. Creating spikes and versions is not included.
 
-Existing-record changes are saved durably in the account-and-server-scoped outbox
-before transmission. Pending bodies overlay the last GET and say “Saved here,
+Except for lab column protocols, existing-record changes are saved durably in
+the account-and-server-scoped outbox before transmission. Pending bodies overlay the last GET and say “Saved here,
 not sent yet”. The indicator opens a list with the server reason, Retry and
 Discard. Definitive refusals stop that object's queue. A 401 waits for the same
 account to sign in again, including token renewal without a sign-out. Transient

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { columnProtocol, readCapsuleNotes, readColumnNotes, readSessionNotes, validMass, writeCapsuleNotes, writeColumnNotes, writeSessionNotes } from './tims-protocol';
+import { columnProtocol, resolveColumnProtocol, readCapsuleNotes, readColumnNotes, readSessionNotes, validMass, writeCapsuleNotes, writeColumnNotes, writeSessionNotes } from './tims-protocol';
 
 const url = 'https://www.boisestate.edu/earth-isotope/labshare/laboratory-handbooks/';
 const reference = (scheme: 'HCl anion' | 'HBr-HCl') => ({
@@ -43,4 +43,15 @@ it('round-trips a capsule date and protocol together and leaves old notes readab
   expect(readCapsuleNotes(column.notes)).toEqual({ notes, date: '2026-11-20' });
   expect(readColumnNotes(notes)).toEqual({ notes, protocol: '' });
   expect(readCapsuleNotes(notes)).toEqual({ notes, date: '' });
+});
+
+it('resolves capsule, batch, lab and link layers with their print attribution', () => {
+  const lab = { text: 'Invented column\nStep A: rinse twice.', attribution: 'Invented laboratory' };
+  expect(resolveColumnProtocol('Invented capsule', 'Invented batch', lab)).toEqual({ text: 'Invented capsule', source: 'capsule', attribution: 'Invented laboratory · edited copy' });
+  expect(resolveColumnProtocol('', 'Invented batch', lab)).toEqual({ text: 'Invented batch', source: 'batch', attribution: 'Invented laboratory · edited copy' });
+  expect(resolveColumnProtocol('', '', lab)).toEqual({ text: lab.text, source: 'lab', attribution: lab.attribution });
+  expect(resolveColumnProtocol('  ', '', null)).toEqual({ text: '', source: null, attribution: '' });
+  expect(resolveColumnProtocol('Invented copy').attribution).toBe('Boise State Isotope Geology Laboratory · U-Th-Pb Lab Guidebook · edited copy');
+  expect(resolveColumnProtocol('', 'Invented batch', { ...lab, attribution: '' }).attribution).toBe('Boise State Isotope Geology Laboratory · U-Th-Pb Lab Guidebook · edited copy');
+  expect(resolveColumnProtocol('', '', { ...lab, text: '' }).source).toBeNull();
 });

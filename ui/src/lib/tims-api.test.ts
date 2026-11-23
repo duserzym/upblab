@@ -4,7 +4,7 @@ vi.mock('./tims-rights.svelte', () => ({ timsRights: { recordReason: () => '', r
 vi.mock('./outbox.svelte', () => ({ outbox: { enqueue: vi.fn() }, onlineOnlyReason: vi.fn(() => '') }));
 import { identity } from './identity.svelte';
 import { outbox, onlineOnlyReason } from './outbox.svelte';
-import { oversight, READ_ONLY_REASON } from './oversight.svelte';
+import { oversight, READ_ONLY_REASON, WriteError } from './oversight.svelte';
 import { capsuleLabel, firstPage, formatParameter, mineralWords, mountFractions, onlineForm, statusWords, tims } from './tims-api';
 import { timsFraction } from '../../tests/fixtures/review';
 beforeEach(() => { vi.clearAllMocks(); oversight.reset(); vi.mocked(onlineOnlyReason).mockReturnValue(''); vi.mocked(identity.get).mockResolvedValue({ status: 200, body: [] }); vi.mocked(identity.write).mockResolvedValue({ status: 200, body: { id: 'synthetic' } }); });
@@ -142,4 +142,51 @@ it('uses loaded spike names in parameter summaries and never a raw version id', 
   expect(formatParameter(def, version.id, batch.spike_versions)).toBe('Synthetic spike · Master · v1 (superseded)');
   expect(formatParameter(def, 'unknown-version')).toBe('Registered spike version (details unavailable)');
   expect(parameterSummary(def, version.id, batch.spike_versions)).toBe('spike version: Synthetic spike · Master · v1 (superseded)');
+});
+
+it('reads bounded lab protocols and details through identity, including history', async () => {
+  await tims.columnProtocols({ lab: 'invented', scheme: 'HCl anion', limit: '2' });
+  await tims.columnProtocol('invented/id'); await tims.history('column-protocol', 'invented/id');
+  expect(vi.mocked(identity.get).mock.calls.map(([path]) => path)).toEqual([
+    '/v1/tims/column-protocols?limit=2&lab=invented&scheme=HCl+anion',
+    '/v1/tims/column-protocols/invented%2Fid', '/v1/history/column-protocol/invented%2Fid?limit=500',
+  ]);
+});
+it('keeps protocol creates and revision-bearing patches online with exact retry keys and no outbox', async () => {
+  const body = { lab_id: 'invented', scheme: 'HCl anion' as const, title: 'Invented protocol', text: 'Invented column\nStep A: rinse twice.', attribution: 'Invented lab', source_url: 'https://example.org/invented' };
+  await tims.createColumnProtocol(body).send();
+  const patch = tims.patchColumnProtocol('invented/id', { text: body.text, revision: 3 });
+  vi.mocked(identity.write).mockRejectedValueOnce(new Error('Invented stalled connection'));
+  await expect(patch.send()).rejects.toThrow('stalled'); await patch.send();
+  const calls = vi.mocked(identity.write).mock.calls;
+  expect(calls[0]).toEqual(['/v1/tims/column-protocols', 'POST', body, { idempotencyKey: expect.any(String) }]);
+  expect(calls[1]).toEqual(['/v1/tims/column-protocols/invented%2Fid', 'PATCH', { text: body.text, revision: 3 }, { idempotencyKey: patch.idempotencyKey }]);
+  expect(calls[2]).toEqual(calls[1]); expect(outbox.enqueue).not.toHaveBeenCalled();
+  vi.mocked(onlineOnlyReason).mockReturnValue('Needs the server: offline');
+  await expect(patch.send()).rejects.toThrow('Needs the server');
+  expect(identity.write).toHaveBeenCalledTimes(3);
+});
+it('explains stale revisions, preserves other server errors and never queues protocol writes', async () => {
+  const form = tims.patchColumnProtocol('invented', { text: 'Invented copy', revision: 2 });
+  vi.mocked(identity.write).mockRejectedValueOnce(new WriteError(409, { code: 'stale_revision' }, 'Server returned 409: stale_revision'));
+  await expect(form.send()).rejects.toThrow('Someone else saved a newer revision; reload it before editing.');
+  vi.mocked(identity.write).mockRejectedValueOnce(new WriteError(403, { detail: 'Invented owner restriction' }, 'Server returned 403: Invented owner restriction'));
+  await expect(form.send()).rejects.toThrow('403: Invented owner restriction');
+  expect(outbox.enqueue).not.toHaveBeenCalled();
+});
+
+it('filters a 5000-row invented protocol catalog to a single bounded lab request', async () => {
+  const catalog = Array.from({ length: 5000 }, (_, index) => ({
+    id: `invented-${index}`, lab_id: `invented-lab-${Math.floor(index / 2)}`, scheme: index % 2 ? 'HBr-HCl' : 'HCl anion',
+    text: 'Invented column\nStep A: rinse twice.',
+  }));
+  vi.mocked(identity.get).mockImplementation(async path => {
+    const params = new URL(path, 'https://invented.example').searchParams;
+    const rows = catalog.filter(row => row.lab_id === params.get('lab'));
+    return { status: 200, body: rows.slice(0, Number(params.get('limit'))) } as never;
+  });
+  const start = performance.now();
+  const page = await tims.columnProtocols({ lab: 'invented-lab-100', limit: '2' });
+  expect(page.items).toHaveLength(2); expect(identity.get).toHaveBeenCalledTimes(1);
+  console.info(`TIMS protocols catalog: 5000 invented rows, 1 bounded filtered request (previously 0), ${(performance.now() - start).toFixed(1)} ms (mock network).`);
 });

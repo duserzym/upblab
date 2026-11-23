@@ -1,4 +1,4 @@
-import type { Mineral } from './tims-api';
+import type { ColumnProtocolOut, Mineral } from './tims-api';
 
 export interface ColumnProtocolReference {
   scheme: 'HCl anion' | 'HBr-HCl';
@@ -16,6 +16,17 @@ export function columnProtocol(scheme: unknown, mineral?: Mineral): ColumnProtoc
     title: `Boise State U-Th-Pb Lab Guidebook, U-Pb separation (${selected})`,
     url: 'https://www.boisestate.edu/earth-isotope/labshare/laboratory-handbooks/',
   };
+}
+
+export interface ResolvedColumnProtocol { text: string; source: 'capsule' | 'batch' | 'lab' | null; attribution: string }
+
+/** Empty copies inherit the next layer. No protocol text is bundled in the shell. */
+export function resolveColumnProtocol(capsule = '', batch = '', lab?: Pick<ColumnProtocolOut, 'text' | 'attribution'> | null): ResolvedColumnProtocol {
+  const source = capsule.trim() ? 'capsule' : batch.trim() ? 'batch' : lab?.text.trim() ? 'lab' : null;
+  const text = source === 'capsule' ? capsule : source === 'batch' ? batch : source === 'lab' ? lab!.text : '';
+  const attribution = source === 'lab' ? lab!.attribution : source
+    ? `${lab?.attribution || 'Boise State Isotope Geology Laboratory · U-Th-Pb Lab Guidebook'} · edited copy` : '';
+  return { text, source, attribution };
 }
 
 const protocolHeading = 'Column protocol (edited)';

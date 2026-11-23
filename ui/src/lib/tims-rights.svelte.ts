@@ -28,6 +28,9 @@ export class TimsRights {
     return this.source === this.current() && identity.signedIn && !oversight.viewAs && (!objectKey || !this.recordReason(objectKey)) &&
       (identity.account?.is_superuser === true || this.labs.some(lab => lab.id === labId && !!lab.my_role));
   }
+  canEditLabProtocol(labId: string) {
+    return this.canEdit(labId) && (identity.account?.is_superuser === true || this.labs.some(lab => lab.id === labId && lab.my_role === 'owner'));
+  }
   recordReason(objectKey: string): string {
     if (oversight.viewAs) return READ_ONLY_REASON;
     if (this.source !== this.current()) return '';

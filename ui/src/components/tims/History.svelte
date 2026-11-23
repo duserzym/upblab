@@ -4,7 +4,7 @@
   import { identity } from '../../lib/identity.svelte';
   import { historyChanges } from '../../lib/tims-model';
   import { ReplyScope } from '../../lib/tims-requests';
-  let { kind, id }: { kind: 'batch' | 'recipe' | 'capsule_set'; id: string } = $props();
+  let { kind, id }: { kind: 'batch' | 'recipe' | 'capsule_set' | 'column-protocol'; id: string } = $props();
   let open = $state(false), busy = $state(false), error = $state('');
   let rows = $state.raw<HistoryRow[]>([]), page = $state.raw<ListPage<HistoryRow> | null>(null);
   let generation = 0;

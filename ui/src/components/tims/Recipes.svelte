@@ -7,11 +7,14 @@
   import { recipeDefaults } from '../../lib/tims-defaults';
   import { outbox, onlineOnlyReason } from '../../lib/outbox.svelte';
   import { OnlineAction, ReplyScope } from '../../lib/tims-requests';
+  import { labProtocol, labProtocols, useLabProtocols } from '../../lib/tims-lab-protocols.svelte';
   import ColumnProtocol from './ColumnProtocol.svelte';
   import { columnProtocol } from '../../lib/tims-protocol';
+  import LabColumnProtocols from './LabColumnProtocols.svelte';
   import ParameterFields from './ParameterFields.svelte';
   import History from './History.svelte';
   let { lab, methods }: { lab: string; methods: MethodCode[] } = $props();
+  useLabProtocols(() => lab);
   let mineral = $state<Mineral>('zircon'), rows = $state.raw<RecipeOut[]>([]), page = $state.raw<ListPage<RecipeOut> | null>(null), busy = $state(false), error = $state('');
   let selected = $state<RecipeOut | null>(null), creating = $state(false), name = $state(''), active = $state(true), notes = $state(''), steps = $state.raw<RecipeStep[]>([]), method = $state('');
   const creation = new OnlineAction<RecipeOut>(); let generation = 0;
@@ -44,10 +47,11 @@
 <button class="btn" type="button" disabled={!editable || !recipeDefaults(selected?.mineral ?? mineral).length} onclick={() => steps = recipeDefaults(selected?.mineral ?? mineral)}>Reset to guidebook defaults</button>
 {#each steps as step, index}<section class="panel stack"><div class="row"><h4>{index + 1}. {methods.find(m => m.code === step.method_code)?.name ?? step.method_code}</h4><button type="button" class="btn" disabled={!editable || index === 0} onclick={() => steps = reorder(steps, index, -1)} aria-label={`Move recipe step ${index + 1} up`}>↑</button><button type="button" class="btn" disabled={!editable || index === steps.length - 1} onclick={() => steps = reorder(steps, index, 1)} aria-label={`Move recipe step ${index + 1} down`}>↓</button><button type="button" class="btn" disabled={!editable} onclick={() => steps = steps.filter((_, i) => i !== index)}>Remove step {index + 1}</button></div>
 <ParameterFields definitions={recipeParameters(step, methods)} values={withDefaults(recipeParameters(step, methods), step.parameters)} onchange={v => steps = steps.map((s, i) => i === index ? { ...s, parameters: v } : s)} disabled={!editable} {lab} />
-{#if step.method_code === "SP-TIMS-COL"}<ColumnProtocol reference={columnProtocol(step.parameters.scheme, selected?.mineral ?? mineral)} context={name} />{/if}
+{#if step.method_code === "SP-TIMS-COL"}<ColumnProtocol reference={columnProtocol(step.parameters.scheme, selected?.mineral ?? mineral)} loadError={labProtocols.state(lab).error} labProtocol={labProtocol(lab, columnProtocol(step.parameters.scheme, selected?.mineral ?? mineral)?.scheme)} context={name} />{/if}
 </section>{/each}
 <label>Recipe step method <select bind:value={method} disabled={!editable}><option value="">Choose method</option>{#each methods as m}<option value={m.code}>{m.name}</option>{/each}</select></label><button class="btn" type="button" disabled={!editable || !method} onclick={() => steps = [...steps, { method_code: method, parameters: withDefaults(methods.find(m => m.code === method)?.parameters ?? []) }]}>Add recipe step</button>
 <button class="btn primary" disabled={!editable || saving || creating && !!onlineOnlyReason()}>{creating ? 'Create recipe' : 'Save recipe here'}</button>
 </form></section>{/key}{/if}
+<LabColumnProtocols {lab} />
 </section>
 <style>h2,h3,h4,p{margin:0}.row{flex-wrap:wrap}.panel{padding:10px;min-width:0}label{display:grid;gap:4px}label:has(input[type=checkbox]){display:flex}input:not([type=checkbox]),textarea,select{min-width:0;width:100%}section{overflow-wrap:anywhere;min-width:0}</style>

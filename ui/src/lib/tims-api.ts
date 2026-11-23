@@ -2,7 +2,7 @@ import { identity } from './identity.svelte';
 import { listPath, type ListPath } from './api-list';
 import { apiReplyMessage, ApiReadError } from './server-error';
 import { timsRights } from './tims-rights.svelte';
-import { oversight } from './oversight.svelte';
+import { oversight, WriteError } from './oversight.svelte';
 import { outbox, onlineOnlyReason } from './outbox.svelte';
 import type { CapsuleSample } from './tims-capsule-intake';
 export interface BaseOut { id: string; created_at: string; updated_at: string; created_by_id: string | null }
@@ -14,6 +14,10 @@ export interface CapsuleOut extends BaseOut { lab_id: string; facility: string; 
 export type Parameters = Record<string, unknown>;
 export interface RecipeStep { method_code: string; parameters: Parameters }
 export interface RecipeOut extends BaseOut { lab_id: string; mineral: Mineral; name: string; steps: RecipeStep[]; active: boolean; notes: string; revision: number }
+export type ColumnScheme = 'HCl anion' | 'HBr-HCl';
+export interface ColumnProtocolOut extends BaseOut { lab_id: string; scheme: ColumnScheme; title: string; text: string; attribution: string; source_url: string; revision: number }
+export type ColumnProtocolInput = Pick<ColumnProtocolOut, 'lab_id' | 'scheme' | 'title' | 'text' | 'attribution' | 'source_url'>;
+export type ColumnProtocolPatch = Partial<Pick<ColumnProtocolOut, 'title' | 'text' | 'attribution' | 'source_url'>> & { revision: number };
 export interface BatchOut extends BaseOut { lab_id: string; capsule_set_id: string; started_on: string; operator_id: string | null; operator_name: string; recipe_id: string | null; recipe_snapshot: RecipeStep[]; recipe_name?: string | null; fraction_count?: number; capsule_set_name?: string; capsule_set_code?: string; notes: string; retired_at: string | null }
 export interface ParameterDefinition { name: string; config_key?: string; meaning?: string; unit?: string | null; type?: string; choices?: (string | number | { value: string | number; label?: string })[]; default?: unknown; min?: number; max?: number; required?: boolean; scope?: 'batch' | 'fraction'; role?: 'parameter' | 'outcome' }
 export interface StepOut extends BaseOut { batch_id: string; ordinal: number; method_code: string; method_name: string; parameters: Parameters; parameter_definitions: ParameterDefinition[]; performed_on: string | null; notes: string }
@@ -97,7 +101,7 @@ function edit(objectKey: string, path: string, body: unknown, method: 'PATCH' | 
   return outbox.enqueue({ objectKey, path, body, method });
 }
 /** Retain one form per exact input across manual retries; changing input needs a new form/key. */
-export function onlineForm<T>(path: string, method: 'POST' | 'DELETE', body?: unknown, objectKey?: string) {
+export function onlineForm<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown, objectKey?: string) {
   const source = () => JSON.stringify([identity.target?.server, identity.account?.id ?? identity.account?.username, identity.revision]);
   const owner = source(), idempotencyKey = crypto.randomUUID(), payload = body === undefined ? undefined : structuredClone(body);
   return { idempotencyKey, get disabledReason() { return onlineOnlyReason(); }, send: async () => {
@@ -111,6 +115,19 @@ export function onlineForm<T>(path: string, method: 'POST' | 'DELETE', body?: un
     }
     catch (error) { if (objectKey && source() === owner) timsRights.reject(objectKey, error); throw error; }
   } };
+}
+export const staleProtocolMessage = 'Someone else saved a newer revision; reload it before editing.';
+function protocolForm(path: string, method: 'POST' | 'PATCH', body: ColumnProtocolInput | ColumnProtocolPatch, objectKey?: string) {
+  const form = onlineForm<ColumnProtocolOut>(path, method, body, objectKey), send = form.send;
+  form.send = async () => {
+    try { return await send(); }
+    catch (error) {
+      if (error instanceof WriteError && error.status === 409 && error.code === 'stale_revision')
+        throw new WriteError(error.status, error.body, `${staleProtocolMessage} ${error.message}`, error.retryAfter);
+      throw error;
+    }
+  };
+  return form;
 }
 export const tims = {
   sampleChoices: (query: string) => firstPage<CapsuleSample>('/v1/samples', { limit: '50', q: query }),
@@ -132,6 +149,10 @@ export const tims = {
   recipe: (recipe: string) => read<RecipeOut>(`/v1/tims/recipes/${id(recipe)}`),
   createRecipe: (body: RecipeInput) => onlineForm<RecipeOut>('/v1/tims/recipes', 'POST', body),
   patchRecipe: (recipe: string, body: RecipePatch) => edit(`recipe:${recipe}`, `/v1/tims/recipes/${id(recipe)}`, body),
+  columnProtocols: (filters: Record<string, string> = {}) => firstPage<ColumnProtocolOut>('/v1/tims/column-protocols', filters),
+  columnProtocol: (protocol: string) => read<ColumnProtocolOut>(`/v1/tims/column-protocols/${id(protocol)}`),
+  createColumnProtocol: (body: ColumnProtocolInput) => protocolForm('/v1/tims/column-protocols', 'POST', body),
+  patchColumnProtocol: (protocol: string, body: ColumnProtocolPatch) => protocolForm(`/v1/tims/column-protocols/${id(protocol)}`, 'PATCH', body, `column-protocol:${protocol}`),
   batches: (filters: Record<string, string> = {}) => firstPage<BatchOut>('/v1/tims/batches', filters),
   batch: (batch: string) => read<BatchDetail>(batchPath(batch)),
   createBatch: (body: BatchInput) => onlineForm<BatchDetail>('/v1/tims/batches', 'POST', body),
@@ -149,7 +170,7 @@ export const tims = {
   patchVersion: (version: string, body: { status?: VersionStatus; notes?: string }) => edit(`spike_version:${version}`, `/v1/tims/spikes/versions/${id(version)}`, body),
   previewNotes: (body: PickNoteRequest) => onlineForm<PickNotePlan>('/v1/tims/pick-notes/preview', 'POST', body),
   importNotes: (body: PickNoteRequest & { status?: FractionStatus }) => onlineForm<{ plan: PickNotePlan; created: Record<string, string[]> }>('/v1/tims/pick-notes/import', 'POST', body),
-  history: (kind: 'fraction' | 'batch' | 'capsule_set' | 'recipe' | 'spike_solution' | 'spike_version', object: string) => firstPage<HistoryRow>(`/v1/history/${kind}/${id(object)}`),
+  history: (kind: 'fraction' | 'batch' | 'capsule_set' | 'recipe' | 'column-protocol' | 'spike_solution' | 'spike_version', object: string) => firstPage<HistoryRow>(`/v1/history/${kind}/${id(object)}`),
 };
 export const capsuleLabel = (fraction: Pick<FractionOut, 'capsule_label'>) => fraction.capsule_label ?? 'No capsule';
 export { statusWords } from './tims-model';

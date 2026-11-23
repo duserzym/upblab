@@ -8,6 +8,7 @@ import { inventedElements } from './fixtures/tims-atlas';
 import { writeCapsulePreparation } from '../src/lib/tims-capsule-intake';
 import { writeSpikingSession } from '../src/lib/tims-spiking';
 import { writeColumnNotes } from '../src/lib/tims-protocol';
+import type { ColumnProtocolOut } from '../src/lib/tims-api';
 // Preserve the stack in the supervisor's run if a Svelte runtime error recurs.
 const pageErrors = new WeakMap<Page, string[]>();
 test.beforeEach(({ page }) => { const errors: string[] = []; pageErrors.set(page, errors); page.on('pageerror', error => errors.push(error.stack ?? String(error))); });
@@ -18,14 +19,15 @@ test.afterEach(async ({ page }, info) => {
 });
 type Write = { method: string; path: string; body: Record<string, unknown>; idempotencyKey: string };
 const writes = (page: Page) => page.evaluate(() => (window as unknown as { __fake: { writes: Write[] } }).__fake.writes);
+const labProtocolsPath = `/v1/tims/column-protocols?limit=2&lab=${lab}`;
 async function start(page: Page, options: Partial<FakeOptions> = {}) {
-  const scoped = Object.fromEntries(Object.entries(fixtures).map(([path, value]) => {
+  const scoped = Object.fromEntries(Object.entries({ ...fixtures, [labProtocolsPath]: [] }).map(([path, value]) => {
     const paged = ['/v1/labs', '/v1/accounts', '/v1/tims/spikes'].includes(path) ? `${path}?limit=500` : path;
     return [`${paged}${paged.includes('?') ? '&' : '?'}as=invented-viewer`, value];
   }));
   await routeTimsAtlas(page);
   await page.route('**/modules/manifest.json', route => route.fulfill({ json: { modules: [] } }));
-  await page.addInitScript(installFakeTauri, { signedIn: true, canViewAs: true, ...options, store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'tims', ...options.store }, fixtures: { ...fixtures, ...scoped, ...options.fixtures } });
+  await page.addInitScript(installFakeTauri, { signedIn: true, canViewAs: true, ...options, store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'tims', ...options.store }, fixtures: { ...fixtures, [labProtocolsPath]: [], ...scoped, ...options.fixtures } });
   await page.goto('./');
   await expect(page.getByRole('tab', { name: 'TIMS', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('region', { name: 'Batch list', exact: true })).toBeVisible();
@@ -204,6 +206,19 @@ test('missing source and operator labels use shared cached names', async ({ page
   await expect(page.getByRole('region', { name: 'Capsule details' })).toContainText('Mount: Shared invented mount · Grain: 3');
   expect(await readCount(page, '/v1/accounts?limit=500')).toBe(1); expect(await readCount(page, '/v1/mounts/mount-demo')).toBe(1); expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(1);
 });
+for (const [width, height] of [[1280, 800], [1440, 900]]) {
+  test(`lab protocol editor fits ${width} × ${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await start(page, { fixtures: { '/v1/labs': ownerLab, [labProtocolsPath]: [{ ...inventedProtocol,
+      title: 'Invented protocol ' + 'long-title-'.repeat(30), source_url: 'https://example.org/' + 'invented-path-'.repeat(30),
+    }] } });
+    const area = await openLabProtocols(page);
+    await area.getByRole('button', { name: 'Edit HCl anion lab protocol', exact: true }).click();
+    await expect(area.getByLabel('Lab protocol text', { exact: true })).toHaveValue(inventedProtocol.text);
+    expect(await problems(page, 'TIMS lab protocol editor')).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
 for (const [width, height] of [[1280, 800], [1024, 640]]) test(`all 15 populated capsule buttons expose their status at ${width} × ${height}`, async ({ page }) => {
   const fractions = Array.from({ length: 15 }, (_, i) => ({ ...batch.fractions[0], id: `invented-capsule-${i + 1}`, name: `z${i + 1}`, capsule_number: i + 1, capsule_label: `K${i + 1}`, status: fractionStatuses[i % fractionStatuses.length] }));
   const populated = { ...batch, fractions, capsule_map: Object.fromEntries(fractions.map(f => [String(f.capsule_number), f.id])) };
@@ -326,6 +341,140 @@ test('capsules retain inherited and saved copies and start empty when their sche
   await drawer.getByRole('button', { name: 'Add protocol copy', exact: true }).click();
   await expect(drawer.getByLabel('Protocol text')).toHaveValue('');
   expect(await writes(page)).toHaveLength(1);
+});
+
+const inventedProtocol: ColumnProtocolOut = {
+  id: 'invented-lab-protocol', lab_id: lab, scheme: 'HCl anion', title: 'Invented column instructions',
+  text: 'Invented column\nStep A: rinse twice.', attribution: 'Invented isotope laboratory',
+  source_url: 'https://example.org/invented-protocol', revision: 3,
+  created_at: '2026-11-23T10:00:00Z', updated_at: '2026-11-23T11:00:00Z', created_by_id: 'invented-account',
+};
+const protocolBatch = { ...batch, steps: [...batch.steps, columnStep] };
+const ownerLab = [{ id: lab, name: 'Invented lab', my_role: 'owner' }];
+async function openLabProtocols(page: Page) {
+  await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Recipes', exact: true }).click();
+  return page.getByRole('region', { name: 'Lab column protocols', exact: true });
+}
+test('a new batch inherits its lab protocol, prints it, and seeds batch and capsule copies', async ({ page }) => {
+  const created = { ...protocolBatch, id: 'invented-new-batch', fractions: protocolBatch.fractions.map(row => ({ ...row, batch_id: 'invented-new-batch' })) };
+  await start(page, { fixtures: { [labProtocolsPath]: [inventedProtocol], [`/v1/tims/batches/${created.id}`]: created },
+    apiReplies: { 'POST /v1/tims/batches': { status: 201, body: created } } });
+  await page.getByRole('button', { name: 'New batch', exact: true }).click();
+  await page.getByRole('form', { name: 'New batch' }).getByLabel('Active capsule set').selectOption(batch.capsule_set_id);
+  await page.getByRole('button', { name: 'Create batch', exact: true }).click();
+  const step = await openStep(page, 'Column chemistry');
+  await step.getByText('Column protocol · lab protocol rev 3', { exact: true }).click();
+  await expect(step.locator('.column-protocol')).toContainText('Step A: rinse twice.');
+  await expect(step.getByRole('button', { name: 'Print column protocol' })).toBeEnabled();
+  await expect(step.getByRole('link', { name: inventedProtocol.title, exact: true })).toHaveAttribute('href', inventedProtocol.source_url);
+  await expect(step.locator('.attribution')).toHaveText(inventedProtocol.attribution);
+  await step.getByRole('button', { name: 'Edit step', exact: true }).click();
+  await step.getByText('Column protocol · lab protocol rev 3', { exact: true }).click();
+  await step.getByRole('button', { name: 'Add protocol copy', exact: true }).click();
+  await expect(step.getByLabel('Protocol text')).toHaveValue(inventedProtocol.text);
+  await step.getByRole('button', { name: 'Use inherited protocol', exact: true }).click();
+  await step.getByRole('button', { name: 'Cancel edit', exact: true }).click();
+  await page.getByRole('button', { name: 'Capsules', exact: true }).click();
+  await page.getByRole('button', { name: 'K1 z1', exact: true }).click();
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  await capsule.getByLabel('Capsule step', { exact: true }).selectOption(columnStep.id);
+  await capsule.getByText('Column protocol · lab protocol rev 3', { exact: true }).click();
+  await capsule.getByRole('button', { name: 'Add protocol copy', exact: true }).click();
+  await expect(capsule.getByLabel('Protocol text')).toHaveValue(inventedProtocol.text);
+  await capsule.getByLabel('Protocol text').fill('Invented capsule override\nStep B: record the trial.');
+  await capsule.getByRole('button', { name: 'Preview protocol', exact: true }).click();
+  await expect(capsule.getByRole('heading', { name: 'Invented capsule override', exact: true })).toBeVisible();
+  await expect(capsule.locator('.attribution')).toHaveText('Invented isotope laboratory · edited copy');
+  await capsule.getByRole('button', { name: 'Use inherited protocol', exact: true }).click();
+  await expect(capsule.getByRole('heading', { name: 'Invented column', exact: true })).toBeVisible();
+  expect(await readCount(page, labProtocolsPath)).toBe(1);
+});
+test('saved capsule text overrides batch and lab protocols', async ({ page }) => {
+  const record = { ...batch.fraction_step_records[0], id: 'invented-column-record', step_id: columnStep.id,
+    outcome_note: writeColumnNotes('', 'Invented saved capsule\nStep C: log the run.') };
+  await start(page, { fixtures: { [labProtocolsPath]: [inventedProtocol], [`/v1/tims/batches/${batch.id}`]: {
+    ...protocolBatch, steps: [...batch.steps, { ...columnStep, notes: writeColumnNotes('', 'Invented batch copy') }],
+    fraction_step_records: [...batch.fraction_step_records, record],
+  } } });
+  await openBatch(page); await page.getByRole('button', { name: 'K1 z1', exact: true }).click();
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  await capsule.getByLabel('Capsule step', { exact: true }).selectOption(columnStep.id);
+  await capsule.getByText('Column protocol · edited', { exact: true }).click();
+  await expect(capsule.getByRole('heading', { name: 'Invented saved capsule', exact: true })).toBeVisible();
+  await expect(capsule.getByRole('button', { name: 'Print column protocol' })).toBeEnabled();
+  await capsule.getByRole('button', { name: 'Use inherited protocol', exact: true }).click();
+  await expect(capsule.getByRole('heading', { name: 'Invented batch copy', exact: true })).toBeVisible();
+});
+test('an owner saves the loaded revision online and reads protocol history', async ({ page }) => {
+  const saved = { ...inventedProtocol, revision: 4, text: 'Invented revised column\nStep D: label the trial.' };
+  await start(page, { fixtures: { [labProtocolsPath]: [inventedProtocol], '/v1/labs': ownerLab,
+    [`/v1/history/column-protocol/${inventedProtocol.id}`]: [{ id: 'invented-protocol-history', actor: 'Invented owner', action: 'updated' }] },
+    apiReplies: { [`PATCH /v1/tims/column-protocols/${inventedProtocol.id}`]: { status: 200, body: saved } } });
+  const area = await openLabProtocols(page), row = area.getByRole('article', { name: 'HCl anion lab protocol', exact: true });
+  await expect(row).toContainText('Revision 3'); await expect(row).toContainText(inventedProtocol.updated_at);
+  await row.getByRole('button', { name: 'History', exact: true }).click();
+  await expect(row.getByRole('region', { name: 'History' })).toContainText('Invented owner');
+  await row.getByRole('button', { name: 'Edit HCl anion lab protocol', exact: true }).click();
+  await area.getByLabel('Lab protocol text', { exact: true }).fill(saved.text);
+  await reply(page, labProtocolsPath, 200, [saved]);
+  await area.getByRole('button', { name: 'Save lab protocol', exact: true }).click();
+  await expect.poll(() => writes(page)).toHaveLength(1);
+  expect((await writes(page))[0]).toMatchObject({ method: 'PATCH', path: `/v1/tims/column-protocols/${inventedProtocol.id}`,
+    body: { revision: 3, text: saved.text, title: saved.title, attribution: saved.attribution, source_url: saved.source_url } });
+  await expect(row).toContainText('Revision 4');
+  await expect(area.getByRole('form', { name: 'Lab protocol editor' })).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: 'Saved edits' })).toHaveCount(0);
+});
+test('an owner creates a missing scheme and cannot save empty protocol text', async ({ page }) => {
+  const created = { ...inventedProtocol, scheme: 'HBr-HCl', revision: 1 };
+  await start(page, { fixtures: { '/v1/labs': ownerLab }, apiReplies: { 'POST /v1/tims/column-protocols': { status: 201, body: created } } });
+  const area = await openLabProtocols(page);
+  await area.getByRole('button', { name: 'Create HBr-HCl lab protocol', exact: true }).click();
+  await expect(area.getByRole('button', { name: 'Save lab protocol' })).toBeDisabled();
+  await area.getByLabel('Lab protocol text', { exact: true }).fill(inventedProtocol.text);
+  await reply(page, labProtocolsPath, 200, [created]);
+  await area.getByRole('button', { name: 'Save lab protocol' }).click();
+  await expect.poll(() => writes(page)).toHaveLength(1);
+  expect((await writes(page))[0]).toMatchObject({ method: 'POST', body: { lab_id: lab, scheme: 'HBr-HCl', text: inventedProtocol.text } });
+});
+test('members see lab protocols read-only and can print the saved text offline', async ({ page }) => {
+  await start(page, { cached: { asOf: '2026-11-23T11:00:00Z', reason: 'unreachable' }, fixtures: { [labProtocolsPath]: [inventedProtocol] } });
+  const area = await openLabProtocols(page);
+  await expect(area).toContainText("Only lab owners can edit the lab's column protocol.");
+  await expect(area.getByRole('button', { name: /^(Edit|Create) .* lab protocol$/ })).toHaveCount(0);
+  const row = area.getByRole('article', { name: 'HCl anion lab protocol', exact: true });
+  await row.getByText('Column protocol · lab protocol rev 3', { exact: true }).click();
+  await expect(row.locator('.column-protocol')).toContainText('Step A: rinse twice.');
+  await expect(row.getByRole('button', { name: 'Print column protocol' })).toBeEnabled();
+  expect(await writes(page)).toHaveLength(0);
+});
+test('stale protocol saves require reloading the newer revision before editing', async ({ page }) => {
+  const path = `/v1/tims/column-protocols/${inventedProtocol.id}`;
+  await start(page, { fixtures: { [labProtocolsPath]: [inventedProtocol], '/v1/labs': ownerLab },
+    apiReplies: { [`PATCH ${path}`]: { status: 409, body: { code: 'stale_revision', detail: 'Invented newer revision exists.' } } } });
+  const area = await openLabProtocols(page);
+  await area.getByRole('button', { name: 'Edit HCl anion lab protocol', exact: true }).click();
+  await area.getByLabel('Lab protocol text', { exact: true }).fill('Invented conflicting draft');
+  await area.getByRole('button', { name: 'Save lab protocol' }).click();
+  await expect(area).toContainText('Someone else saved a newer revision; reload it before editing.');
+  await expect(area.getByRole('button', { name: 'Save lab protocol' })).toBeDisabled();
+  const newer = { ...inventedProtocol, revision: 4, text: 'Invented newer column' };
+  await reply(page, labProtocolsPath, 200, [newer]); await area.getByRole('button', { name: 'Reload lab protocols' }).click();
+  await expect(area.getByLabel('Lab protocol text', { exact: true })).toHaveValue(newer.text);
+  await reply(page, `PATCH ${path}`, 200, { ...newer, revision: 5 });
+  await reply(page, labProtocolsPath, 200, [{ ...newer, revision: 5 }]);
+  await area.getByRole('button', { name: 'Save lab protocol' }).click();
+  await expect.poll(() => writes(page)).toHaveLength(2);
+  expect((await writes(page))[1]).toMatchObject({ body: { revision: 4 } });
+});
+test('servers without column protocols retain the link-only fallback', async ({ page }) => {
+  await start(page, { fixtures: { [`/v1/tims/batches/${batch.id}`]: protocolBatch },
+    apiReplies: { [labProtocolsPath]: { status: 404, body: { detail: 'Invented older server.' } } } });
+  await openBatch(page); const step = await openStep(page, 'Column chemistry');
+  await step.getByText('Column protocol', { exact: true }).click();
+  await expect(step.getByRole('link')).toHaveAttribute('href', guidebookUrl);
+  await expect(step.getByRole('button', { name: 'Print column protocol' })).toHaveCount(0);
+  await expect(step.locator('.column-protocol')).toHaveCount(0);
 });
 
 test('BSU defaults need an explicit confirm and create only missing sets with separate keys', async ({ page }) => {

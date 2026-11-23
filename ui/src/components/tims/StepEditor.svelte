@@ -7,6 +7,7 @@
   import { columnProtocol, readColumnNotes, validMass, writeColumnNotes } from '../../lib/tims-protocol';
   import { latestBottleReading, readSpikingSession, writeSpikingSession, type SessionBottle } from '../../lib/tims-spiking';
   import ParameterFields from './ParameterFields.svelte';
+  import { labProtocol, labProtocols, useLabProtocols } from '../../lib/tims-lab-protocols.svelte';
   import ColumnProtocol from './ColumnProtocol.svelte';
   import SpikePicker from './SpikePicker.svelte';
 
@@ -16,6 +17,7 @@
     spikes?: SpikeAddition[];
     sessionStepIds: ReadonlySet<string>;
   } = $props();
+  useLabProtocols(() => lab);
   let editing = $state(false), parameters = $state.raw<Parameters>({}), performed = $state(''), notes = $state('');
   let bottles = $state.raw<SessionBottle[]>([]), pickerVersion = $state('');
   let protocolDraft = $state(''), error = $state(''), busy = $state(false);
@@ -117,7 +119,7 @@
           <SpikePicker value={pickerVersion} onchange={addBottle} disabled={!editable || busy} {lab} {knownVersions} showComposition />
         </fieldset>
       {/if}
-      {#if column}<ColumnProtocol reference={columnProtocol(parameters.scheme)} value={protocolDraft} saved={!!columnNotes.protocol} onchange={value => protocolDraft = value} />{/if}
+      {#if column}<ColumnProtocol reference={columnProtocol(parameters.scheme)} loadError={labProtocols.state(lab).error} labProtocol={labProtocol(lab, columnProtocol(parameters.scheme)?.scheme)} value={protocolDraft} saved={!!columnNotes.protocol} onchange={value => protocolDraft = value} />{/if}
       <label>Step notes <textarea rows="3" bind:value={notes} disabled={!editable || busy}></textarea></label>
       <div class="row heading">
         <button class="btn primary" disabled={!editable || busy}>Save step here</button>
@@ -145,7 +147,7 @@
     {/if}
     {@const summary = spiking ? session.notes : column ? columnNotes.notes : step.notes}
     {#if summary}<p>{summary}</p>{/if}
-    {#if column}<ColumnProtocol reference={columnProtocol(step.parameters.scheme)} value={columnNotes.protocol} saved={!!columnNotes.protocol} context={`Batch step ${step.ordinal} · ${step.performed_on ?? 'Date unrecorded'}`} />{/if}
+    {#if column}<ColumnProtocol reference={columnProtocol(step.parameters.scheme)} loadError={labProtocols.state(lab).error} labProtocol={labProtocol(lab, columnProtocol(step.parameters.scheme)?.scheme)} value={columnNotes.protocol} saved={!!columnNotes.protocol} context={`Batch step ${step.ordinal} · ${step.performed_on ?? 'Date unrecorded'}`} />{/if}
   {/if}
   {#if error}<p class="error" role="status">{error}</p>{/if}
 </article>

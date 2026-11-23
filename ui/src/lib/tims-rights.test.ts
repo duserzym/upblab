@@ -23,3 +23,16 @@ it('publishes lab rights progressively, adds further pages on demand, and fails 
   rights.rememberLabs((await more()).items as never); expect(more).toHaveBeenCalledTimes(1); expect(rights.canEdit('second')).toBe(true);
   vi.mocked(firstPage).mockRejectedValueOnce(new Error('Server returned 503: maintenance')); await rights.load(); expect(rights.error).toContain('503'); expect(rights.canEdit('second')).toBe(false);
 });
+
+it('limits lab protocol editing to owners and superusers and respects identity and view-as', async () => {
+  const rights = new TimsRights(); await rights.load();
+  expect(rights.canEditLabProtocol('member-lab')).toBe(false);
+  expect(rights.canEditLabProtocol('owner-lab')).toBe(true);
+  expect(rights.canEditLabProtocol('visible-lab')).toBe(false);
+  identity.account!.is_superuser = true;
+  expect(rights.canEditLabProtocol('unrelated')).toBe(true);
+  oversight.select({ username: 'invented', name: 'Invented' });
+  expect(rights.canEditLabProtocol('owner-lab')).toBe(false);
+  oversight.reset(); identity.revision++;
+  expect(rights.canEditLabProtocol('owner-lab')).toBe(false);
+});
