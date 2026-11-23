@@ -8,6 +8,12 @@ export function sourceNames(source: SourceOut, mount?: MountGeometry) {
   const spot = mount?.spots.find(s => !!source.spot_id && s.server_id === source.spot_id || !!source.atlas_spot_id && (s.id === source.atlas_spot_id || s.atlas_spot_id === source.atlas_spot_id));
   return { mount: source.mount_label || mount?.label || 'Not recorded', grain: source.grain_label || grain?.label || grain?.name || grain?.number || grain?.grain_number || 'Not recorded', spot: source.spot_label || spot?.label || spot?.name || 'Not recorded' };
 }
+/** Names of the active LA links, in source order; stored labels win. */
+export function sourceSpotNames(sources: readonly SourceOut[], geometry: Record<string, MountGeometry>) {
+  return [...new Set(sources.filter(source => !source.retired_at && (source.spot_id || source.atlas_spot_id))
+    .map(source => sourceNames(source, source.mount_id ? geometry[source.mount_id] : undefined).spot)
+    .filter(name => name !== 'Not recorded'))];
+}
 export function capsulePucks(positions = 15, perPuck = 5) {
   if (!Number.isInteger(positions) || positions < 1 || !Number.isInteger(perPuck) || perPuck < 1) return [];
   return Array.from({ length: Math.ceil(positions / perPuck) }, (_, p) => Array.from({ length: Math.min(perPuck, positions - p * perPuck) }, (_, n) => p * perPuck + n + 1));

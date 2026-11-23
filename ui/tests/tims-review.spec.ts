@@ -15,6 +15,7 @@ for (const [width, height] of [[1280, 800], [1440, 900]]) {
       const crop = section.getByTestId('tims-grain-image').first();
       await expect(crop).toHaveAttribute('data-image-state', 'ready');
       await expect(crop.locator('clipPath polygon')).toHaveCount(1); await expect(crop.locator('image[href]')).not.toHaveCount(0);
+      await expect(section.locator('strong').filter({ hasText: /^Zircon_1$/ })).toBeVisible();
       await expect(section).toContainText('Synthetic-A'); await expect(section).toContainText('K1'); await expect(section).toContainText('Krogh');
       await expect(section).toContainText('Synthetic analyst'); await expect(section).toContainText('2026-11-06');
       await expect(section).toContainText('Temperature: 180 °C'); await expect(section).toContainText('Duration: 12 h');

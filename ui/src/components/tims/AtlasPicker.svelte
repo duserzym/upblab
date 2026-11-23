@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, untrack } from 'svelte';
   import { firstPage, mineralWords, type FractionOut, type ListPage, type Mineral, type SourceOut } from '../../lib/tims-api';
-  import { grainLabel, grainSources, missingSpotSources, mountGrainChoices } from '../../lib/tims-capsule-import';
+  import { grainSources, missingSpotSources } from '../../lib/tims-capsule-import';
   import { fractionNamePattern } from '../../lib/tims-capsule-intake';
   import { minerals } from '../../lib/tims-model';
   import { mountElements, OnlineAction, ReplyScope } from '../../lib/tims-requests';
@@ -10,8 +10,8 @@
   import { plural } from '../../lib/plural';
   import GrainImage from './GrainImage.svelte';
 
-  interface Mount { id: string; label: string; atlas: { project_id: string } | null }
-  type Choice = ReturnType<typeof mountGrainChoices>[number];
+  import { grainChoiceLabel, searchSpots, spotMountQuery, type GrainChoice as Choice } from '../../lib/tims-spot-search';
+  import { findSpotMounts, mountSpotIndex, type PickerMount as Mount, type FoundMount, type SpotMountSearch } from '../../lib/tims-spot-finder';
   let { batch, lab, position, label, fraction, editable, defaultMineral = 'zircon', oncreated, onlinked, close }: {
     batch: string; lab: string; position: number; label: string; fraction?: FractionOut; editable: boolean;
     defaultMineral?: Mineral; oncreated: (value: FractionOut) => void;
@@ -20,7 +20,9 @@
 
   const pageSize = 24;
   let mounts = $state.raw<Mount[]>([]), mountsPage = $state.raw<ListPage<Mount> | null>(null);
-  let mountSearch = $state(false);
+  let mountSearch = $state(false), findBusy = $state(false), sampleFilter = $state('');
+  let findResult = $state.raw<SpotMountSearch>(), findError = $state('');
+  let findGeneration = 0;
   let mountQuery = $state(''), grainQuery = $state(''), mountId = $state(''), count = $state(pageSize);
   let geometry = $state.raw<MountGeometry>(), choice = $state.raw<Choice>(), mineral = $state<Mineral>('zircon');
   let fractionName = $state(''), selectedSpots = $state.raw<string[]>([]), singleSpot = $state('');
@@ -33,8 +35,8 @@
   const sourceAction = new OnlineAction<SourceOut>();
   onDestroy(() => replies.invalidate());
 
-  const choices = $derived(geometry ? mountGrainChoices(geometry) : []);
-  const matches = $derived(choices.filter(({ grain }) => `${grainLabel(grain)} ${grain.sample ?? ''}`.toLowerCase().includes(grainQuery.trim().toLowerCase())));
+  const index = $derived(geometry ? mountSpotIndex(geometry) : undefined);
+  const matches = $derived(index ? searchSpots(index, grainQuery, sampleFilter).map(match => match.choice) : []);
   const available = $derived(choice ? missingSpotSources(fraction?.sources ?? [], choice.grain, choice.spots) : null);
   const writeReason = $derived(onlineOnlyReason());
   const needsSample = $derived(!fraction && choice?.grain.sample === null);
@@ -68,7 +70,16 @@
     }
   }
 
+  function cancelSpotSearch() {
+    findGeneration++;
+    findBusy = false;
+    findResult = undefined;
+    findError = '';
+  }
+
   async function openMount(id: string, revalidate = false) {
+    cancelSpotSearch();
+    sampleFilter = '';
     mountGeneration++;
     mountId = id;
     choice = undefined;
@@ -90,7 +101,55 @@
     }
   }
 
+  function chooseFound(found: FoundMount, query: string) {
+    findGeneration++;
+    mountGeneration++;
+    findBusy = false;
+    findResult = undefined;
+    mountId = found.mount.id;
+    geometry = found.geometry;
+    if (!mounts.some(mount => mount.id === found.mount.id)) mounts = [...mounts, found.mount];
+    const samples = [...new Set(found.matches.map(match => match.choice.grain.sample).filter(Boolean))];
+    sampleFilter = samples.length === 1 ? samples[0]! : '';
+    grainQuery = query;
+    choice = undefined;
+    grainBusy = false;
+    grainError = '';
+    saveError = '';
+    count = pageSize;
+  }
+
+  async function findSpot() {
+    const query = grainQuery.trim();
+    if (!query || findBusy) return;
+    choice = undefined;
+    count = pageSize;
+    findError = '';
+    findResult = undefined;
+    const sampleQuery = spotMountQuery(query, !!geometry);
+    if (!sampleQuery) return;
+    // A matching grain label without a sample prefix stays within this mount.
+    if (index && matches.length && !index.samples.some(sample =>
+      sample.toLowerCase().startsWith(sampleQuery.toLowerCase()))) return;
+    findGeneration++;
+    const generation = findGeneration;
+    const current = replies.capture(() => [findGeneration, mountGeneration, grainQuery, position]);
+    findBusy = true;
+    try {
+      const result = await findSpotMounts(query, sampleQuery, value => { if (current()) findResult = value; }, current);
+      if (!current()) return;
+      findResult = result;
+      if (result.matches.length === 1 && !result.errors.length && !result.hasMore) chooseFound(result.matches[0], query);
+    } catch (error) {
+      if (current()) findError = String(error);
+    } finally {
+      // Typing invalidates a reply, but must also release this search's busy state.
+      if (findGeneration === generation) findBusy = false;
+    }
+  }
+
   function select(next: Choice) {
+    cancelSpotSearch();
     choice = next;
     selectedSpots = next.spots.map(spot => spot.server_id!);
     singleSpot = missingSpotSources(fraction?.sources ?? [], next.grain, next.spots).spots[0]?.server_id ?? '';
@@ -150,14 +209,34 @@
   {#if grainBusy}<p class="muted" role="status">Loading registered grains…</p>{/if}
   {#if grainError}<p class="error small" role="status">{grainError}</p><button class="btn" onclick={() => void openMount(mountId, true)}>Retry mount</button>{/if}
 
-  {#if geometry}
-    <div class="row search">
-      <input type="search" aria-label="Filter grains" placeholder="Filter by grain or sample" value={grainQuery} oninput={e => { grainQuery = e.currentTarget.value; count = pageSize; }} />
-      <button class="btn small" onclick={() => void openMount(mountId, true)}>Refresh</button>
+  <form class="row search" onsubmit={e => { e.preventDefault(); void findSpot(); }}>
+    <input type="search" aria-label="Filter grains" placeholder="Spot, grain or sample" value={grainQuery} oninput={e => { grainQuery = e.currentTarget.value; count = pageSize; choice = undefined; findResult = undefined; findError = ''; }} />
+    <button class="btn small" type="submit" disabled={findBusy || !grainQuery.trim()}>Find spot</button>
+    {#if geometry}<button class="btn small" type="button" onclick={() => void openMount(mountId, true)}>Refresh</button>{/if}
+  </form>
+  {#if findBusy}<p class="small muted" role="status">Finding spots across up to 5 mounts…</p>{/if}
+  {#if findError}<p class="small error" role="status">{findError}</p>{/if}
+  {#if findResult}
+    <div class="stack" aria-label="Matching mounts">
+      {#each findResult.matches as found (found.mount.id)}
+        {@const names = [...new Set(found.matches.flatMap(match => match.spotNames))]}
+        <button class="btn mount-match" type="button" onclick={() => chooseFound(found, grainQuery.trim())} title={names.join(', ')}>
+          {found.mount.label} · {names.slice(0, 5).join(', ')}{names.length > 5 ? ` · and ${names.length - 5} more` : ''}
+        </button>
+      {/each}
+      {#if !findBusy && !findResult.matches.length}<p class="small muted" role="status">No matching spots in the checked mounts. Include the sample name, or choose a mount.</p>{/if}
+      {#if findResult.hasMore}<p class="small muted">Checked up to 5 candidate mounts. Use Find mount to narrow the mount filter.</p>{/if}
+      {#each findResult.errors as error}<p class="small error" role="status">{error}</p>{/each}
     </div>
+  {/if}
+  {#if geometry}
+    <label>Sample <select value={sampleFilter} onchange={e => { cancelSpotSearch(); sampleFilter = e.currentTarget.value; choice = undefined; count = pageSize; }}>
+      <option value="">All samples</option>
+      {#each index?.samples ?? [] as sample}<option value={sample}>{sample}</option>{/each}
+    </select></label>
     {#if choice}
       <form class="glass selection stack" aria-label="Grain import" onsubmit={e => { e.preventDefault(); void save(); }}>
-        <div class="row heading"><strong>{grainLabel(choice.grain)}</strong><button class="btn small" type="button" onclick={() => choice = undefined}>Choose another</button></div>
+        <div class="row heading"><strong>{grainChoiceLabel(choice)}</strong><button class="btn small" type="button" onclick={() => choice = undefined}>Choose another</button></div>
         <div class="row">
           {@render thumbnail(choice, 82)}
           {#if choice.grain.sample}<p class="small muted">{choice.grain.sample}</p>{/if}
@@ -197,7 +276,7 @@
         {#each matches.slice(0, count) as item (item.grain.server_id)}
           <button class="btn grain" type="button" onclick={() => select(item)}>
             {@render thumbnail(item, 62)}
-            <strong>{grainLabel(item.grain)}</strong><span class="small muted">{plural(item.spots.length, 'spot')}</span>
+            <strong>{grainChoiceLabel(item)}</strong><span class="small muted">{plural(item.spots.length, 'spot')}</span>
           </button>
         {:else}<p class="small muted">No registered grains match.</p>{/each}
       </div>
@@ -212,10 +291,13 @@
 {/snippet}
 
 <style>
-  section, form { min-width: 0; }
+  section, form { min-width: 0; overflow-wrap: anywhere; }
   h3, p { margin: 0; }
   .heading { justify-content: space-between; flex-wrap: wrap; }
-  .search input { flex: 1; }
+  .search { flex-wrap: wrap; }
+  .search input { flex: 1; min-width: min(150px, 100%); }
+  .mount-match { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+  .selection strong { overflow-wrap: anywhere; }
   .mount-row { align-items: end; }
   .mount-row label { flex: 1; min-width: 0; }
   label { display: grid; gap: 4px; }

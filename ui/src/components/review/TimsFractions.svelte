@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { sourceNames, sourceSpotNames, type MountGeometry } from '../../lib/tims-geometry';
+  import { grainImageScope } from '../../lib/tims-requests';
   import GrainImage from '../tims/GrainImage.svelte';
   import OperatorName from '../tims/OperatorName.svelte';
   import { timsRights } from '../../lib/tims-rights.svelte';
@@ -11,6 +13,8 @@
   import { oversight, READ_ONLY_REASON } from '../../lib/oversight.svelte';
   import { editInAtlas } from '../../lib/apps.svelte';
   import { shell } from '../../lib/shell.svelte';
+  let geometry = $state.raw<Record<string, MountGeometry>>({});
+  $effect(() => { void grainImageScope(); geometry = {}; });
   const spot = $derived(review.selected);
   const matches = $derived(spot ? spotFractions(spot, review.fractionIndex) : []);
 </script>
@@ -26,9 +30,13 @@
       {@const fraction = { ...(batch?.fractions.find(f => f.id === original.id) ?? original), ...Object.assign({}, ...pending.filter(e => e.path === `/v1/fractions/${original.id}`).map(e => e.body)) }}
       {@const project = spot?.atlasProjectId ?? review.mounts.find(m => m.id === (match.source.mount_id ?? spot?.mountId))?.atlas?.project_id ?? null}
       {@const reason = oversight.viewAs ? READ_ONLY_REASON : !project ? 'No grainatlas project is available for this mount.' : !match.source.atlas_grain_id ? 'No grainatlas grain identity is available for this source.' : ''}
+      {@const sourceMount = match.source.mount_id ?? spot?.mountId ?? null}
+      {@const names = sourceNames(match.source, sourceMount ? geometry[sourceMount] : undefined)}
+      {@const spotNames = sourceSpotNames(fraction.sources, geometry)}
       <article class="panel stack small">
-        <GrainImage source={{ ...match.source, mount_id: match.source.mount_id ?? spot?.mountId ?? null }} size={120} loadGeometry enabled={!!stored || !original.batch_id || !!review.batchErrors[original.batch_id]} />
-        {#if match.source.mount_label || match.source.grain_label}<p>{match.source.mount_label || 'Mount name unavailable'} · {match.source.grain_label || 'Grain name unavailable'}</p>{/if}
+        <GrainImage source={{ ...match.source, mount_id: match.source.mount_id ?? spot?.mountId ?? null }} size={120} loadGeometry ongeometry={value => { if (sourceMount && geometry[sourceMount] !== value) geometry = { ...geometry, [sourceMount]: value }; }} enabled={!!stored || !original.batch_id || !!review.batchErrors[original.batch_id]} />
+        {#if spotNames.length}<p><strong>{spotNames.join(', ')}</strong></p>{/if}
+        {#if names.mount !== 'Not recorded' || names.grain !== 'Not recorded'}<p>{names.mount} · grain {names.grain}</p>{/if}
         <p><strong>{fraction.name}</strong> · {capsuleLabel(fraction)} · {batch?.capsule_set.name ?? fraction.capsule_set_name ?? 'No capsule set'}</p>
         <p class:warning={fraction.status === 'dissolved_in_ca'}>{statusWords(fraction.status)} · {fraction.sample.name} · {mineralWords(fraction.mineral)}</p>
         {#if match.fromGrain}<p class="muted">from this grain</p>{/if}

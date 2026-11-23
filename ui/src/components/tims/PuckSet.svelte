@@ -1,6 +1,6 @@
 <script lang="ts">
   import { statusWords, type BatchDetail, type FractionStepRecord } from '../../lib/tims-api';
-  import { capsulePucks, puckSlotCoordinates, type MountGeometry } from '../../lib/tims-geometry';
+  import { capsulePucks, puckSlotCoordinates, sourceSpotNames, type MountGeometry } from '../../lib/tims-geometry';
   import { capsulePreparations, readCapsulePreparation } from '../../lib/tims-capsule-intake';
   import GrainImage from './GrainImage.svelte';
 
@@ -40,10 +40,11 @@
           {@const source = fraction?.sources.find(s => !s.retired_at && s.mount_id)}
           {@const label = batch.capsule_set.capsule_labels[position - 1] ?? batch.capsule_set.code + position}
           {@const state = fraction ? statusWords(fraction.status) : 'empty'}
+          {@const spotNames = fraction ? sourceSpotNames(fraction.sources, geometry).join(', ') : ''}
           {@const preparation = fraction ? readCapsulePreparation(fraction.notes).preparation : null}
-          {@const detail = fraction ? [preparation && capsulePreparations[preparation], fraction.sample.name, state, ...(outcomes.get(fraction.id) ?? []).map(r => r.outcome === 'fully_dissolved' && methods.get(r.step_id) === 'SP-TIMS-CA' ? 'dissolved during CA' : statusWords(r.outcome)), ...(fraction.sources.some(s => !s.retired_at && s.is_fragment) ? ['fragment'] : [])].filter(Boolean).join(' · ') : 'Prepare this capsule'}
+          {@const detail = fraction ? [preparation && capsulePreparations[preparation], fraction.sample.name, spotNames, state, ...(outcomes.get(fraction.id) ?? []).map(r => r.outcome === 'fully_dissolved' && methods.get(r.step_id) === 'SP-TIMS-CA' ? 'dissolved during CA' : statusWords(r.outcome)), ...(fraction.sources.some(s => !s.retired_at && s.is_fragment) ? ['fragment'] : [])].filter(Boolean).join(' · ') : 'Prepare this capsule'}
           <button class="btn capsule" class:filled={!!fraction} type="button" data-testid="tims-capsule"
-            aria-label={`${label} ${fraction?.name ?? 'empty'}${preparation ? ' · ' + capsulePreparations[preparation] : ''}`} aria-pressed={selected === position}
+            aria-label={`${label} ${fraction?.name ?? 'empty'}${preparation ? ' · ' + capsulePreparations[preparation] : ''}${spotNames ? ' · ' + spotNames : ''}`} aria-pressed={selected === position}
             title={detail} style={batch.capsule_set.positions_per_puck <= 6 ? location(slot, batch.capsule_set.positions_per_puck) : undefined} onclick={() => onselect(position)}>
             <span class="well">
               {#if source}<GrainImage {source} mount={source.mount_id ? geometry[source.mount_id] : undefined} size={36} lazy {geometryError} />

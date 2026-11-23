@@ -7,8 +7,8 @@
   import { grainImages, grainTiles, type AtlasListing, type PublishedGrainAtlas } from '../../lib/tims-grain-image-cache';
   import { grainImageScope, mountElements } from '../../lib/tims-requests';
 
-  let { source, mount, size = 72, lazy = false, loadGeometry = false, enabled = true, geometryError = '' }: {
-    source?: GrainImageSource; mount?: MountGeometry; size?: number; lazy?: boolean; loadGeometry?: boolean; enabled?: boolean; geometryError?: string;
+  let { source, mount, size = 72, lazy = false, loadGeometry = false, enabled = true, geometryError = '', ongeometry }: {
+    source?: GrainImageSource; mount?: MountGeometry; size?: number; lazy?: boolean; loadGeometry?: boolean; enabled?: boolean; geometryError?: string; ongeometry?: (value: MountGeometry) => void;
   } = $props();
   const uid = $props.id();
   const clipId = `${uid}-grain`;
@@ -53,6 +53,7 @@
         const value = provided ?? (loadGeometry ? await mountElements(src.mount_id) : undefined);
         if (!current()) return;
         fetched = value;
+        if (value) untrack(() => ongeometry?.(value));
         const { grain, spot } = sourceGeometry(src, value);
         if (!grain?.polygon_um || !grainOutline(grain.polygon_um)) throw new Error('No segmented grain polygon is available.');
         const image = await grainImages.published(owner, identity.target!.server, src.mount_id, () => read<AtlasListing>(`/v1/mounts/${encodeURIComponent(src.mount_id!)}/atlas`), failed);

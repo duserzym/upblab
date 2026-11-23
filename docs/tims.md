@@ -23,6 +23,21 @@ pages searchable mount lists, reuses the selected mount's element snapshot
 and shows grain thumbnails progressively. UPbDB supplies elements as a single
 mount snapshot rather than a paged grain list.
 
+Grain choices lead with their registered spot names, followed by the grain label.
+Use **Spot, grain or sample** to filter the open mount in memory, and **Sample**
+to narrow it further. Separators and case do not matter: `195`, `S 195`,
+`S_195` and `ZZ01_S_195` find the same invented spot. Numbers match whole
+number tokens, ignoring leading zeros; `195` does not match `1950`.
+
+Press Enter or **Find spot** with a sample name or a full spot name to look
+across mounts. UPbDB searches mount labels and sample names; the picker checks
+up to five candidate mounts and reuses cached elements. A unique complete
+match opens its mount and selects its sample. Several matches appear as mount
+choices with their matching spot names. For more candidates, narrow the manual
+mount filter with **Find mount**. Typing alone never requests mounts or elements.
+Linked spot names lead capsule source lines and Review fraction cards, and full
+names appear in capsule-position accessible labels and tooltips.
+
 For an unmounted sample, register it in UPbDB with its project and metadata.
 In an empty capsule, choose **TIMS only**, search by sample name or IGSN and
 select the registered record. This list includes all registered samples except

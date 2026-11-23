@@ -194,10 +194,10 @@
         <article class="source">
           <GrainImage {source} {mount} size={104} {geometryError} />
           <div class="stack labels">
-            <p class="small muted">Mount: {names.mount} · Grain: <strong>{names.grain}</strong></p>
-            {#if sources.some(s => s.spot_id)}
-              <ul aria-label="Linked LA spots">{#each sources.filter(s => s.spot_id) as linked (linked.id)}<li>{sourceNames(linked, mount).spot}</li>{/each}</ul>
+            {#if sources.some(s => s.spot_id || s.atlas_spot_id)}
+              <ul aria-label="Linked LA spots">{#each sources.filter(s => s.spot_id || s.atlas_spot_id) as linked (linked.id)}<li><strong>{sourceNames(linked, mount).spot}</strong></li>{/each}</ul>
             {:else}<span class="small muted">No linked LA spots</span>{/if}
+            <p class="small muted">Mount: {names.mount} · Grain: {names.grain}</p>
             {#each [...new Set(sources.filter(s => s.is_fragment).map(s => s.fragment_note))] as fragmentNote}<p class="small warning">Fragment · {fragmentNote}</p>{/each}
             {#each [...new Set(sources.map(s => s.note).filter(Boolean))] as note}<p class="small">{note}</p>{/each}
             <button type="button" class="btn small" disabled={!editable || !mount?.current_project_uuid || !source.atlas_grain_id}
@@ -334,7 +334,7 @@
   .picker-steps .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
   .picker-steps .btn { white-space: normal; }
   .source { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
-  .labels { gap: var(--space-1); }
+  .labels { min-width: 0; gap: var(--space-1); overflow-wrap: anywhere; }
   ul { padding-left: 1.2em; margin: 0; font-size: .78rem; }
   label { display: grid; gap: 4px; }
   .check { display: flex; align-items: baseline; }

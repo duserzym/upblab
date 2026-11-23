@@ -37,3 +37,12 @@ it('uses source labels first, then shared mount elements and never displays a so
   expect(sourceNames({ ...source, mount_label: 'Recorded mount', grain_label: 'Recorded grain' }, geometry)).toMatchObject({ mount: 'Recorded mount', grain: 'Recorded grain' });
   expect(sourceNames(source)).toEqual({ mount: 'Not recorded', grain: 'Not recorded', spot: 'Not recorded' });
 });
+
+it('shows every active linked spot once, preserving full stored names and falling back to elements', async () => {
+  const { sourceSpotNames } = await import('./tims-geometry');
+  const source = { ...timsFraction.sources[0], spot_label: 'ZZ01_S_195' };
+  const geometry = { [source.mount_id!]: { current_project_uuid: null, grains: [], spots: [{ id: 'a196', server_id: 's196', name: 'ZZ01_S_196', x_um: 0, y_um: 0 }] } };
+  expect(sourceSpotNames([source, source, { ...source, spot_id: 's196', atlas_spot_id: 'a196', spot_label: null },
+    { ...source, spot_label: 'ZZ01_S_197', retired_at: '2026-11-23' }], geometry)).toEqual(['ZZ01_S_195', 'ZZ01_S_196']);
+  expect(sourceSpotNames([{ ...source, spot_id: null, atlas_spot_id: null, spot_label: null }], geometry)).toEqual([]);
+});
