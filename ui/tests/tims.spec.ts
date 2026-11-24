@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { installFakeTauri, type FakeOptions } from './fake-tauri';
-import { fixtures, batch, lab, plan, recipe, version, solutions } from './fixtures/tims';
+import { fixtures, batch, lab, plan, recipe, version, solutions, publishedVersion, labVersion, earlierVersion } from './fixtures/tims';
 import { routeTimsAtlas } from './tims-atlas-helpers';
 import { problems } from './problems';
 import { fractionStatuses, statusWords } from '../src/lib/tims-model';
@@ -246,12 +246,106 @@ test('422 attention shows the server reason with Retry and Discard', async ({ pa
 test('spike picker reviews composition and non-current warning before applying a registered version', async ({ page }) => {
   await start(page); await openBatch(page); const step = await openStep(page, 'Spiking'); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByRole('button', { name: 'Choose spike version' }).click();
   const picker = page.getByRole('region', { name: 'Spike version picker' }); await expect(picker.getByLabel('Solution', { exact: true }).getByRole('option')).toHaveCount(solutions.length + 1); await picker.getByLabel('Solution', { exact: true }).selectOption('synthetic-solution'); await picker.getByLabel('Subfraction', { exact: true }).selectOption('synthetic-bottle'); await picker.getByLabel('Version', { exact: true }).selectOption(version.id);
-  await expect(picker.getByRole('region', { name: 'Spike composition' })).toContainText('0.001 mol/g'); await expect(picker).toContainText('uncertainty not given'); await expect(picker).toContainText('not current'); expect(await writes(page)).toHaveLength(0);
+  await expect(picker.getByRole('table', { name: 'Concentrations (mol/g)', exact: true })).toContainText('0.001'); await expect(picker).toContainText('uncertainty not given'); await expect(picker).toContainText('not current'); expect(await writes(page)).toHaveLength(0);
   await picker.getByRole('button', { name: 'Apply reviewed version' }).click(); await expect(picker).toHaveCount(0); expect(await writes(page)).toHaveLength(0);
   await expect(step).toContainText('Selected version: Synthetic spike · Master · v1 (superseded)');
   await step.getByRole('button', { name: 'Choose spike version' }).click();
   await expect(picker.getByLabel('Solution', { exact: true }).getByRole('option')).toHaveCount(solutions.length + 1);
   expect(await readCount(page, '/v1/tims/spikes?limit=500')).toBe(1);
+});
+test('shared spike composition fits a 320 px picker with full stored precision', async ({ page }) => {
+  await start(page); await openBatch(page); const step = await openStep(page, 'Spiking');
+  await step.getByRole('button', { name: 'Edit step' }).click();
+  await step.getByRole('button', { name: 'Choose spike version' }).click();
+  const picker = page.getByRole('region', { name: 'Spike version picker' });
+  await picker.getByLabel('Solution', { exact: true }).selectOption(publishedVersion.solution_id);
+  await picker.getByLabel('Subfraction', { exact: true }).selectOption(publishedVersion.subfraction_id);
+  await picker.getByLabel('Version', { exact: true }).selectOption(publishedVersion.id);
+  const composition = picker.getByRole('region', { name: 'Spike composition' });
+  await expect(composition).toBeVisible();
+  await composition.evaluate(e => { e.style.width = '320px'; e.style.maxWidth = '100%'; });
+  await composition.getByRole('checkbox', { name: 'Full precision', exact: true }).check();
+  expect(await composition.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+  for (const table of await composition.getByRole('table').all()) expect(await table.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+  expect(await writes(page)).toHaveLength(0);
+});
+async function openSpikes(page: Page) {
+  await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Spikes', exact: true }).click();
+  const composition = page.getByRole('region', { name: 'Spike composition' });
+  await expect(composition).toBeVisible();
+  return { composition, catalogue: page.getByRole('region', { name: 'Spike solutions' }), detail: page.getByRole('article', { name: 'Selected spike' }) };
+}
+test('spikes have a compact catalogue, a default master calibration and disclosed history', async ({ page }) => {
+  await start(page); const { composition, catalogue, detail } = await openSpikes(page);
+  for (const solution of solutions) await expect(catalogue.getByRole('button', { name: solution.name, exact: true })).toHaveCount(1);
+  await expect(catalogue.getByRole('button', { name: solutions[0].name, exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(catalogue).toContainText('also REF-X'); await expect(catalogue).toContainText('2 current versions');
+  const master = detail.getByRole('region', { name: 'EARTHTIME master solution', exact: true });
+  await expect(master.getByRole('row', { name: /^View v1/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(composition.getByRole('heading')).toContainText([`${publishedVersion.solution_name} · EARTHTIME master solution · v1`, 'Reference']);
+  await expect(page.getByRole('region', { name: 'Spikes', exact: true })).not.toContainText(/registry|overlay/);
+  await expect(detail.getByRole('row', { name: /^View v2/ })).toBeHidden();
+  await expect(detail.getByRole('row', { name: /^View v0/ })).toBeHidden();
+  await detail.getByText('Show 2 earlier versions', { exact: true }).click();
+  const earlier = detail.getByRole('row', { name: /^View v2/ }); await expect(earlier).toBeVisible();
+  await earlier.focus(); await earlier.press('Enter');
+  await expect(composition).toContainText('This version is not current.');
+  await expect(composition.getByRole('table', { name: 'Ratios', exact: true })).toBeVisible();
+  expect(await writes(page)).toHaveLength(0);
+});
+test('spike composition offers stored precision, wrapping references and cached version reads', async ({ page }) => {
+  await start(page); const { composition, detail } = await openSpikes(page);
+  await expect(composition).toContainText('0.8765432');
+  await expect(composition).toContainText('uncertainty not given');
+  await expect(composition.getByRole('cell', { name: '± 0.00679 %', exact: true })).toBeVisible();
+  await composition.getByRole('checkbox', { name: 'Full precision', exact: true }).check();
+  await expect(composition.getByRole('cell', { name: '0.876543219876', exact: true })).toBeVisible();
+  await expect(composition.getByRole('cell', { name: '± 0.006789123 %', exact: true })).toBeVisible();
+  await expect(composition.getByRole('cell', { name: '4.0000000007e-12', exact: true })).toBeVisible();
+  const reference = composition.getByRole('region', { name: 'Reference', exact: true });
+  expect(await reference.evaluate(e => getComputedStyle(e).textAlign)).not.toBe('center');
+  await expect(reference).toContainText(publishedVersion.source_display); await expect(reference).toContainText(publishedVersion.locator);
+  await expect(detail.getByText('Fable et al. 2022', { exact: true })).toHaveAttribute('title', publishedVersion.source_display);
+  await detail.getByRole('row', { name: /^View v3/ }).click();
+  await expect(composition).toContainText(labVersion.notes);
+  await detail.getByRole('row', { name: /^View v1/ }).click();
+  await expect(composition).toContainText(publishedVersion.notes);
+  expect(await readCount(page, `/v1/tims/spikes/versions/${publishedVersion.id}`)).toBe(1);
+  expect(await readCount(page, `/v1/tims/spikes/versions/${labVersion.id}`)).toBe(1);
+  expect(await readCount(page, `/v1/tims/spikes/versions/${earlierVersion.id}`)).toBe(0);
+  expect(await writes(page)).toHaveLength(0);
+});
+test('spike editing stays disclosed, preserves permissions and sends only status and notes', async ({ page }) => {
+  await start(page, { apiReplies: { [`PATCH /v1/tims/spikes/versions/${labVersion.id}`]: { status: 200, body: { ...labVersion, status: 'superseded', notes: 'Invented revised note.' } } } });
+  const { composition, detail } = await openSpikes(page);
+  await expect(detail.getByRole('combobox', { name: 'Version status', exact: true })).toBeHidden();
+  await detail.getByText('Edit status and notes', { exact: true }).click();
+  await expect(detail.getByRole('combobox', { name: 'Version status', exact: true })).toBeDisabled();
+  await expect(detail).toContainText('Only superusers may edit public versions.');
+  await detail.getByRole('row', { name: /^View v3/ }).click(); await expect(composition).toContainText(labVersion.notes);
+  await detail.getByText('Edit status and notes', { exact: true }).click();
+  await detail.getByRole('combobox', { name: 'Version status', exact: true }).selectOption('superseded');
+  await detail.getByLabel('Version notes', { exact: true }).fill('Invented revised note.');
+  expect(await writes(page)).toHaveLength(0);
+  await detail.getByRole('button', { name: 'Save version here', exact: true }).click();
+  await expect.poll(() => writes(page)).toHaveLength(1);
+  expect((await writes(page))[0]).toMatchObject({ method: 'PATCH', path: `/v1/tims/spikes/versions/${labVersion.id}`, body: { status: 'superseded', notes: 'Invented revised note.' } });
+});
+test('spike lists page on demand without reading a version per row', async ({ page }) => {
+  const next = { ...solutions[1], id: 'invented-next-solution', name: 'Invented next spike' };
+  await start(page, { apiReplies: {
+    '/v1/tims/spikes?limit=500': { status: 200, body: [solutions[0]], nextCursor: 'invented-next' },
+    '/v1/tims/spikes?limit=500&after=invented-next': { status: 200, body: [next] },
+  } });
+  const { catalogue, composition } = await openSpikes(page);
+  await expect(catalogue.getByRole('button', { name: next.name, exact: true })).toHaveCount(0);
+  expect(await readCount(page, '/v1/tims/spikes?limit=500&after=invented-next')).toBe(0);
+  await catalogue.getByRole('button', { name: 'Load more spikes', exact: true }).click();
+  await expect(catalogue.getByRole('button', { name: next.name, exact: true })).toBeVisible();
+  await expect(composition).toContainText(publishedVersion.notes);
+  expect(await readCount(page, '/v1/tims/spikes?limit=500&after=invented-next')).toBe(1);
+  expect(await readCount(page, `/v1/tims/spikes/versions/${version.id}`)).toBe(0);
+  expect(await writes(page)).toHaveLength(0);
 });
 test('new recipes and reset fill guidebook defaults for review before saving', async ({ page }) => {
   await start(page); await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Recipes', exact: true }).click(); await page.getByRole('button', { name: 'New recipe', exact: true }).click(); const editor = page.getByRole('region', { name: 'Recipe editor' }); await expect(editor.getByLabel('Temperature (°C)').first()).toHaveValue('900'); await expect(editor.getByLabel('Duration (h)').first()).toHaveValue('60');
@@ -555,7 +649,19 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1024, 640]]) for (cons
     expect(saveBox).not.toBeNull(); expect(capsuleBox).not.toBeNull();
     expect(saveBox!.y).toBeGreaterThanOrEqual(capsuleBox!.y);
     expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(capsuleBox!.y + capsuleBox!.height);
-    for (const name of ['Recipes', 'Capsule sets', 'Spikes', 'Import pick notes']) { await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name, exact: true }).click(); expect(await problems(page, `TIMS ${name}`)).toEqual([]); }
+    for (const name of ['Recipes', 'Capsule sets', 'Spikes', 'Import pick notes']) {
+      await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name, exact: true }).click();
+      if (name === 'Spikes') {
+        const composition = page.getByRole('region', { name: 'Spike composition' });
+        await expect(composition).toBeVisible();
+        await composition.getByRole('checkbox', { name: 'Full precision', exact: true }).check();
+        const spike = page.getByRole('article', { name: 'Selected spike' });
+        await spike.getByText('Show 2 earlier versions', { exact: true }).click();
+        await spike.getByText('Edit status and notes', { exact: true }).click();
+        expect(await composition.getByRole('region', { name: 'Reference' }).evaluate(e => getComputedStyle(e).textAlign)).not.toBe('center');
+      }
+      expect(await problems(page, `TIMS ${name}`)).toEqual([]);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }

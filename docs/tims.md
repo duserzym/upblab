@@ -165,12 +165,16 @@ action lists missing sets in a confirmation and creates them with separate keys.
 Load the remaining capsule-set pages before checking defaults. Existing names,
 codes and inactive sets are kept; an occupied code is not overwritten.
 
-Spikes browses visible registered solutions, subfractions and versions. Choosing
-a version shows its composition, uncertainty information, source and locator
-before Apply. Withdrawn versions cannot be chosen. Non-current versions have a
-warning, including any warning returned with a spike addition. Bottle differences
-come from the server. Members may edit private version status and notes; public
-versions require a superuser. Creating spikes and versions is not included.
+Spikes has a compact solution list and a detail view, with the published master
+calibration selected first when present. Current calibrations appear first;
+earlier versions are disclosed on request. Composition tables show reference
+precision, uncertainties and provenance, with Full precision for stored numbers.
+Version details are reused within the current lab and identity scope. Status and
+notes editing remains in a separate disclosure: members may edit private
+versions, and public versions require a superuser. The batch spike picker uses
+the same tables before Apply; withdrawn versions cannot be applied. Non-current
+versions carry a warning, including any warning returned with a spike addition.
+Bottle differences come from the server. Creating spikes and versions is not included.
 
 Except for lab column protocols, existing-record changes are saved durably in
 the account-and-server-scoped outbox before transmission. Pending bodies overlay the last GET and say “Saved here,

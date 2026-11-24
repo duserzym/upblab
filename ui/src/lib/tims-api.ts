@@ -24,7 +24,7 @@ export interface StepOut extends BaseOut { batch_id: string; ordinal: number; me
 export interface FractionStepRecord extends BaseOut { fraction_id: string; step_id: string; parameters: Parameters; skipped: boolean; outcome: string; outcome_note: string }
 export interface SpikeAddition extends BaseOut { fraction_id: string; step_id: string; spike_version_id: string; spike_weight_g: string; bottle_before_g: string | null; bottle_after_g: string | null; bottle_difference_g: string | null; notes: string; warnings: string[] }
 export type VersionStatus = 'current' | 'superseded' | 'withdrawn';
-export interface CompactVersion { id: string; version: string; status: VersionStatus; source: string; source_display: string; content_sha256: string }
+export interface CompactVersion { id: string; version: string; status: VersionStatus; source: string; source_display: string; content_sha256: string; calibrated?: string }
 export interface SpikeSubfraction extends BaseOut { lab_id: string | null; origin: string; sub_id: string; name: string; notes: string; versions: CompactVersion[] }
 export interface SpikeSolution extends BaseOut { registry_id: string; name: string; aliases: string[]; spike_type: string; isotopes: string[]; description: string; origin: string; lab_id: string | null; active: boolean; subfractions: SpikeSubfraction[] }
 export interface CompositionValue { value: number; unit?: 'mol/g'; uncertainty?: number; uncertainty_type?: '1sd_rel_pct' | '2sd_rel_pct' | '1sd_abs' | '2sd_abs' }
