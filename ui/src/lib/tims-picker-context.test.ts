@@ -43,8 +43,8 @@ describe('mount list', () => {
     expect(magnification(mount('a', 'Demo'))).toBe('Magnification unrecorded');
   });
   it('matches label, samples and projects ignoring case and separators', () => {
-    const rows = [mount('a', 'Grenville_XS_150X', { sample_names: ['DEMO-A'], projects: [{ name: 'North_Study' }] })];
-    for (const query of ['grenville-xs', 'demo a', 'NORTH-STUDY', '150x']) expect(mountGroups(rows, [], query)[0].mounts).toEqual(rows);
+    const rows = [mount('a', 'Northwind_XS_150X', { sample_names: ['DEMO-A'], projects: [{ name: 'North_Study' }] })];
+    for (const query of ['northwind-xs', 'demo a', 'NORTH-STUDY', '150x']) expect(mountGroups(rows, [], query)[0].mounts).toEqual(rows);
     expect(mountGroups(rows, [], 'absent')).toEqual([]);
   });
   it('pins recents in usage order and sorts the rest by group then label', () => {
