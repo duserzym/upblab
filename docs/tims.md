@@ -229,6 +229,12 @@ Replace grain is unavailable. Like source add and retire, replacement requires
 an online connection and keeps one idempotency key across retries. Queued
 chemistry edits continue to say “Saved here, not sent yet”.
 
+Loose-grain sources show their sample-local label in the puck and capsule
+record. They have no mount, linked LA spot or GrainAtlas image. **Replace
+grain** and **Refine in GrainAtlas** are disabled for these sources because
+the picker and editor support mounted GrainAtlas grains only. Older servers
+that omit loose-grain fields keep the existing source display.
+
 At 1440 × 900, 1280 × 800 and 1024 × 640 px the capsule bench keeps three
 columns: compact puck map, capsule record, and GrainAtlas picker. The map
 track narrows at the smallest size without moving above the inspector. Capsule

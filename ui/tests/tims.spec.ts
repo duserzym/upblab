@@ -9,7 +9,7 @@ import { inventedElements } from './fixtures/tims-atlas';
 import { writeCapsulePreparation } from '../src/lib/tims-capsule-intake';
 import { writeSpikingSession } from '../src/lib/tims-spiking';
 import { writeColumnNotes } from '../src/lib/tims-protocol';
-import type { ColumnProtocolOut } from '../src/lib/tims-api';
+import type { ColumnProtocolOut, SourceOut } from '../src/lib/tims-api';
 // Preserve the stack in the supervisor's run if a Svelte runtime error recurs.
 const pageErrors = new WeakMap<Page, string[]>();
 test.beforeEach(({ page }) => { const errors: string[] = []; pageErrors.set(page, errors); page.on('pageerror', error => errors.push(error.stack ?? String(error))); });
@@ -776,6 +776,71 @@ test('ambiguous spot matches list mount choices with full spot names', async ({ 
   await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue('Invented ZZ01 spot mount');
   await expect(picker.getByRole('combobox', { name: 'Sample', exact: true })).toHaveValue('ZZ01');
   expect(await readCount(page, '/v1/mounts/mount-zz01/elements')).toBe(1);
+});
+
+const looseGrainSource: SourceOut = { ...batch.fractions[0].sources[0], grain_id: null, atlas_grain_id: null, spot_id: null, atlas_spot_id: null,
+  mount_id: null, mount_label: null, grain_label: null, spot_label: null,
+  loose_grain_id: '00000000-0000-4000-8000-000000000007', loose_grain_label: 'LG-invented-1' };
+
+for (const [width, height] of [[1440, 900], [1280, 800]]) test(`loose-grain capsule labels and disabled mounted-grain actions at ${width} × ${height}`, async ({ page }) => {
+  await page.setViewportSize({ width, height });
+  const old = batch.fractions[0];
+  const retired = { ...looseGrainSource, id: 'retired-loose-source', loose_grain_label: 'LG-invented-old', retired_at: '2026-11-24T12:00:00Z' };
+  const looseBatch = { ...batch, fractions: [{ ...old, sources: [looseGrainSource], replaced_sources: [retired],
+    replaces: { id: 'replaced-loose-fraction', name: 'z-old', sample_name: old.sample.name, retired_at: retired.retired_at, retired_by_name: 'Invented analyst', sources: [retired] } }, batch.fractions[1]] };
+  await start(page, { fixtures: { [`/v1/tims/batches/${batch.id}`]: looseBatch } });
+  await openBatch(page);
+  const well = page.getByRole('button', { name: /^K1 z1 · Loose grain LG-invented-1/ });
+  await expect(well.locator('.well')).toHaveText('LG-invented-1');
+  await expect(well).toHaveAttribute('title', /Loose grain LG-invented-1/);
+  await expect(well.locator('.fraction-mark')).toHaveAttribute('title', 'Loose grain LG-invented-1');
+  expect(await well.locator('.well').evaluate(node => node.getBoundingClientRect().width)).toBeLessThanOrEqual(38);
+  expect(await well.locator('.fraction-mark').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+  await well.click();
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  const card = capsule.getByRole('article');
+  await expect(card).toContainText('Loose grain · Grain: LG-invented-1');
+  await expect(card).not.toContainText('Not recorded');
+  await expect(card.getByText('Loose grain · No GrainAtlas image.', { exact: true })).toBeVisible();
+  expect(await card.locator('.loose-image').evaluate(node => ({ width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height }))).toEqual({ width: 104, height: 104 });
+  await expect(card.getByTestId('tims-grain-image')).toHaveCount(0);
+  await expect(capsule.getByText('Replaced Loose grain · Grain: LG-invented-old', { exact: true })).toBeVisible();
+  await expect(capsule.getByText(/^Replaced Loose grain · Grain: LG-invented-old · Unknown viewer/)).toBeVisible();
+  const buttons = capsule.getByRole('button', { name: 'Replace grain', exact: true });
+  await expect(buttons).toHaveCount(2);
+  for (const button of await buttons.all()) {
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveAttribute('title', 'Loose grains cannot be replaced here yet.');
+    await expect(button).toHaveAccessibleDescription('Loose grains cannot be replaced here yet.');
+  }
+  const refine = card.getByRole('button', { name: 'Refine in GrainAtlas', exact: true });
+  await expect(refine).toBeDisabled();
+  await expect(refine).toHaveAttribute('title', 'Loose grains have no GrainAtlas project.');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: /^K2 z2(?: · |$)/ }).click();
+  const registered = capsule.getByRole('button', { name: 'Replace grain', exact: true });
+  await expect(registered).toHaveCount(2);
+  for (const button of await registered.all()) await expect(button).toBeEnabled();
+  expect(await writes(page)).toEqual([]);
+});
+
+test('Source to replace names loose grains and disables replacement only for the selected loose source', async ({ page }) => {
+  const mixed = { ...batch, fractions: [{ ...batch.fractions[0], sources: [looseGrainSource,
+    { ...batch.fractions[0].sources[0], id: 'registered-source' }] }, batch.fractions[1]] };
+  await start(page, { fixtures: { [`/v1/tims/batches/${batch.id}`]: mixed } });
+  await openBatch(page);
+  await page.getByRole('button', { name: /^K1 z1 · Loose grain LG-invented-1/ }).click();
+  const actions = page.getByRole('region', { name: 'Capsule details' }).getByRole('group', { name: 'Capsule actions' });
+  const select = actions.getByRole('combobox', { name: 'Source to replace' });
+  const replace = actions.getByRole('button', { name: 'Replace grain', exact: true });
+  await expect(select.getByRole('option', { name: 'Loose grain · Grain: LG-invented-1', exact: true })).toHaveCount(1);
+  await expect(replace).toBeDisabled();
+  await select.selectOption('registered-source');
+  await expect(replace).toBeEnabled();
+  await select.selectOption(looseGrainSource.id);
+  await expect(replace).toBeDisabled();
+  await expect(replace).toHaveAccessibleDescription('Loose grains cannot be replaced here yet.');
+  expect(await writes(page)).toEqual([]);
 });
 
 for (const crossSample of [false, true]) test(`Replace grain preserves history (${crossSample ? 'cross sample' : 'same sample'})`, async ({ page }) => {

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { statusWords, type BatchDetail, type FractionStepRecord } from '../../lib/tims-api';
-  import { capsulePucks, puckSlotCoordinates, sourceSpotNames, type MountGeometry } from '../../lib/tims-geometry';
+  import { capsulePucks, isLooseGrain, puckSlotCoordinates, sourceNames, sourceSpotNames, type MountGeometry } from '../../lib/tims-geometry';
   import { capsulePreparations, readCapsulePreparation } from '../../lib/tims-capsule-intake';
   import { batchReadiness } from '../../lib/tims-readiness';
   import GrainImage from './GrainImage.svelte';
@@ -41,16 +41,20 @@
           {@const id = batch.capsule_map[String(position)]}
           {@const fraction = id ? fractions.get(id) : undefined}
           {@const source = fraction?.sources.find(s => !s.retired_at && s.mount_id)}
+          {@const looseSource = fraction?.sources.find(s => !s.retired_at && isLooseGrain(s))}
+          {@const looseLabel = looseSource ? sourceNames(looseSource).grain : ''}
+          {@const looseDetail = looseSource ? `Loose grain ${looseLabel}` : ''}
           {@const label = batch.capsule_set.capsule_labels[position - 1] ?? batch.capsule_set.code + position}
           {@const state = fraction ? statusWords(fraction.status) : 'empty'}
           {@const spotNames = fraction ? sourceSpotNames(fraction.sources, geometry).join(', ') : ''}
           {@const preparation = fraction ? readCapsulePreparation(fraction.notes).preparation : null}
-          {@const detail = fraction ? [preparation && capsulePreparations[preparation], fraction.sample.name, spotNames, state, ...(outcomes.get(fraction.id) ?? []).map(r => r.outcome === 'fully_dissolved' && methods.get(r.step_id) === 'SP-TIMS-CA' ? 'dissolved during CA' : statusWords(r.outcome)), ...(fraction.sources.some(s => !s.retired_at && s.is_fragment) ? ['fragment'] : [])].filter(Boolean).join(' · ') : 'Prepare this capsule'}
+          {@const detail = fraction ? [preparation && capsulePreparations[preparation], looseDetail, fraction.sample.name, spotNames, state, ...(outcomes.get(fraction.id) ?? []).map(r => r.outcome === 'fully_dissolved' && methods.get(r.step_id) === 'SP-TIMS-CA' ? 'dissolved during CA' : statusWords(r.outcome)), ...(fraction.sources.some(s => !s.retired_at && s.is_fragment) ? ['fragment'] : [])].filter(Boolean).join(' · ') : 'Prepare this capsule'}
           <button class="btn capsule" class:filled={!!fraction} type="button" data-testid="tims-capsule"
-            aria-label={`${label} ${fraction?.name ?? 'empty'}${preparation ? ' · ' + capsulePreparations[preparation] : ''}${spotNames ? ' · ' + spotNames : ''}`} aria-pressed={selected === position}
+            aria-label={`${label} ${fraction?.name ?? 'empty'}${looseDetail ? ' · ' + looseDetail : ''}${preparation ? ' · ' + capsulePreparations[preparation] : ''}${spotNames ? ' · ' + spotNames : ''}`} aria-pressed={selected === position}
             title={detail} style={batch.capsule_set.positions_per_puck <= 6 ? location(slot, batch.capsule_set.positions_per_puck) : undefined} onclick={() => onselect(position)}>
             <span class="well">
-              {#if source}<GrainImage {source} mount={source.mount_id ? geometry[source.mount_id] : undefined} size={36} lazy {geometryError} />
+              {#if looseSource}<span class="fraction-mark" title={looseDetail}>{looseLabel}</span>
+              {:else if source}<GrainImage {source} mount={source.mount_id ? geometry[source.mount_id] : undefined} size={36} lazy {geometryError} />
               {:else if fraction}<span class="fraction-mark">{preparation === 'lab-blank' ? 'Blank' : fraction.name}</span>
               {:else}<span class="empty-mark" aria-hidden="true">+</span>{/if}
             </span>
@@ -107,7 +111,7 @@
   .capsule[aria-pressed=true] .well { outline: 2px solid var(--accent); outline-offset: 2px; }
   .capsule[aria-pressed=true] strong { color: var(--accent); }
   .empty-mark { font-size: 1rem; font-weight: 400; }
-  .fraction-mark { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .fraction-mark { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .caption { display: flex; justify-content: center; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
   h4 { margin: 0; font-size: .9rem; }
 </style>

@@ -3,7 +3,11 @@ export type GrainImageSource = Pick<SourceOut, 'mount_id' | 'grain_id' | 'atlas_
 export interface GrainGeometry { area_id?: string; area?: string; project_uuid?: string | null; id: string | null; server_id?: string; atlas_grain_id?: string | null; label?: string | null; name?: string | null; number?: string | number | null; grain_number?: string | number | null; sample?: string | null; polygon_um: number[][] | null; retired?: boolean }
 export interface SpotGeometry { diameter_um?: number | null; area_id?: string; project_uuid?: string | null; id: string | null; server_id?: string; atlas_spot_id?: string | null; grain_id?: string | null; label?: string | null; name?: string | null; x_um: number; y_um: number }
 export interface MountGeometry { label?: string; grains: GrainGeometry[]; spots: SpotGeometry[]; current_project_uuid: string | null }
+export function isLooseGrain(source: Pick<SourceOut, 'loose_grain_id' | 'loose_grain_label'>) {
+  return !!(source.loose_grain_id || source.loose_grain_label?.trim());
+}
 export function sourceNames(source: SourceOut, mount?: MountGeometry) {
+  if (isLooseGrain(source)) return { loose: true, mount: 'Loose grain', grain: source.loose_grain_label?.trim() || 'Loose grain', spot: 'Not recorded' };
   const grain = mount?.grains.find(g => !!source.grain_id && g.server_id === source.grain_id || !!source.atlas_grain_id && (g.id === source.atlas_grain_id || g.atlas_grain_id === source.atlas_grain_id));
   const spot = mount?.spots.find(s => !!source.spot_id && s.server_id === source.spot_id || !!source.atlas_spot_id && (s.id === source.atlas_spot_id || s.atlas_spot_id === source.atlas_spot_id));
   return { mount: source.mount_label || mount?.label || 'Not recorded', grain: source.grain_label || grain?.label || grain?.name || grain?.number || grain?.grain_number || 'Not recorded', spot: source.spot_label || spot?.label || spot?.name || 'Not recorded' };

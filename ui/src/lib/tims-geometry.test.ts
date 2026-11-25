@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { capsulePucks, grainOutline, puckSlotCoordinates, sourceOutline } from './tims-geometry';
+import { capsulePucks, grainOutline, isLooseGrain, puckSlotCoordinates, sourceNames, sourceOutline, sourceSpotNames } from './tims-geometry';
 import { timsFraction } from '../../tests/fixtures/review';
 it('lays out default and partial pucks using the set dimensions', () => {
   expect(capsulePucks()).toEqual([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10], [11, 12, 13, 14, 15]]);
@@ -45,4 +45,26 @@ it('shows every active linked spot once, preserving full stored names and fallin
   expect(sourceSpotNames([source, source, { ...source, spot_id: 's196', atlas_spot_id: 'a196', spot_label: null },
     { ...source, spot_label: 'ZZ01_S_197', retired_at: '2026-11-23' }], geometry)).toEqual(['ZZ01_S_195', 'ZZ01_S_196']);
   expect(sourceSpotNames([{ ...source, spot_id: null, atlas_spot_id: null, spot_label: null }], geometry)).toEqual([]);
+});
+
+it('names loose grains without inventing a mount or LA spot', () => {
+  const source = { ...timsFraction.sources[0], grain_id: null, atlas_grain_id: null, spot_id: null, atlas_spot_id: null, mount_id: null,
+    grain_label: null, mount_label: null, spot_label: null, loose_grain_id: 'loose-invented', loose_grain_label: 'LG-invented-1' };
+  expect(isLooseGrain(source)).toBe(true);
+  expect(sourceNames(source)).toEqual({ loose: true, mount: 'Loose grain', grain: 'LG-invented-1', spot: 'Not recorded' });
+  expect(sourceSpotNames([source], {})).toEqual([]);
+  expect(sourceNames({ ...source, loose_grain_label: null }).grain).toBe('Loose grain');
+  expect(sourceNames({ ...source, loose_grain_label: '  ' }).grain).toBe('Loose grain');
+  expect(isLooseGrain({ loose_grain_label: ' L-7 ' })).toBe(true);
+  expect(sourceNames({ ...source, loose_grain_id: null, loose_grain_label: ' L-7 ' }).grain).toBe('L-7');
+});
+
+it('keeps older-server and registered sources unchanged when loose-grain fields are absent or blank', () => {
+  const registered = { ...timsFraction.sources[0], mount_label: 'Invented mount', grain_label: 'Registered grain', spot_label: 'Stored spot' };
+  expect(isLooseGrain(registered)).toBe(false);
+  expect(sourceNames(registered)).toEqual({ mount: 'Invented mount', grain: 'Registered grain', spot: 'Stored spot' });
+  expect(sourceNames({ ...registered, loose_grain_id: null, loose_grain_label: '  ' })).toEqual(sourceNames(registered));
+  const older = { ...registered, grain_id: null, atlas_grain_id: null, spot_id: null, atlas_spot_id: null, mount_id: null,
+    grain_label: null, mount_label: null, spot_label: null };
+  expect(sourceNames(older)).toEqual({ mount: 'Not recorded', grain: 'Not recorded', spot: 'Not recorded' });
 });

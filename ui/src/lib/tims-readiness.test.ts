@@ -38,6 +38,15 @@ it('reports live sources or explicit TIMS-only and lab blank preparation as grai
   copy.fractions[0].sources.forEach(s => s.retired_at = '2026-11-24T00:00:00Z');
   expect(batchReadiness(copy).capsules[0].grain).toBe(false);
 });
+it('counts a live loose-grain source as a grain on servers without readiness', () => {
+  const copy = structuredClone(batch);
+  copy.readiness = undefined;
+  copy.fractions[0].sources = [{ ...copy.fractions[0].sources[0], grain_id: null, atlas_grain_id: null, spot_id: null,
+    atlas_spot_id: null, mount_id: null, loose_grain_id: 'loose-invented', loose_grain_label: 'LG-invented-1' }];
+  expect(batchReadiness(copy).capsules[0].grain).toBe(true);
+  copy.fractions[0].sources[0].retired_at = '2026-11-24T00:00:00Z';
+  expect(batchReadiness(copy).capsules[0].grain).toBe(false);
+});
 it.each(['lost', 'dissolved_in_ca'] as const)('exempts %s capsules without changing grain or spike flags', status => {
   const copy = structuredClone(batch);
   copy.spikes = [];

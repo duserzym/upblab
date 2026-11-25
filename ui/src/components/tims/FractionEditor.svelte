@@ -4,7 +4,7 @@
   import { choices, effectiveParameters, parameterDefinitions, parameterKey, validateParameters } from '../../lib/tims-model';
   import { isDesktop } from '../../lib/platform';
   import { shell } from '../../lib/shell.svelte';
-  import { sourceNames, type MountGeometry } from '../../lib/tims-geometry';
+  import { isLooseGrain, sourceNames, type MountGeometry } from '../../lib/tims-geometry';
   import { OnlineAction, ReplyScope } from '../../lib/tims-requests';
   import { columnProtocol, readCapsuleNotes, readColumnNotes, writeCapsuleNotes, writeColumnNotes } from '../../lib/tims-protocol';
   import { laterWeighing, latestBottleReading, readSpikingSession, spikingSessionId } from '../../lib/tims-spiking';
@@ -26,6 +26,7 @@
     createSpikeStep: (session: StepOut) => Promise<StepOut>;
   } = $props();
   const uid = $props.id();
+  const looseReplaceReason = 'Loose grains cannot be replaced here yet.';
   let statusOpen = $state(false), recordOpen = $state(false), replaceSourceId = $state('');
   const replaceSource = $derived(fraction.sources.find(s => !s.retired_at && s.id === replaceSourceId) ?? fraction.sources.find(s => !s.retired_at));
   useLabProtocols(() => batch.lab_id);
@@ -58,7 +59,7 @@
     const groups = new Map<string, SourceOut[]>();
     for (const source of fraction.sources) {
       if (source.retired_at) continue;
-      const key = source.grain_id ?? source.atlas_grain_id ?? source.id;
+      const key = source.loose_grain_id ?? source.grain_id ?? source.atlas_grain_id ?? source.id;
       const group = groups.get(key) ?? [];
       group.push(source);
       groups.set(key, group);
@@ -183,20 +184,27 @@
         {@const mount = source.mount_id ? geometry[source.mount_id] : undefined}
         {@const names = sourceNames(source, mount)}
         <article class="source">
-          <GrainImage {source} {mount} size={104} {geometryError} />
+          {#if names.loose}
+            <div id={`${uid}-${source.id}-image`} class="loose-image small muted">Loose grain · No GrainAtlas image.</div>
+          {:else}<GrainImage {source} {mount} size={104} {geometryError} />{/if}
           <div class="stack labels">
             {#if sources.some(s => s.spot_id || s.atlas_spot_id)}
               <ul aria-label="Linked LA spots">{#each sources.filter(s => s.spot_id || s.atlas_spot_id) as linked (linked.id)}<li><strong>{sourceNames(linked, mount).spot}</strong></li>{/each}</ul>
             {:else}<span class="small muted">No linked LA spots</span>{/if}
-            <p class="small muted">Mount: {names.mount} · Grain: {names.grain}</p>
+            <p class="small muted">{names.loose ? 'Loose grain' : `Mount: ${names.mount}`} · Grain: {names.grain}</p>
             {#each [...new Set(sources.filter(s => s.is_fragment).map(s => s.fragment_note))] as fragmentNote}<p class="small warning">Fragment · {fragmentNote}</p>{/each}
             {#each [...new Set(sources.map(s => s.note).filter(Boolean))] as note}<p class="small">{note}</p>{/each}
             {#each sources as linked (linked.id)}
-              <div class="row" aria-label={`Source ${sourceNames(linked, mount).spot}`}>
-                <button type="button" class="btn small" disabled={!editable} onclick={() => onreplace(linked)}>Replace grain</button>
-                {#if isDesktop || shell.homeUrl('images')}<button type="button" class="btn small" disabled={!editable || !mount?.current_project_uuid}
+              {@const loose = isLooseGrain(linked)}
+              <div class="row" aria-label={`Source ${loose ? `Loose grain ${sourceNames(linked).grain}` : sourceNames(linked, mount).spot}`}>
+                <button type="button" class="btn small" disabled={!editable || loose} title={loose ? looseReplaceReason : undefined}
+                  aria-describedby={loose ? `${uid}-${linked.id}-replace` : undefined} onclick={() => onreplace(linked)}>Replace grain</button>
+                {#if isDesktop || shell.homeUrl('images')}<button type="button" class="btn small" disabled={!editable || loose || !mount?.current_project_uuid}
+                  title={loose ? 'Loose grains have no GrainAtlas project.' : !mount?.current_project_uuid ? 'No GrainAtlas project is recorded for this source.' : undefined}
+                  aria-describedby={loose ? `${uid}-${source.id}-image` : undefined}
                   onclick={() => void onrefine(linked)}>Refine in GrainAtlas</button>{/if}
               </div>
+              {#if loose}<p id={`${uid}-${linked.id}-replace`} class="small muted">{looseReplaceReason}</p>{/if}
             {/each}
           </div>
         </article>
@@ -204,11 +212,14 @@
       {/if}
       {#each fraction.replaced_sources ?? [] as retired (retired.id)}
         {@const names = sourceNames(retired)}
-        <p class="small muted">Replaced {names.grain}{names.spot !== 'Not recorded' ? ` (spot ${names.spot})` : ''} · {retired.retired_by_name ?? 'Unknown viewer'} · {retired.retired_at ? new Date(retired.retired_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'Date unrecorded'}{retired.reason ? ` · ${retired.reason}` : ''}</p>
+        <p class="small muted">Replaced {names.loose ? 'Loose grain · Grain: ' : ''}{names.grain}{names.spot !== 'Not recorded' ? ` (spot ${names.spot})` : ''} · {retired.retired_by_name ?? 'Unknown viewer'} · {retired.retired_at ? new Date(retired.retired_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'Date unrecorded'}{retired.reason ? ` · ${retired.reason}` : ''}</p>
       {/each}
       {#if fraction.replaces}
         <p class="small muted">Replaces {fraction.replaces.name} · {fraction.replaces.sample_name} · {fraction.replaces.retired_by_name ?? 'Unknown viewer'} · {fraction.replaces.retired_at ? new Date(fraction.replaces.retired_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'Date unrecorded'}{fraction.replaces.source_labels?.length ? ` · ${fraction.replaces.source_labels.join(', ')}` : ''}</p>
-        {#each fraction.replaces.sources ?? [] as retired}<p class="small muted">Replaced {sourceNames(retired).grain} (spot {sourceNames(retired).spot})</p>{/each}
+        {#each fraction.replaces.sources ?? [] as retired}
+          {@const names = sourceNames(retired)}
+          <p class="small muted">Replaced {names.loose ? `Loose grain · Grain: ${names.grain}` : `${names.grain} (spot ${names.spot})`}</p>
+        {/each}
       {/if}
     </section>
     <details class="details" ontoggle={event => statusOpen = event.currentTarget.open}>
@@ -283,10 +294,16 @@
       {#if replaceSource}
         {#if fraction.sources.filter(s => !s.retired_at).length > 1}
           <select aria-label="Source to replace" bind:value={replaceSourceId}>
-            {#each fraction.sources.filter(s => !s.retired_at) as source (source.id)}<option value={source.id}>{sourceNames(source, source.mount_id ? geometry[source.mount_id] : undefined).spot}</option>{/each}
+            {#each fraction.sources.filter(s => !s.retired_at) as source (source.id)}
+              {@const names = sourceNames(source, source.mount_id ? geometry[source.mount_id] : undefined)}
+              <option value={source.id}>{names.loose ? `Loose grain · Grain: ${names.grain}` : names.spot}</option>
+            {/each}
           </select>
         {/if}
-        <button class="btn small" type="button" disabled={!editable} onclick={() => onreplace(replaceSource!)}>Replace grain</button>
+        <button class="btn small" type="button" disabled={!editable || isLooseGrain(replaceSource)}
+          title={isLooseGrain(replaceSource) ? looseReplaceReason : undefined}
+          aria-describedby={isLooseGrain(replaceSource) ? `${uid}-${replaceSource.id}-replace` : undefined}
+          onclick={() => onreplace(replaceSource!)}>Replace grain</button>
       {/if}
       {#if statusOpen}<button class="btn small" form={`${uid}-status`} disabled={!editable || busy}>Save fraction here</button>{/if}
     {:else if spiking}
@@ -298,6 +315,7 @@
 
 <style>
   .fraction-editor { gap: 0; }
+  .loose-image { width: 104px; height: 104px; flex-shrink: 0; display: grid; place-items: center; padding: var(--space-2); box-sizing: border-box; text-align: center; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--row-hover); }
   .fraction-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overflow-anchor: none; padding: 2px; gap: var(--space-2); }
   .fraction-scroll > :global(*) { flex-shrink: 0; }
   .status-line { height: 42px; overflow: auto; }
@@ -310,7 +328,7 @@
   .picker-steps select { flex: 1; }
   .picker-steps .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
   .picker-steps .btn { white-space: normal; }
-  .source { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
+  .source { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
   .labels { min-width: 0; gap: var(--space-1); overflow-wrap: anywhere; }
   ul { padding-left: 1.2em; margin: 0; font-size: .78rem; }
   label { display: grid; gap: 4px; }
