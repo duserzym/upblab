@@ -4,7 +4,7 @@ import { fixtures, batch, lab, plan, recipe, version, solutions, publishedVersio
 import { capsuleMount, correctionElements, correctionFixtures, correctionGrain, correctionSpot, correctedFraction, replacementPath } from './fixtures/tims-capsules';
 import { routeTimsAtlas } from './tims-atlas-helpers';
 import { problems } from './problems';
-import { expectPuckBoardFits } from './tims-layout';
+import { expectPuckBoardFits, expectTimsBenchFills } from './tims-layout';
 import { fractionStatuses, statusWords } from '../src/lib/tims-model';
 import { inventedElements } from './fixtures/tims-atlas';
 import { writeCapsulePreparation } from '../src/lib/tims-capsule-intake';
@@ -235,6 +235,12 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) for (const theme of ['
     await page.setViewportSize({ width, height });
     await start(page, { store: { theme, themeChosen: true } }); await openBatch(page);
     await expectPuckBoardFits(page);
+    await expectTimsBenchFills(page);
+    await expect(page.getByRole('button', { name: 'Back to batches', exact: true })).toBeVisible();
+    await expect(page.locator('.batch > header')).toContainText('Invented lab');
+    await expect(page.locator('.tims > .workspace > .lab-bar')).toHaveCount(0);
+    await expect(page.locator('.batch-status')).toBeAttached();
+    expect(await page.locator('.batch-status').evaluate(node => node.getBoundingClientRect().height)).toBe(0);
     const board = page.getByRole('region', { name: 'Capsule grid', exact: true });
     const pucks = board.locator('section[aria-label^="Puck "]');
     await expect(pucks).toHaveCount(3);
@@ -250,9 +256,28 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) for (const theme of ['
       const bounds = (await box.boundingBox())!;
       expect(bounds.width).toBeGreaterThanOrEqual(28);
     }
+    await page.getByRole('button', { name: 'History', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'History', exact: true })).toBeVisible();
+    await expectTimsBenchFills(page);
+    await expectPuckBoardFits(page);
     expect(await problems(page, 'Triangle capsule board')).toEqual([]);
   });
 }
+test('an open batch retains the multi-lab selector and returns to the selected lab list', async ({ page }) => {
+  const other = 'other-invented-lab';
+  await start(page, { fixtures: {
+    '/v1/labs': [{ id: lab, name: 'Invented lab', my_role: 'member' }, { id: other, name: 'Another invented lab', my_role: 'member' }],
+    [`/v1/tims/capsule-sets?limit=500&lab=${other}`]: [],
+    [`/v1/tims/recipes?limit=500&lab=${other}`]: [],
+    [`/v1/tims/batches?limit=500&lab=${other}`]: [],
+  } });
+  await openBatch(page);
+  await expect(page.getByRole('combobox', { name: 'Lab', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Lab', exact: true }).selectOption(other);
+  await expect(page.getByRole('region', { name: 'Chemistry batch', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Batch list', exact: true })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Lab', exact: true })).toHaveValue(other);
+});
 test('step edits are durable while offline, then sent with an Idempotency-Key', async ({ page }) => {
   await start(page, { cached: { asOf: '2026-11-06T10:00:00Z', reason: 'unreachable' } }); await openBatch(page);
   const step = await openStep(page, 'Chemical abrasion'); await step.getByRole('button', { name: 'Edit step', exact: true }).click(); await step.getByLabel('Temperature (°C)').fill('195'); await step.getByRole('button', { name: 'Save step here' }).click();
@@ -662,7 +687,7 @@ test('a late pick-note preview cannot appear in a different account view', async
 });
 for (const [width, height] of [[1280, 800], [1440, 900], [1024, 640]]) for (const theme of ['light', 'dark']) {
   test(`TIMS panels fit ${width} × ${height}, ${theme}`, async ({ page }) => {
-    await page.setViewportSize({ width, height }); await start(page, { store: { theme, themeChosen: true } }); await openBatch(page); await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click(); await expect(page.getByRole('img', { name: 'Grain outline and LA spot' }).first()).toBeAttached(); expect(await problems(page, 'TIMS batch')).toEqual([]);
+    await page.setViewportSize({ width, height }); await start(page, { store: { theme, themeChosen: true } }); await openBatch(page); await expectTimsBenchFills(page); await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click(); await expect(page.getByRole('img', { name: 'Grain outline and LA spot' }).first()).toBeAttached(); expect(await problems(page, 'TIMS batch')).toEqual([]);
     const capsule = page.getByRole('region', { name: 'Capsule details' });
     await capsule.getByText('Fraction status and notes', { exact: true }).click();
     expect(await problems(page, 'TIMS fraction form')).toEqual([]);
@@ -810,16 +835,36 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) test(`loose-grain caps
   await page.setViewportSize({ width, height });
   const old = batch.fractions[0];
   const retired = { ...looseGrainSource, id: 'retired-loose-source', loose_grain_label: 'LG-invented-old', retired_at: '2026-11-24T12:00:00Z' };
-  const looseBatch = { ...batch, fractions: [{ ...old, sources: [looseGrainSource], replaced_sources: [retired],
-    replaces: { id: 'replaced-loose-fraction', name: 'z-old', sample_name: old.sample.name, retired_at: retired.retired_at, retired_by_name: 'Invented analyst', sources: [retired] } }, batch.fractions[1]] };
+  const medium = { ...old, id: 'medium-loose-fraction', name: 'z3', capsule_number: 3, capsule_label: 'K3', sources: [{ ...looseGrainSource, id: 'medium-loose-source', loose_grain_label: 'H12-z3' }] };
+  const shortFraction = { ...old, id: 'short-loose-fraction', name: 'z4', capsule_number: 4, capsule_label: 'K4', sources: [{ ...looseGrainSource, id: 'short-loose-source', loose_grain_label: 'LG-7' }] };
+  const looseBatch = { ...batch, capsule_map: { ...batch.capsule_map, '3': medium.id, '4': shortFraction.id }, fractions: [{ ...old, sources: [looseGrainSource], replaced_sources: [retired],
+    replaces: { id: 'replaced-loose-fraction', name: 'z-old', sample_name: old.sample.name, retired_at: retired.retired_at, retired_by_name: 'Invented analyst', sources: [retired] } }, batch.fractions[1], medium, shortFraction] };
   await start(page, { fixtures: { [`/v1/tims/batches/${batch.id}`]: looseBatch } });
   await openBatch(page);
   const well = page.getByRole('button', { name: /^K1 z1 · Loose grain LG-invented-1/ });
   await expect(well.locator('.well')).toHaveText('LG-invented-1');
   await expect(well).toHaveAttribute('title', /Loose grain LG-invented-1/);
   await expect(well.locator('.fraction-mark')).toHaveAttribute('title', 'Loose grain LG-invented-1');
-  expect(await well.locator('.well').evaluate(node => node.getBoundingClientRect().width)).toBeLessThanOrEqual(38);
-  expect(await well.locator('.fraction-mark').evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+  await expect(well).toHaveAttribute('data-loose-overflow', 'true');
+  await expect(well.locator('.well .fraction-mark')).toBeHidden();
+  await expect(well.locator('.capsule-label .loose-label')).toBeVisible();
+  await expect(well.locator('.capsule-label .loose-label')).toHaveText('LG-invented-1');
+  await expect(well.locator('.capsule-label .loose-label')).toHaveAttribute('title', 'Loose grain LG-invented-1');
+  const short = page.getByRole('button', { name: /^K4 z4 · Loose grain LG-7/ });
+  await expect(short).toHaveAttribute('data-loose-overflow', 'false');
+  await expect(short.locator('.well .fraction-mark')).toBeVisible();
+  await expect(short.locator('.capsule-label .loose-label')).toBeHidden();
+  expect(await short.locator('.well .fraction-mark').evaluate(node => node.scrollWidth <= node.parentElement!.clientWidth - 4)).toBe(true);
+  const mediumWell = page.getByRole('button', { name: /^K3 z3 · Loose grain H12-z3/ });
+  // Check the rendered font, including fallback fonts on the supervisor's OS.
+  const mediumOverflows = await mediumWell.evaluate(node => {
+    const mark = node.querySelector<HTMLElement>('.loose-grain-mark')!, well = node.querySelector<HTMLElement>('.well')!;
+    return mark.getBoundingClientRect().width > well.clientWidth - 4;
+  });
+  await expect(mediumWell).toHaveAttribute('data-loose-overflow', String(mediumOverflows));
+  await expect(mediumWell.locator(mediumOverflows ? '.capsule-label .loose-label' : '.well .fraction-mark')).toBeVisible();
+  expect(await mediumWell.locator('.capsule-label .loose-label').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+  await expectPuckBoardFits(page);
   await well.click();
   const capsule = page.getByRole('region', { name: 'Capsule details' });
   const card = capsule.getByRole('article');

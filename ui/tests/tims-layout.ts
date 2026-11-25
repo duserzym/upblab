@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test';
-const names = ['Capsule grid', 'Capsule details', 'Grain selection', 'Chemistry step rail'] as const;
+// The third column hosts the picker/review, step timeline or matrix.
+const names = ['Capsule grid', 'Capsule details', 'Batch workspace'] as const;
 type Box = { x: number; y: number; width: number; height: number };
 export async function timsRegionBoxes(page: Page): Promise<Record<string, Box>> {
   // Include Svelte's flush and disclosure layout before both baseline and later reads.
@@ -72,7 +73,7 @@ export async function expectPuckBoardFits(page: Page) {
       [...wells, ...labels, caption, disc].forEach(child => { if (!contains(box, child)) failures.push(`${name} content outside footprint`); });
       labels.forEach((label, labelIndex) => {
         wells.forEach((well, wellIndex) => {
-          // Also check the own well: all two-line label boxes live outside wells.
+          // Also check the own well: every reserved three-line box clears all wells.
           if (intersects(label, well)) failures.push(`${name} label ${labelIndex + 1} overlaps well ${wellIndex + 1}`);
         });
         labels.slice(labelIndex + 1).forEach(other => { if (intersects(label, other)) failures.push(`${name} labels overlap`); });
@@ -82,4 +83,42 @@ export async function expectPuckBoardFits(page: Page) {
     return failures;
   });
   expect(failures, 'capsule board fits without collisions').toEqual([]);
+}
+
+/** Single-lab baseline chrome, full-height bench, readable puck discs and text. */
+export async function expectTimsBenchFills(page: Page) {
+  await settled(page);
+  const layout = await page.locator('.tims > .workspace').evaluate(workspace => {
+    const bounds = workspace.getBoundingClientRect();
+    const css = getComputedStyle(workspace);
+    const bench = workspace.querySelector('.bench')!.getBoundingClientRect();
+    return { chrome: bench.top - bounds.top, benchHeight: bench.height,
+      bottomGap: bounds.top + workspace.clientTop + workspace.clientHeight - parseFloat(css.paddingBottom) - bench.bottom };
+  });
+  expect(Math.abs(layout.bottomGap), 'bench reaches module content bottom').toBeLessThanOrEqual(4);
+  expect(layout.benchHeight, 'bench has available height').toBeGreaterThan(0);
+  const { width } = page.viewportSize()!;
+  if (width >= 1280) {
+    expect(layout.chrome, 'single-lab chrome above bench').toBeLessThanOrEqual(150);
+    const minimum = width >= 1440 ? 170 : 140;
+    for (const disc of await page.locator('.board .positions').all())
+      expect((await disc.boundingBox())!.width, 'puck disc diameter').toBeGreaterThanOrEqual(minimum);
+  }
+  for (const [selector, minimum] of [
+    ['.capsule-label strong', 11], ['.readiness-mark', 10], ['.caption h4', 12], ['.caption span', 12],
+  ] as const) {
+    const sizes = await page.locator(`.board ${selector}`).evaluateAll(nodes => nodes.map(node => parseFloat(getComputedStyle(node).fontSize)));
+    expect(sizes.length, `${selector} exists`).toBeGreaterThan(0);
+    for (const size of sizes) expect(size, `${selector} font size`).toBeGreaterThanOrEqual(minimum);
+  }
+  const textFits = await page.locator('.board .capsule-label').first().evaluate(label => {
+    const canvas = document.createElement('canvas'), context = canvas.getContext('2d')!;
+    return [['strong', 'K15'], ['.readiness-mark', 'G ✓ S ✓']].every(([selector, text]) => {
+      const node = label.querySelector<HTMLElement>(selector)!;
+      const css = getComputedStyle(node);
+      context.font = `${css.fontWeight} ${css.fontSize} ${css.fontFamily}`;
+      return context.measureText(text).width <= node.clientWidth;
+    });
+  });
+  expect(textFits, 'fixed label boxes fit actual capsule and readiness text').toBe(true);
 }

@@ -2,7 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import { installFakeTauri, type FakeOptions } from './fake-tauri';
 import { fixtures, batch, lab, version, publishedVersion } from './fixtures/tims';
 import { batchReadiness } from '../src/lib/tims-readiness';
-import { timsRegionBoxes, expectTimsRegionsStable, timsWellBoxes, expectTimsWellsStable, expectPuckBoardFits } from './tims-layout';
+import { timsRegionBoxes, expectTimsRegionsStable, timsWellBoxes, expectTimsWellsStable, expectPuckBoardFits, expectTimsBenchFills } from './tims-layout';
 import { routeTimsAtlas } from './tims-atlas-helpers';
 import { problems } from './problems';
 import { inventedElements } from './fixtures/tims-atlas';
@@ -158,12 +158,14 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (cons
     }, apiReplies: { 'POST /v1/fractions': { status: 201, body: added } } });
     const railBox = await rail(page).boundingBox();
     expect(railBox).not.toBeNull(); expect(railBox!.height).toBeLessThanOrEqual(40);
+    await expectTimsBenchFills(page);
     const before = await timsRegionBoxes(page);
     const wellsBefore = await timsWellBoxes(page);
     if (width >= 1280) await expectPuckBoardFits(page);
     const stable = async (action: () => Promise<unknown>) => {
       await action(); await expectTimsRegionsStable(page, before);
       await expectTimsWellsStable(page, wellsBefore);
+      await expectTimsBenchFills(page);
       if (width >= 1280) await expectPuckBoardFits(page);
     };
     const walkDisclosures = async () => {
@@ -197,6 +199,22 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (cons
       await walkDisclosures();
     }
     for (const number of [1, 2, 3, 4, 5]) await stable(() => step(page, number));
+    for (const name of ['Capsules', 'Batch steps', 'Step × capsule matrix', 'Capsules']) {
+      await stable(() => page.getByRole('group', { name: 'Batch views', exact: true }).getByRole('button', { name, exact: true }).click());
+      const content = name === 'Batch steps' ? 'Step timeline' : name === 'Step × capsule matrix' ? 'Capsule record matrix' : 'Batch completion review';
+      const panel = page.getByLabel(content, { exact: true });
+      await expect(panel).toBeVisible();
+      const box = (await panel.boundingBox())!, bench = (await page.locator('.bench').boundingBox())!;
+      expect(box.height, `${content} uses bench height`).toBeGreaterThanOrEqual(bench.height - 20);
+      expect(box.y + box.height).toBeLessThanOrEqual(bench.y + bench.height);
+    }
+    // Opening the picker from the inspector also returns from a chemistry view.
+    await stable(() => inspector(page).getByRole('combobox', { name: 'Capsule step', exact: true }).selectOption(''));
+    await stable(() => page.getByRole('group', { name: 'Batch views', exact: true }).getByRole('button', { name: 'Batch steps', exact: true }).click());
+    await stable(() => inspector(page).getByRole('button', { name: 'Browse GrainAtlas', exact: true }).click());
+    await expect(page.getByRole('group', { name: 'Batch views' }).getByRole('button', { name: 'Capsules', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(picker).toBeVisible();
+    await expect(rail(page).getByRole('button', { name: /^2\./ })).toHaveAttribute('aria-current', 'step');
     expect(await problems(page, 'TIMS guided bench')).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.locator('.tims > .workspace').evaluate(node => node.scrollHeight <= node.clientHeight + 1)).toBe(true);

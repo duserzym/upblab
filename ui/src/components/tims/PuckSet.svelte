@@ -3,7 +3,7 @@
   import { capsulePucks, isLooseGrain, sourceNames, sourceSpotNames, type MountGeometry } from '../../lib/tims-geometry';
   import { capsulePreparations, readCapsulePreparation } from '../../lib/tims-capsule-intake';
   import { batchReadiness } from '../../lib/tims-readiness';
-  import { puckBoardLayout, type Box } from '../../lib/tims-puck-layout';
+  import { puckBoardLayout, puckLabel, type Box } from '../../lib/tims-puck-layout';
   import GrainImage from './GrainImage.svelte';
 
   let { batch, geometry, geometryError, selected, onselect, compact = false }: {
@@ -33,6 +33,23 @@
   let width = $state(284), height = $state(280), viewportWidth = $state(1280);
   const layout = $derived(puckBoardLayout({ pucks: pucks.length, perPuck: batch.capsule_set.positions_per_puck,
     width: Math.max(0, width - 1), height: Math.max(0, height - 1), columns: viewportWidth < 1280 ? 1 : 2 }));
+  // Measure the rendered font, including fallback glyphs, rather than guessing
+  // by character count. Both copies reserve their space, so text and image
+  // arrival cannot move wells or label boxes.
+  function looseLabelFit(node: HTMLButtonElement, _content: string) {
+    let frame = 0, destroyed = false;
+    const measure = () => {
+      const mark = node.querySelector<HTMLElement>('.loose-grain-mark');
+      const well = node.querySelector<HTMLElement>('.well');
+      node.dataset.looseOverflow = String(!!mark && !!well && mark.getBoundingClientRect().width > well.clientWidth - 4);
+    };
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(measure); };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(node);
+    schedule();
+    void document.fonts.ready.then(() => { if (!destroyed) schedule(); });
+    return { update: schedule, destroy() { destroyed = true; observer.disconnect(); cancelAnimationFrame(frame); } };
+  }
   function boxStyle(box: Box) {
     return `left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px`;
   }
@@ -40,7 +57,7 @@
 
 <svelte:window bind:innerWidth={viewportWidth} />
 <div class="puck-set" class:compact bind:clientWidth={width} bind:clientHeight={height}>
-  <div class="puck-canvas" style={`width:${layout.width}px;height:${layout.height}px;--well-size:${layout.puck.wellSize}px`}>
+  <div class="puck-canvas" style={`width:${layout.width}px;height:${layout.height}px;--well-size:${layout.puck.wellSize}px;--label-font:${puckLabel.nameFont}px;--mark-font:${puckLabel.markFont}px;--loose-font:${puckLabel.looseFont}px`}>
   {#each pucks as puck, index (puck[0])}
     <section class="puck" aria-label={`Puck ${index + 1}`} style={boxStyle({ ...layout.offsets[index], width: layout.puck.width, height: layout.puck.height })}>
       <div class="positions" style={boxStyle(layout.puck.disc)} class:ring={batch.capsule_set.positions_per_puck <= 6} class:bsu={batch.capsule_set.positions_per_puck === 5}>
@@ -60,17 +77,19 @@
           {@const preparation = fraction ? readCapsulePreparation(fraction.notes).preparation : null}
           {@const detail = fraction ? [preparation && capsulePreparations[preparation], looseDetail, fraction.sample.name, spotNames, state, ...(outcomes.get(fraction.id) ?? []).map(r => r.outcome === 'fully_dissolved' && methods.get(r.step_id) === 'SP-TIMS-CA' ? 'dissolved during CA' : statusWords(r.outcome)), ...(fraction.sources.some(s => !s.retired_at && s.is_fragment) ? ['fragment'] : [])].filter(Boolean).join(' · ') : 'Prepare this capsule'}
           <button class="btn capsule" class:filled={!!fraction} type="button" data-testid="tims-capsule"
+            use:looseLabelFit={`${layout.puck.wellSize}:${looseLabel}`}
             aria-label={`${label} ${fraction?.name ?? 'empty'}${looseDetail ? ' · ' + looseDetail : ''}${preparation ? ' · ' + capsulePreparations[preparation] : ''}${spotNames ? ' · ' + spotNames : ''}`} aria-pressed={selected === position}
             title={detail} style={boxStyle(slotLayout.well)} onclick={() => onselect(position)}>
             <span class="well">
-              {#if looseSource}<span class="fraction-mark" title={looseDetail}>{looseLabel}</span>
+              {#if looseSource}<span class="fraction-mark loose-grain-mark" title={looseDetail}>{looseLabel}</span>
               {:else if source}<GrainImage {source} mount={source.mount_id ? geometry[source.mount_id] : undefined} size={layout.puck.wellSize - 2} lazy {geometryError} />
               {:else if fraction}<span class="fraction-mark">{preparation === 'lab-blank' ? 'Blank' : fraction.name}</span>
               {:else}<span class="empty-mark" aria-hidden="true">+</span>{/if}
             </span>
             <span class="capsule-label" style={boxStyle({ ...slotLayout.label, x: slotLayout.label.x - slotLayout.well.x, y: slotLayout.label.y - slotLayout.well.y })}>
-            <strong>{label}</strong>
+            <strong title={label}>{label}</strong>
             <span class="readiness-mark" title={`${label}: grain ${readinessByPosition.get(position)?.grain ? 'complete' : 'pending'} · spike ${readinessByPosition.get(position)?.spike ? 'complete' : 'pending'}`}>G {readinessByPosition.get(position)?.grain ? '✓' : '·'} S {readinessByPosition.get(position)?.spike ? '✓' : '·'}</span>
+            {#if looseSource}<span class="loose-label" title={looseDetail}>{looseLabel}</span>{/if}
             </span>
           </button>
         {/each}
@@ -86,9 +105,9 @@
   .puck, .positions, .caption { position: absolute; }
   .positions { border-radius: var(--radius); background: var(--row-hover); }
   .positions.ring { isolation: isolate; background: none; }
-  .capsule-label { position: absolute; display: grid; grid-template-rows: 10px 10px; justify-items: center; line-height: 10px; }
-  .capsule-label strong { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .6rem; line-height: 10px; }
-  .readiness-mark { display: block; width: 40px; height: 10px; font-size: .55rem; line-height: 10px; white-space: nowrap; }
+  .capsule-label { position: absolute; display: grid; grid-template-rows: 13px 11px 13px; justify-items: center; line-height: 13px; }
+  .capsule-label strong { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--label-font); line-height: 13px; }
+  .readiness-mark { display: block; width: 100%; height: 11px; font-size: var(--mark-font); line-height: 11px; white-space: nowrap; }
   .ring::before {
     content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
     z-index: -1;
@@ -110,7 +129,7 @@
     border: 0; box-shadow: none; color: var(--text-muted); font-size: .72rem; line-height: 1;
   }
   .well {
-    display: grid; place-items: center; width: var(--well-size, 38px); aspect-ratio: 1; border-radius: 50%;
+    position: relative; overflow: hidden; display: grid; place-items: center; width: var(--well-size, 38px); aspect-ratio: 1; border-radius: 50%;
     background: var(--glass-edge); border: 1px solid var(--hairline);
     box-shadow: inset 0 3px 5px var(--glass-edge), 0 1px 0 var(--glass-border);
   }
@@ -121,6 +140,10 @@
   .empty-mark { font-size: 1rem; font-weight: 400; }
   .fraction-mark { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .caption { display: flex; justify-content: center; align-items: center; gap: 4px; white-space: nowrap; }
-  .caption span { font-size: .6rem; line-height: 12px; }
-  h4 { margin: 0; font-size: .65rem; line-height: 12px; }
+  .loose-grain-mark { position: absolute; left: 50%; transform: translateX(-50%); max-width: none; font-size: var(--loose-font); line-height: 13px; }
+  .loose-label { width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--loose-font); line-height: 13px; visibility: hidden; }
+  .capsule:global([data-loose-overflow=true]) .loose-grain-mark { visibility: hidden; }
+  .capsule:global([data-loose-overflow=true]) .loose-label { visibility: visible; }
+  .caption span { font-size: 12px; line-height: 16px; }
+  h4 { margin: 0; font-size: 12px; line-height: 16px; }
 </style>

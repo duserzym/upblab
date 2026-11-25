@@ -114,7 +114,7 @@ one bounded read per lab, including across capsule panels, and reuse identity's
 account-and-server-scoped ETag cache and desktop offline mirror. After saving,
 the list is revalidated so the saved protocol can be viewed and printed offline.
 
-Grain thumbnails in capsule positions (36 px), the capsule inspector (104 px) and
+Grain thumbnails in capsule positions (28–60 px wells), the capsule inspector (104 px) and
 Review's TIMS fractions (120 px) show the published SEM image clipped to the
 stored segmented polygon. They preserve the grain's aspect ratio in a square,
 leave 10 % padding around its bounding box, and draw a thin outline above the
@@ -236,9 +236,10 @@ the picker and editor support mounted GrainAtlas grains only. Older servers
 that omit loose-grain fields keep the existing source display.
 
 At 1440 × 900, 1280 × 800 and 1024 × 640 px the capsule bench keeps three
-columns: capsule puck board, capsule record, and GrainAtlas picker. The board
-track is 300 px at widths of at least 1280 px and 160 px below that, without
-moving above the inspector. Capsule forms and the picker scroll inside their own panels; their action bars stay
+columns: capsule puck board, capsule record, and a shared workspace for the
+GrainAtlas picker, Batch steps or Step × capsule matrix. Review & complete
+uses the picker column. The board scales from 300 px to 400 px at widths of
+at least 1280 px and stays 160 px below that, without moving above the inspector. Capsule forms and the picker scroll inside their own panels; their action bars stay
 visible. The grain gallery also scrolls independently. **Previous** and
 **Next capsule** follow capsule positions in puck order.
 
@@ -277,36 +278,69 @@ remain directly selectable. The current guided step is saved per viewer, server
 and batch, with guarded local storage and an in-memory fallback. Browsing never
 writes chemistry records.
 
+The compact batch header contains **Back to batches** (shown as ← Batches),
+the capsule-set title and date, analyst and recipe, the three view buttons,
+Refresh batch, Edit batch and History. History opens over the bench without
+changing its size. A fixed lab name joins the analyst line;
+a multi-lab selector and Load more labs remain above the header when needed.
+The batch list and other TIMS sections retain their lab row. The status element
+has no height while empty; errors and completion messages remain visible.
+Notes, pending saves, read-only reasons and the edit form may add height.
+The guided rail follows the header, with the capsule-check hint in the progress
+tooltip. In the single-lab fixture, header and rail use about 138 px above the
+bench at both 1440 × 900 and 1280 × 800 px. The bench fills the remaining module
+height, about 694 px and 594 px respectively. There is no bottom chemistry rail.
+
 All three bench columns stay mounted, including the empty inspector and closed
-picker. At widths of at least 1280 px, the board track is 300 px. The inspector
-keeps 48 % of (bench width − 196 px); the picker takes the remaining
-width after the board, inspector and two 8 px gaps. Below 1280 px the board
-track is 160 px and each other track gets half the remaining width after 16 px
-of gaps. These tracks depend only on available width.
+picker. The third column is labelled **Batch workspace** and shows **Grain
+selection**, **Step timeline** or **Capsule record matrix**. The steps and matrix
+scroll within that full-height column. Batch-step selection sits above the step
+editor so all controls fit the picker width. Opening GrainAtlas or Replace grain
+from the inspector selects Capsules; from Review it also returns to Grains.
+Chemistry guidance points to Batch steps.
+The inspector keeps exactly 48 % of (bench width − 196 px). With two 8 px gaps
+and a minimum picker width of 345 px, the board gets the remaining width,
+clamped between 300 px and 400 px: about 383 px at 1440 × 900 and 300 px at
+1280 × 800 px. Below 1280 px the board track is 160 px and each other track gets
+half the remaining width after 16 px of gaps. These tracks depend only on
+available width; view switches do not move the board or inspector.
 
 The board centres one puck, pairs two, places three in a triangle with Puck 3
 centred below Pucks 1 and 2, and wraps larger sets in rows of two. Below
 1280 px the pucks form one scrolling column. Wells use the existing clockwise
-position order. Each label has its own 40 × 20 px box for the capsule name and
-grain/spike readiness marks; captions have a separate 18 px row. Five-hole
-pucks put the top three labels above their wells and the lower two below,
-with the upper side labels offset outward to clear the top label. Ring radius
-is 1.05 times well size and disc diameter is 3.65 times well size (six-hole
-pucks use a wider ring with two labels in the centre). More than six positions
-use grid cells with each label beneath its own well.
+position order. Each label has its own fixed 44 × 37 px box (42 px wide for
+the two six-hole centre labels): a bold 11 px
+capsule name on a 13 px line, 10 px grain/spike marks on an 11 px line, and a
+reserved third 13 px line for an 11 px loose-grain name. Captions use 12 px text
+within a separate 18 px row. Longer capsule and loose-grain names use ellipsis
+and full titles. The rendered system font is measured for loose-grain names:
+short labels such as LG-7 stay inside the well without truncation; names wider
+than its inner space appear on the reserved third line instead. This cannot
+change the footprint. On macOS, K15 bold at 11 px measures 20.9 px, and
+G ✓ S ✓ at 10 px measures 40.4 px; the browser checks the actual font too.
+
+Five-hole pucks put the top three labels above their wells and the lower two
+below. The upper side labels move outward enough to clear the top label and
+well. Their horizontal extent stays within the disc width at both target
+sizes, so external labels do not reduce the disc diameter. Ring radius remains
+1.05 times well size and disc diameter remains 3.65 times well size. Four- and
+six-hole rings widen as needed to clear the fixed labels; six-hole pucks keep
+two labels side by side in the centre, with a minimum footprint that still fits
+the narrow board track. More than six positions use grid cells with labels
+beneath their wells.
 
 The board measures its available area on resize and chooses the largest well
-size from 28 px to 40 px that fits all puck footprints. Three five-hole pucks
-fit without board scrolling at 1440 × 900 and 1280 × 800 px. Larger sets keep
-28 px wells and scroll when necessary. The selection hint and geometry-error
-message share a permanent status line; selecting a capsule or changing guided
-steps cannot resize or move the pucks. The board keeps a 1 px sizing margin
-for fractional browser measurements. The inspector, picker and chemistry rail
-scroll internally with stable scrollbar gutters. The rail below the bench
-reserves a height between 56 px and 160 px according to window height;
-switching content does not change it. Status slots and action
-rows reserve their height. Disclosure and capsule changes preserve panel scroll;
-long rows truncate inside fixed boxes, with full labels in titles.
+size from 28 px to 60 px that fits all puck footprints. The three five-hole
+fixture pucks have approximately 182 px discs and 49.9 px wells at 1440 × 900,
+and 140.5 px discs and 38.5 px wells at 1280 × 800. They fit without board
+scrolling. Larger sets keep 28 px wells and scroll when necessary. The
+selection hint and geometry-error message share a permanent status line;
+selection, guidance, view switches and image arrival cannot resize or move the
+pucks. The board keeps a 1 px sizing margin for fractional browser measurements.
+The inspector, picker, review, steps and matrix scroll internally. Status slots
+inside the inspector and action rows reserve their height. Disclosure and
+capsule changes preserve panel scroll; long rows truncate inside fixed boxes,
+with full labels in titles.
 
 Readiness from batch detail is authoritative when supplied. On older servers,
 the pure client fallback lists active fractions in the capsule map. A grain is
@@ -357,8 +391,13 @@ endpoints show a compatibility message. New detail fields are optional.
 
 `ui/tests/tims-guided.spec.ts` covers guidance, next incomplete, weighing,
 calculations, conflict comparison, required-spike errors, completion and reopen.
-The shared `ui/tests/tims-layout.ts` helper measures all four main regions
-before and after clicks, accepting at most 2 px displacement in each dimension
-at 1440 × 900, 1280 × 800 and 1024 × 640, in both themes. A mocked 3000-row history list took 0.1 ms for two 50-row page requests;
+The shared `ui/tests/tims-layout.ts` helper measures the three permanent column
+regions before and after clicks, accepting at most 2 px displacement in each
+dimension and 1 px for wells, including Capsules → Batch steps → matrix →
+Capsules switches. It checks the bench bottom within 4 px of the module bottom
+at 1440 × 900, 1280 × 800 and 1024 × 640, in both themes. At the two larger
+sizes it checks at most 150 px of single-lab chrome, minimum discs of 170 px and
+140 px respectively, fixed font-size floors and real text widths. Rendered
+well/label/caption collision checks accompany the pure layout proofs. A mocked 3000-row history list took 0.1 ms for two 50-row page requests;
 browsing history made zero requests before and after this change. This measures
 client overhead rather than network latency.
