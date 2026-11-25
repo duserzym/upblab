@@ -4,6 +4,7 @@ import { fixtures, batch, lab, plan, recipe, version, solutions, publishedVersio
 import { capsuleMount, correctionElements, correctionFixtures, correctionGrain, correctionSpot, correctedFraction, replacementPath } from './fixtures/tims-capsules';
 import { routeTimsAtlas } from './tims-atlas-helpers';
 import { problems } from './problems';
+import { expectPuckBoardFits } from './tims-layout';
 import { fractionStatuses, statusWords } from '../src/lib/tims-model';
 import { inventedElements } from './fixtures/tims-atlas';
 import { writeCapsulePreparation } from '../src/lib/tims-capsule-intake';
@@ -229,6 +230,29 @@ for (const [width, height] of [[1280, 800], [1024, 640]]) test(`all 15 populated
   }
   expect(await problems(page, 'Populated capsule grid')).toEqual([]);
 });
+for (const [width, height] of [[1440, 900], [1280, 800]]) for (const theme of ['light', 'dark']) {
+  test(`three capsule pucks form a visible triangle at ${width} × ${height}, ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await start(page, { store: { theme, themeChosen: true } }); await openBatch(page);
+    await expectPuckBoardFits(page);
+    const board = page.getByRole('region', { name: 'Capsule grid', exact: true });
+    const pucks = board.locator('section[aria-label^="Puck "]');
+    await expect(pucks).toHaveCount(3);
+    const boxes = await Promise.all([0, 1, 2].map(index => pucks.nth(index).boundingBox()));
+    const [one, two, three] = boxes.map(box => box!);
+    expect(Math.abs(one.y - two.y)).toBeLessThanOrEqual(1);
+    expect(one.x + one.width).toBeLessThanOrEqual(two.x);
+    expect(three.y).toBeGreaterThanOrEqual(Math.max(one.y + one.height, two.y + two.height));
+    const area = (await board.boundingBox())!;
+    expect(Math.abs(three.x + three.width / 2 - (area.x + area.width / 2))).toBeLessThanOrEqual(2);
+    for (let index = 0; index < 3; index++) await expect(pucks.nth(index)).toBeInViewport({ ratio: 1 });
+    for (const box of await board.locator('.well').all()) {
+      const bounds = (await box.boundingBox())!;
+      expect(bounds.width).toBeGreaterThanOrEqual(28);
+    }
+    expect(await problems(page, 'Triangle capsule board')).toEqual([]);
+  });
+}
 test('step edits are durable while offline, then sent with an Idempotency-Key', async ({ page }) => {
   await start(page, { cached: { asOf: '2026-11-06T10:00:00Z', reason: 'unreachable' } }); await openBatch(page);
   const step = await openStep(page, 'Chemical abrasion'); await step.getByRole('button', { name: 'Edit step', exact: true }).click(); await step.getByLabel('Temperature (°C)').fill('195'); await step.getByRole('button', { name: 'Save step here' }).click();

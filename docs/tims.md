@@ -236,9 +236,9 @@ the picker and editor support mounted GrainAtlas grains only. Older servers
 that omit loose-grain fields keep the existing source display.
 
 At 1440 × 900, 1280 × 800 and 1024 × 640 px the capsule bench keeps three
-columns: compact puck map, capsule record, and GrainAtlas picker. The map
-track narrows at the smallest size without moving above the inspector. Capsule
-forms and the picker scroll inside their own panels; their action bars stay
+columns: capsule puck board, capsule record, and GrainAtlas picker. The board
+track is 300 px at widths of at least 1280 px and 160 px below that, without
+moving above the inspector. Capsule forms and the picker scroll inside their own panels; their action bars stay
 visible. The grain gallery also scrolls independently. **Previous** and
 **Next capsule** follow capsule positions in puck order.
 
@@ -278,14 +278,33 @@ and batch, with guarded local storage and an in-memory fallback. Browsing never
 writes chemistry records.
 
 All three bench columns stay mounted, including the empty inspector and closed
-picker. At widths of at least 1280 px, the map track is 180 px and the inspector
-and picker use 48 % and 52 % of the remaining width after 16 px of gaps. Below
-1280 px the map track is 160 px and each other track gets half the remaining
-width after 16 px of gaps. These tracks depend only on available width. Each
-puck is 116 px wide with at least 150 px reserved height. The inspector, picker,
-map and chemistry rail scroll internally with stable scrollbar gutters. The
-rail below the bench reserves a height between 56 px and 160 px according to
-window height; switching content does not change it. Status slots and action
+picker. At widths of at least 1280 px, the board track is 300 px. The inspector
+keeps 48 % of (bench width − 196 px); the picker takes the remaining
+width after the board, inspector and two 8 px gaps. Below 1280 px the board
+track is 160 px and each other track gets half the remaining width after 16 px
+of gaps. These tracks depend only on available width.
+
+The board centres one puck, pairs two, places three in a triangle with Puck 3
+centred below Pucks 1 and 2, and wraps larger sets in rows of two. Below
+1280 px the pucks form one scrolling column. Wells use the existing clockwise
+position order. Each label has its own 40 × 20 px box for the capsule name and
+grain/spike readiness marks; captions have a separate 18 px row. Five-hole
+pucks put the top three labels above their wells and the lower two below,
+with the upper side labels offset outward to clear the top label. Ring radius
+is 1.05 times well size and disc diameter is 3.65 times well size (six-hole
+pucks use a wider ring with two labels in the centre). More than six positions
+use grid cells with each label beneath its own well.
+
+The board measures its available area on resize and chooses the largest well
+size from 28 px to 40 px that fits all puck footprints. Three five-hole pucks
+fit without board scrolling at 1440 × 900 and 1280 × 800 px. Larger sets keep
+28 px wells and scroll when necessary. The selection hint and geometry-error
+message share a permanent status line; selecting a capsule or changing guided
+steps cannot resize or move the pucks. The board keeps a 1 px sizing margin
+for fractional browser measurements. The inspector, picker and chemistry rail
+scroll internally with stable scrollbar gutters. The rail below the bench
+reserves a height between 56 px and 160 px according to window height;
+switching content does not change it. Status slots and action
 rows reserve their height. Disclosure and capsule changes preserve panel scroll;
 long rows truncate inside fixed boxes, with full labels in titles.
 

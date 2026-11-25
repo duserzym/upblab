@@ -1,0 +1,1 @@
+- TIMS batches: capsule pucks sit side by side in a wider board (three pucks as a triangle), sized to fit the window without scrolling at 1280 px and wider; capsule labels and G/S marks no longer slide under neighbouring wells.

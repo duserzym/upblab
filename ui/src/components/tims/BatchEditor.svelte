@@ -348,8 +348,10 @@
               if (selected !== position) choose(position, currentCapsuleStep?.method_code === 'SP-TIMS-SPIKE' ? spikingSessionId(currentCapsuleStep) : '');
             }} />
           <div class="row legend small muted"><span><i></i> Assigned</span><span><i class="empty"></i> Empty</span>{#if batch.capsule_set.positions_per_puck === 5}<span>Clockwise from front left</span>{/if}</div>
-          {#if selected === null}<p class="small muted">Select a capsule to prepare it or view its chemistry.</p>{/if}
-          {#if geometryError}<p class="error small">Grain outlines unavailable: {geometryError}</p>{/if}
+          <p class="board-status small muted" class:error={!!geometryError} class:quiet={!geometryError && selected !== null}
+            title={geometryError ? `Grain outlines unavailable: ${geometryError}` : 'Select a capsule to prepare it or view its chemistry.'}>
+            {geometryError ? `Grain outlines unavailable: ${geometryError}` : 'Select a capsule to prepare it or view its chemistry.'}
+          </p>
         </section>
 
           <section class="panel stack inspector" aria-label="Capsule details">
@@ -481,12 +483,17 @@
   .batch { flex: 1; min-height: 0; gap: 6px; }
   .batch > .panel, .bench > .panel { margin: 0; }
   .batch > header, .views { flex-shrink: 0; }
-  .bench { display: grid; grid-template-columns: 180px calc((100% - 196px) * .48) calc((100% - 196px) * .52); grid-template-rows: minmax(0, 1fr); gap: 8px; align-items: stretch; min-height: 0; flex: 1; overflow: hidden; }
-  .board > :global(*) { flex-shrink: 0; }
-  .board { background: linear-gradient(150deg, var(--glass-strong), var(--glass)); overflow: auto; scrollbar-gutter: stable; }
+  .bench { display: grid; grid-template-columns: 300px calc((100% - 196px) * .48) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 8px; align-items: stretch; min-height: 0; flex: 1; overflow: hidden; }
+  .board { background: linear-gradient(150deg, var(--glass-strong), var(--glass)); overflow: auto; }
   .board, .inspector, .picker-panel { padding: 8px; min-height: 0; min-width: 0; gap: 8px; }
-  .legend { gap: var(--space-2); }
-  .legend span { display: flex; gap: var(--space-1); align-items: center; }
+  .bench > .board { gap: 4px; }
+  .board > .heading { height: 20px; flex: none; flex-wrap: nowrap; }
+  .board > .heading h3 { font-size: .8rem; white-space: nowrap; }
+  .board > .heading > span { font-size: .65rem; white-space: nowrap; }
+  .board-status { flex: none; height: 14px; line-height: 14px; font-size: .65rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board-status.quiet { visibility: hidden; }
+  .legend { flex: none; height: 12px; line-height: 12px; flex-wrap: nowrap; gap: 6px; font-size: .6rem; }
+  .legend span { white-space: nowrap; display: flex; gap: var(--space-1); align-items: center; }
   .legend i { width: 10px; height: 10px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 50%; }
   .legend .empty { border-color: var(--hairline); background: var(--glass-edge); }
   .inspector { overflow: hidden; }
@@ -530,7 +537,7 @@
   .step-rail .steps, .step-rail .matrix { overflow: visible; }
   @media (max-width: 1279px) {
     .bench { grid-template-columns: 160px calc((100% - 176px) * .5) calc((100% - 176px) * .5); }
-    .board > .heading { height: 48px; overflow: hidden; }
+    .board > .heading { height: 48px; overflow: hidden; flex-wrap: wrap; }
     .board .legend { display: none; }
 
   }

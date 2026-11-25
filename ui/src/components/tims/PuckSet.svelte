@@ -1,8 +1,9 @@
 <script lang="ts">
   import { statusWords, type BatchDetail, type FractionStepRecord } from '../../lib/tims-api';
-  import { capsulePucks, isLooseGrain, puckSlotCoordinates, sourceNames, sourceSpotNames, type MountGeometry } from '../../lib/tims-geometry';
+  import { capsulePucks, isLooseGrain, sourceNames, sourceSpotNames, type MountGeometry } from '../../lib/tims-geometry';
   import { capsulePreparations, readCapsulePreparation } from '../../lib/tims-capsule-intake';
   import { batchReadiness } from '../../lib/tims-readiness';
+  import { puckBoardLayout, type Box } from '../../lib/tims-puck-layout';
   import GrainImage from './GrainImage.svelte';
 
   let { batch, geometry, geometryError, selected, onselect, compact = false }: {
@@ -26,18 +27,27 @@
     return records;
   });
 
-  function location(index: number, capacity: number) {
-    const { x, y } = puckSlotCoordinates(index, capacity);
-    return `--x:${x}%;--y:${y}%`;
+  // These bindings use ResizeObserver. The flex area depends only on the window,
+  // never on selection, guidance content or geometry loading state. Keep 1 px
+  // clear because clientWidth/clientHeight round fractional CSS measurements.
+  let width = $state(284), height = $state(280), viewportWidth = $state(1280);
+  const layout = $derived(puckBoardLayout({ pucks: pucks.length, perPuck: batch.capsule_set.positions_per_puck,
+    width: Math.max(0, width - 1), height: Math.max(0, height - 1), columns: viewportWidth < 1280 ? 1 : 2 }));
+  function boxStyle(box: Box) {
+    return `left:${box.x}px;top:${box.y}px;width:${box.width}px;height:${box.height}px`;
   }
 </script>
 
-<div class="puck-set" class:compact>
+<svelte:window bind:innerWidth={viewportWidth} />
+<div class="puck-set" class:compact bind:clientWidth={width} bind:clientHeight={height}>
+  <div class="puck-canvas" style={`width:${layout.width}px;height:${layout.height}px;--well-size:${layout.puck.wellSize}px`}>
   {#each pucks as puck, index (puck[0])}
-    <section class="puck" aria-label={`Puck ${index + 1}`}>
-      <div class="positions" class:ring={batch.capsule_set.positions_per_puck <= 6} class:bsu={batch.capsule_set.positions_per_puck === 5}>
+    <section class="puck" aria-label={`Puck ${index + 1}`} style={boxStyle({ ...layout.offsets[index], width: layout.puck.width, height: layout.puck.height })}>
+      <div class="positions" style={boxStyle(layout.puck.disc)} class:ring={batch.capsule_set.positions_per_puck <= 6} class:bsu={batch.capsule_set.positions_per_puck === 5}>
         {#if batch.capsule_set.positions_per_puck === 5}<span class="stem-bore" aria-hidden="true"></span>{/if}
+      </div>
         {#each puck as position, slot (position)}
+          {@const slotLayout = layout.puck.slots[slot]}
           {@const id = batch.capsule_map[String(position)]}
           {@const fraction = id ? fractions.get(id) : undefined}
           {@const source = fraction?.sources.find(s => !s.retired_at && s.mount_id)}
@@ -51,40 +61,39 @@
           {@const detail = fraction ? [preparation && capsulePreparations[preparation], looseDetail, fraction.sample.name, spotNames, state, ...(outcomes.get(fraction.id) ?? []).map(r => r.outcome === 'fully_dissolved' && methods.get(r.step_id) === 'SP-TIMS-CA' ? 'dissolved during CA' : statusWords(r.outcome)), ...(fraction.sources.some(s => !s.retired_at && s.is_fragment) ? ['fragment'] : [])].filter(Boolean).join(' · ') : 'Prepare this capsule'}
           <button class="btn capsule" class:filled={!!fraction} type="button" data-testid="tims-capsule"
             aria-label={`${label} ${fraction?.name ?? 'empty'}${looseDetail ? ' · ' + looseDetail : ''}${preparation ? ' · ' + capsulePreparations[preparation] : ''}${spotNames ? ' · ' + spotNames : ''}`} aria-pressed={selected === position}
-            title={detail} style={batch.capsule_set.positions_per_puck <= 6 ? location(slot, batch.capsule_set.positions_per_puck) : undefined} onclick={() => onselect(position)}>
+            title={detail} style={boxStyle(slotLayout.well)} onclick={() => onselect(position)}>
             <span class="well">
               {#if looseSource}<span class="fraction-mark" title={looseDetail}>{looseLabel}</span>
-              {:else if source}<GrainImage {source} mount={source.mount_id ? geometry[source.mount_id] : undefined} size={36} lazy {geometryError} />
+              {:else if source}<GrainImage {source} mount={source.mount_id ? geometry[source.mount_id] : undefined} size={layout.puck.wellSize - 2} lazy {geometryError} />
               {:else if fraction}<span class="fraction-mark">{preparation === 'lab-blank' ? 'Blank' : fraction.name}</span>
               {:else}<span class="empty-mark" aria-hidden="true">+</span>{/if}
             </span>
+            <span class="capsule-label" style={boxStyle({ ...slotLayout.label, x: slotLayout.label.x - slotLayout.well.x, y: slotLayout.label.y - slotLayout.well.y })}>
             <strong>{label}</strong>
             <span class="readiness-mark" title={`${label}: grain ${readinessByPosition.get(position)?.grain ? 'complete' : 'pending'} · spike ${readinessByPosition.get(position)?.spike ? 'complete' : 'pending'}`}>G {readinessByPosition.get(position)?.grain ? '✓' : '·'} S {readinessByPosition.get(position)?.spike ? '✓' : '·'}</span>
+            </span>
           </button>
         {/each}
-      </div>
-      <div class="caption"><h4>Puck {index + 1}</h4><span class="small muted">{puck.filter(n => !!batch.capsule_map[String(n)]).length} / {puck.length} assigned</span></div>
+      <div class="caption" style={boxStyle(layout.puck.caption)}><h4>Puck {index + 1}</h4><span class="small muted">{puck.filter(n => !!batch.capsule_map[String(n)]).length} / {puck.length} assigned</span></div>
     </section>
   {/each}
+  </div>
 </div>
 
 <style>
-  .puck-set { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: var(--space-3); align-items: start; }
-  .compact { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
-  .compact .puck { max-width: 116px; }
-  .compact .positions.ring { --well-size: 32px; }
-  .compact .caption { gap: 2px; margin-top: 4px; }
-  .compact .caption span { font-size: .65rem; }
-  .readiness-mark { width: 46px; height: 12px; font-size: .55rem; white-space: nowrap; }
-  .compact .puck { width: 116px; min-height: 150px; }
-  .puck { min-width: 0; width: 100%; max-width: 226px; justify-self: center; }
-  .positions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(48px, 100%), 1fr)); gap: 4px; padding: var(--space-2); border-radius: var(--radius); background: var(--row-hover); }
-  .positions.ring { --well-size: 38px; position: relative; display: block; isolation: isolate; aspect-ratio: 1; padding: 0; background: none; }
+  .puck-set { flex: 1 1 0; min-height: 0; min-width: 0; position: relative; }
+  .puck-canvas { position: relative; }
+  .puck, .positions, .caption { position: absolute; }
+  .positions { border-radius: var(--radius); background: var(--row-hover); }
+  .positions.ring { isolation: isolate; background: none; }
+  .capsule-label { position: absolute; display: grid; grid-template-rows: 10px 10px; justify-items: center; line-height: 10px; }
+  .capsule-label strong { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .6rem; line-height: 10px; }
+  .readiness-mark { display: block; width: 40px; height: 10px; font-size: .55rem; line-height: 10px; white-space: nowrap; }
   .ring::before {
     content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
     z-index: -1;
     background: radial-gradient(circle at 40% 30%, var(--plot-bg), var(--glass-strong) 68%, var(--bg));
-    border: 1px solid var(--hairline); box-shadow: inset 0 0 0 4px var(--glass);
+    border: 1px solid var(--hairline); box-shadow: inset 0 0 0 calc(var(--well-size) / 8) var(--glass);
   }
   .bsu::before { clip-path: polygon(0 0, 100% 0, 100% 100%, 57% 100%, 57% 89%, 43% 89%, 43% 100%, 0 100%); }
   .bsu::after {
@@ -97,10 +106,9 @@
     border: 1px solid var(--hairline); box-shadow: inset 0 4px 6px var(--glass-edge), 0 1px 0 var(--glass-border);
   }
   .capsule {
-    display: grid; justify-items: center; min-width: 0; padding: 0 2px; gap: 2px; background: transparent;
+    position: absolute; display: block; min-width: 0; padding: 0; background: transparent;
     border: 0; box-shadow: none; color: var(--text-muted); font-size: .72rem; line-height: 1;
   }
-  .ring .capsule { position: absolute; top: var(--y); left: var(--x); transform: translate(-50%, calc(var(--well-size) / -2)); }
   .well {
     display: grid; place-items: center; width: var(--well-size, 38px); aspect-ratio: 1; border-radius: 50%;
     background: var(--glass-edge); border: 1px solid var(--hairline);
@@ -112,6 +120,7 @@
   .capsule[aria-pressed=true] strong { color: var(--accent); }
   .empty-mark { font-size: 1rem; font-weight: 400; }
   .fraction-mark { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .caption { display: flex; justify-content: center; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
-  h4 { margin: 0; font-size: .9rem; }
+  .caption { display: flex; justify-content: center; align-items: center; gap: 4px; white-space: nowrap; }
+  .caption span { font-size: .6rem; line-height: 12px; }
+  h4 { margin: 0; font-size: .65rem; line-height: 12px; }
 </style>

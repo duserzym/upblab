@@ -2,7 +2,7 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import { installFakeTauri, type FakeOptions } from './fake-tauri';
 import { fixtures, batch, lab, version, publishedVersion } from './fixtures/tims';
 import { batchReadiness } from '../src/lib/tims-readiness';
-import { timsRegionBoxes, expectTimsRegionsStable } from './tims-layout';
+import { timsRegionBoxes, expectTimsRegionsStable, timsWellBoxes, expectTimsWellsStable, expectPuckBoardFits } from './tims-layout';
 import { routeTimsAtlas } from './tims-atlas-helpers';
 import { problems } from './problems';
 import { inventedElements } from './fixtures/tims-atlas';
@@ -159,7 +159,13 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (cons
     const railBox = await rail(page).boundingBox();
     expect(railBox).not.toBeNull(); expect(railBox!.height).toBeLessThanOrEqual(40);
     const before = await timsRegionBoxes(page);
-    const stable = async (action: () => Promise<unknown>) => { await action(); await expectTimsRegionsStable(page, before); };
+    const wellsBefore = await timsWellBoxes(page);
+    if (width >= 1280) await expectPuckBoardFits(page);
+    const stable = async (action: () => Promise<unknown>) => {
+      await action(); await expectTimsRegionsStable(page, before);
+      await expectTimsWellsStable(page, wellsBefore);
+      if (width >= 1280) await expectPuckBoardFits(page);
+    };
     const walkDisclosures = async () => {
       // Exclude summaries inside another disclosure, even after its parent opens.
       // Re-query on each click rather than retaining indexes into all nested summaries.
