@@ -49,7 +49,11 @@ theme spec 26 s per test), workers at 80 % of the cores instead of half, and a
 controllable clock instead of a 5.1 s sleep in the updates spec. A production
 preview server instead of the dev server was tried and was slower (78 s), and
 some tests rely on development-port behaviour, so the dev server stays.
-Playwright reuses a dev server already running on port 1431.
+By default, Playwright reuses a dev server already running on port 1431 outside
+CI. Set `UPBLAB_E2E_PORT=<port>` to run Playwright on a private port. A private
+run never reuses a running server and passes the port to Vite as
+`UPBLAB_DEV_PORT`, so the shell's dev-port rule also covers that port.
+Production builds ignore `UPBLAB_DEV_PORT`.
 
 `pnpm docs-screenshots` writes invented-data PNGs to `docs/images/` in Light and Dark at 1440 × 900 and 1280 × 800; Images uses Review’s maximised SEM panel, and Sessions uses `../upbdb/ui/dist` (skipped if that build is absent).
 

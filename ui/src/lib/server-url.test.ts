@@ -31,6 +31,28 @@ describe('server URL resolution', () => {
     expect(resolveServerUrl(stored, false, page + query)).toBe(new URL(page).origin);
   });
 
+  it.each([
+    'http://localhost:47613/', 'http://127.0.0.1:47613/desk/',
+  ])('honours the override on the extra shell dev port: %s', page => {
+    expect(resolveServerUrl(stored, false, page + query, '47613')).toBe(override);
+    expect(resolveServerUrl(stored, false, page, '47613')).toBe('');
+  });
+
+  it('uses the page origin on a private port without an extra dev port', () => {
+    expect(resolveServerUrl(stored, false, 'http://localhost:47613/' + query)).toBe('http://localhost:47613');
+    expect(resolveServerUrl(stored, false, 'http://localhost:47613/' + query, '')).toBe('http://localhost:47613');
+  });
+
+  it.each(['abc', '0', '70000', '1431x'])('ignores an invalid extra dev port: %s', port => {
+    expect(resolveServerUrl(stored, false, 'http://localhost:47613/' + query, port)).toBe('http://localhost:47613');
+    expect(resolveServerUrl(stored, false, 'http://localhost:1431/' + query, port)).toBe(override);
+  });
+
+  it('ignores the override on a remote host even with the extra dev port', () => {
+    expect(resolveServerUrl(stored, false, 'http://lab.example.test:47613/' + query, '47613'))
+      .toBe('http://lab.example.test:47613');
+  });
+
   it.each(['not a URL', 'javascript:alert(1)', 'file:///tmp/server', ''])('ignores an invalid dev override %s', server => {
     expect(resolveServerUrl(stored, false, `http://localhost:1420/?server=${encodeURIComponent(server)}`))
       .toBe('');

@@ -66,6 +66,13 @@ including `/desk/` and `/desk/open`. Other web origins use the page origin
 and ignore the override. Web delivery never falls back to a stored URL or
 `http://localhost:8000`. Desktop server selection is unchanged.
 
+Set `UPBLAB_E2E_PORT=<port>` to run Playwright on a private port. It never
+reuses a running server and passes the port to Vite as `UPBLAB_DEV_PORT`, so
+the dev-port rule also covers that port on `localhost` and `127.0.0.1`.
+Only `vite serve` accepts this extra port, which must contain only digits and
+be between 1 and 65535. Production builds ignore `UPBLAB_DEV_PORT` and keep
+the rule limited to ports 1420 and 1431.
+
 ## Trying a link
 
 macOS (a built app; Launch Services learns the schemes once the `.app` has

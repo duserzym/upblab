@@ -59,6 +59,7 @@ test.beforeAll(async ({ browser }, info) => {
 
 /** All server-origin traffic, including nested frames, terminates here. */
 async function serveDemo(context: BrowserContext) {
+  const shellOrigin = new URL(test.info().project.use.baseURL!).origin;
   const unexpected: string[] = [];
   const pending = new Set<string>();
   let tileReads = 0;
@@ -73,7 +74,7 @@ async function serveDemo(context: BrowserContext) {
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
     // Vite and the bundled GrainAtlas build are the only unmocked origin.
-    if (url.origin === 'http://localhost:1431') return route.continue();
+    if (url.origin === shellOrigin) return route.continue();
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*',
       'access-control-allow-methods': 'GET, HEAD, OPTIONS' };
     if (url.origin === server) {
