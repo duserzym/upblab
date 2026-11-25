@@ -1,6 +1,7 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import { installFakeTauri, type FakeOptions } from './fake-tauri';
 import { fixtures, batch, lab, plan, recipe, version, solutions, publishedVersion, labVersion, earlierVersion } from './fixtures/tims';
+import { capsuleMount, correctionElements, correctionFixtures, correctionGrain, correctionSpot, correctedFraction, replacementPath } from './fixtures/tims-capsules';
 import { routeTimsAtlas } from './tims-atlas-helpers';
 import { problems } from './problems';
 import { fractionStatuses, statusWords } from '../src/lib/tims-model';
@@ -90,7 +91,7 @@ test('loading a grain creates the empty capsule and its selected LA spots with o
   await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
   await page.getByRole('button', { name: 'GrainAtlas', exact: true }).click();
   const picker = page.getByRole('region', { name: 'GrainAtlas picker' });
-  await picker.getByRole('combobox', { name: 'Mount', exact: true }).selectOption('mount-demo');
+  await chooseMount(picker, 'Invented mount S');
   await picker.getByRole('button', { name: /Invented selectable grain/ }).click();
   await expect(picker.getByLabel('Invented spot 1')).toBeChecked();
   await expect(picker.getByLabel('Invented spot 2')).toBeChecked();
@@ -122,7 +123,7 @@ test('assigns an existing sample directly to TIMS without a mount or laser spot'
   await expect(page.getByRole('button', { name: 'K3 z3 · TIMS only', exact: true })).toBeVisible();
   expect(await writes(page)).toMatchObject([{ method: 'POST', path: '/v1/fractions', body: { sample_id: sample.id, batch_id: batch.id, capsule_number: 3, sources: [], notes } }]);
   expect(await readCount(page, path)).toBe(1);
-  expect(await readCount(page, '/v1/mounts?limit=50')).toBe(0);
+  expect(await readCount(page, '/v1/mounts?limit=50')).toBe(1);
 });
 test('opens the Spiking pane for a source-free lab blank and saves its measured use', async ({ page }) => {
   const sample = { id: 'sample-blank', name: 'Invented lab blank', material: 'Lab blank', igsn: null, project: { code: 'DEMO' } };
@@ -642,13 +643,14 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1024, 640]]) for (cons
     await capsule.getByText('Fraction status and notes', { exact: true }).click();
     expect(await problems(page, 'TIMS fraction form')).toEqual([]);
     const saveFraction = capsule.getByRole('button', { name: 'Save fraction here', exact: true });
-    // Centre it: aligning to the scroller's edge leaves a sub-pixel clip at 1280 x 800.
-    await saveFraction.evaluate(button => button.scrollIntoView({ block: 'center' }));
+    // Capsule actions stay visible while the form scrolls independently.
     await expect(saveFraction).toBeInViewport({ ratio: 1 });
     const saveBox = await saveFraction.boundingBox(), capsuleBox = await capsule.boundingBox();
     expect(saveBox).not.toBeNull(); expect(capsuleBox).not.toBeNull();
     expect(saveBox!.y).toBeGreaterThanOrEqual(capsuleBox!.y);
     expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(capsuleBox!.y + capsuleBox!.height);
+    await expect(capsule.getByRole('button', { name: 'Next capsule' })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('region', { name: 'GrainAtlas picker' }).getByRole('group', { name: 'Picker actions' })).toBeInViewport({ ratio: 1 });
     for (const name of ['Recipes', 'Capsule sets', 'Spikes', 'Import pick notes']) {
       await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name, exact: true }).click();
       if (name === 'Spikes') {
@@ -690,6 +692,10 @@ const spotSearchFixtures = {
   '/v1/mounts/mount-zz01/elements': searchElements,
   '/v1/mounts/mount-zz02/elements': otherSearchElements,
 };
+async function chooseMount(picker: Locator, name: string) {
+  await picker.getByRole('combobox', { name: 'Mount', exact: true }).fill(name);
+  await picker.getByRole('option', { name: new RegExp('^' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' ') }).click();
+}
 async function openSpotPicker(page: Page) {
   await openBatch(page);
   await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
@@ -705,7 +711,7 @@ for (const [width, height] of [[1280, 800], [1440, 900]]) {
         mount_id: 'mount-zz01', mount_label: searchMounts[1].label, spot_id: searchSpot.server_id, atlas_spot_id: searchSpot.id, spot_label: searchSpot.name }] };
     await start(page, { fixtures: spotSearchFixtures, apiReplies: { 'POST /v1/fractions': { status: 201, body: added } } });
     const picker = await openSpotPicker(page);
-    await picker.getByRole('combobox', { name: 'Mount', exact: true }).selectOption('mount-zz01');
+    await chooseMount(picker, 'Invented ZZ01 spot mount');
     const filter = picker.getByRole('searchbox', { name: 'Filter grains' });
     await expect(filter).toHaveAttribute('placeholder', 'Spot, grain or sample');
     await picker.getByRole('combobox', { name: 'Sample', exact: true }).selectOption('ZZ03');
@@ -737,14 +743,14 @@ test('sample submit opens the matching mount among two and preselects its sample
   await filter.fill('ZZ01');
   expect(await readCount(page, '/v1/mounts?limit=5&q=ZZ01')).toBe(0);
   await filter.press('Enter');
-  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue('mount-zz01');
+  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue('Invented ZZ01 spot mount');
   await expect(picker.getByRole('combobox', { name: 'Sample', exact: true })).toHaveValue('ZZ01');
   await expect(picker.getByRole('button', { name: /ZZ01_S_195 · grain/ })).toBeVisible();
   expect(await readCount(page, '/v1/mounts?limit=5&q=ZZ01')).toBe(1);
   // A different sample also changes mounts when one is already open.
   await filter.fill('ZZ02');
   await picker.getByRole('button', { name: 'Find spot', exact: true }).click();
-  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue('mount-zz02');
+  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue('Invented ZZ01 comparison mount');
   await expect(picker.getByRole('combobox', { name: 'Sample', exact: true })).toHaveValue('ZZ02');
   expect(await readCount(page, '/v1/mounts/mount-zz01/elements')).toBe(1);
   expect(await readCount(page, '/v1/mounts/mount-zz02/elements')).toBe(1);
@@ -757,7 +763,204 @@ test('ambiguous spot matches list mount choices with full spot names', async ({ 
   await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue('');
   await expect(picker.getByRole('button', { name: 'Invented ZZ01 comparison mount · ZZ01_S_195', exact: true })).toBeVisible();
   await picker.getByRole('button', { name: 'Invented ZZ01 spot mount · ZZ01_S_195', exact: true }).click();
-  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue('mount-zz01');
+  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue('Invented ZZ01 spot mount');
   await expect(picker.getByRole('combobox', { name: 'Sample', exact: true })).toHaveValue('ZZ01');
   expect(await readCount(page, '/v1/mounts/mount-zz01/elements')).toBe(1);
+});
+
+for (const crossSample of [false, true]) test(`Replace grain preserves history (${crossSample ? 'cross sample' : 'same sample'})`, async ({ page }) => {
+  const next = correctedFraction(crossSample);
+  const elements = { ...correctionElements, grains: correctionElements.grains.map(g => g.id === correctionGrain.id ? { ...g, sample: next.sample.name } : g) };
+  await start(page, { fixtures: { ...correctionFixtures, '/v1/mounts/mount-demo/elements': elements } });
+  await openBatch(page);
+  await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  await capsule.getByRole('group', { name: 'Capsule actions' }).getByRole('button', { name: 'Replace grain', exact: true }).click();
+  const picker = page.getByRole('region', { name: 'GrainAtlas picker' });
+  await expect(picker).toContainText('Replacing Invented grain one · spot Zircon_1');
+  await chooseMount(picker, capsuleMount.label);
+  await picker.getByRole('button', { name: /Demo-12 · grain 002_Demo\/4/ }).click();
+  await expect(picker).toContainText(crossSample
+    ? `This grain is from Synthetic-B, not ${batch.fractions[0].sample.name}. K1 will hold a new Synthetic-B fraction; z1 is kept as a replaced record.`
+    : 'The old grain stays recorded as replaced.');
+  await picker.getByRole('textbox', { name: 'Reason (optional)' }).fill('Wrong grain selected');
+  expect(await writes(page)).toEqual([]);
+  await reply(page, `POST ${replacementPath}`, 200, next);
+  await reply(page, `/v1/tims/batches/${batch.id}`, 200, { ...batch, fractions: [...batch.fractions.filter(f => f.id !== batch.fractions[0].id), next], capsule_map: { ...batch.capsule_map, 1: next.id } });
+  await picker.getByRole('button', { name: 'Replace', exact: true }).click();
+  await expect(capsule).toContainText('Replaced Invented grain one (spot Zircon_1) · Invented analyst · 24 Nov 2026 · Wrong grain selected');
+  if (crossSample) await expect(capsule).toContainText(`Replaces z1 · ${batch.fractions[0].sample.name} · Invented analyst · 24 Nov 2026`);
+  await expect(page.getByRole('button', { name: new RegExp(`^K1 ${next.name}(?: · |$)`) })).toHaveAttribute('aria-pressed', 'true');
+  const recorded = await writes(page);
+  expect(recorded).toHaveLength(1);
+  expect(recorded[0]).toEqual({ method: 'POST', path: replacementPath,
+    body: { grain_id: correctionGrain.server_id, spot_id: correctionSpot.server_id, is_fragment: false, fragment_note: '', note: '', reason: 'Wrong grain selected' },
+    idempotencyKey: expect.stringMatching(/^[\da-f-]{36}$/i) });
+  expect(await readCount(page, `/v1/tims/batches/${batch.id}`)).toBe(2);
+});
+
+for (const status of [404, 405, 409]) test(`Replace grain leaves the capsule intact on ${status}`, async ({ page }) => {
+  await start(page, { fixtures: correctionFixtures, apiReplies: { [`POST ${replacementPath}`]: { status, body: { detail: 'Invented chemistry record blocks this replacement.' } } } });
+  await openBatch(page); await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  await capsule.getByRole('group', { name: 'Capsule actions' }).getByRole('button', { name: 'Replace grain', exact: true }).click();
+  const picker = page.getByRole('region', { name: 'GrainAtlas picker' });
+  await chooseMount(picker, capsuleMount.label);
+  await picker.getByRole('button', { name: /Demo-12 · grain/ }).click();
+  await picker.getByRole('button', { name: 'Replace', exact: true }).click();
+  await expect(picker).toContainText(status === 409 ? '409: Invented chemistry record blocks this replacement.' : 'This server does not support Replace grain yet.');
+  await expect(capsule).toContainText('Grain: Invented grain one');
+  await expect(capsule).not.toContainText('Replaced Invented grain one');
+  expect(await readCount(page, `/v1/tims/batches/${batch.id}`)).toBe(1);
+  const first = (await writes(page))[0];
+  await picker.getByRole('button', { name: 'Replace', exact: true }).click();
+  await expect.poll(async () => (await writes(page)).length).toBe(2);
+  expect((await writes(page))[1].idempotencyKey).toBe(first.idempotencyKey);
+});
+
+for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (const theme of ['light', 'dark']) test(`capsule and picker actions stay visible at ${width} × ${height}, ${theme}`, async ({ page }) => {
+  await page.setViewportSize({ width, height });
+  await start(page, { store: { theme, themeChosen: true }, fixtures: correctionFixtures });
+  await openBatch(page); await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
+  const capsule = page.getByRole('region', { name: 'Capsule details' }), picker = page.getByRole('region', { name: 'GrainAtlas picker' });
+  const actions = capsule.getByRole('group', { name: 'Capsule actions' });
+  await expect(actions.getByRole('button', { name: 'Add source', exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(actions.getByRole('button', { name: 'Replace grain', exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(capsule.getByRole('button', { name: 'Close capsule' })).toBeInViewport({ ratio: 1 });
+  await chooseMount(picker, capsuleMount.label);
+  await picker.getByRole('button', { name: /Demo-12 · grain/ }).click();
+  await expect(picker.getByRole('button', { name: 'Add source', exact: true })).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole('region', { name: 'Capsule grid' })).toBeInViewport({ ratio: 1 });
+  expect(await problems(page, 'Capsule bench with picker')).toEqual([]);
+  expect(await writes(page)).toEqual([]);
+});
+
+test('carries mount, sample and search to the next capsule and after reopening the batch', async ({ page }) => {
+  await start(page, { fixtures: correctionFixtures });
+  const picker = await openSpotPicker(page);
+  await chooseMount(picker, capsuleMount.label);
+  await picker.getByRole('combobox', { name: 'Sample', exact: true }).selectOption(batch.fractions[0].sample.name);
+  await picker.getByRole('searchbox', { name: 'Filter grains' }).fill('Demo-12');
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  await capsule.getByRole('button', { name: 'Next capsule' }).click();
+  await expect(capsule).toContainText('K4');
+  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue(capsuleMount.label);
+  await expect(picker.getByRole('combobox', { name: 'Sample', exact: true })).toHaveValue(batch.fractions[0].sample.name);
+  await expect(picker.getByRole('searchbox', { name: 'Filter grains' })).toHaveValue('Demo-12');
+  expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(1);
+  await page.getByRole('button', { name: 'Back to batches', exact: true }).click();
+  await openBatch(page); await page.getByRole('button', { name: 'K4 empty', exact: true }).click();
+  await expect(picker.getByRole('searchbox', { name: 'Filter grains' })).toHaveValue('Demo-12');
+  await page.getByRole('button', { name: 'Back to batches', exact: true }).click();
+  await page.reload(); await expect(page.getByRole('region', { name: 'Batch list', exact: true })).toBeVisible(); await openBatch(page); await page.getByRole('button', { name: 'K4 empty', exact: true }).click();
+  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue(capsuleMount.label);
+  await expect(picker.getByRole('combobox', { name: 'Sample', exact: true })).toHaveValue(batch.fractions[0].sample.name);
+  await expect(picker.getByRole('searchbox', { name: 'Filter grains' })).toHaveValue('Demo-12');
+  expect(await writes(page)).toEqual([]);
+});
+
+test('mount combobox filters loaded metadata, navigates by keyboard and pages on demand', async ({ page }) => {
+  const mounts = [capsuleMount, { ...capsuleMount, id: 'mount-other', label: 'Other synthetic 50X', sample_names: ['Other-B'], projects: ['Other project'] }];
+  await start(page, { fixtures: correctionFixtures, apiReplies: { '/v1/mounts?limit=50': { status: 200, body: mounts, nextCursor: 'more' }, '/v1/mounts?limit=50&after=more': { status: 200, body: [{ ...capsuleMount, id: 'mount-last', label: 'Last synthetic 100X' }] } } });
+  const picker = await openSpotPicker(page), combo = picker.getByRole('combobox', { name: 'Mount', exact: true });
+  const options = picker.getByRole('listbox', { name: 'Mounts', exact: true }).getByRole('option');
+  await combo.fill('synthetic a');
+  await expect(options).toHaveCount(1);
+  await combo.press('ArrowDown'); await combo.press('Home');
+  await expect(combo).toHaveAttribute('aria-activedescendant', /.+-0$/);
+  await combo.press('Enter');
+  await expect(combo).toHaveValue(capsuleMount.label);
+  await expect(combo).toHaveAttribute('aria-expanded', 'false');
+  await picker.getByRole('button', { name: 'Change mount', exact: true }).click();
+  await expect(picker.getByRole('group', { name: 'Recent', exact: true })).toContainText(capsuleMount.label);
+  await combo.fill('other-project'); await expect(options).toContainText('50X · 2 samples · 2 grains');
+  await combo.press('Escape'); await expect(combo).toHaveValue(capsuleMount.label);
+  await combo.fill(''); await combo.press('End'); await expect(combo).toHaveAttribute('aria-activedescendant', /.+-1$/);
+  await combo.press('ArrowUp'); await expect(combo).toHaveAttribute('aria-activedescendant', /.+-0$/);
+  await picker.getByRole('button', { name: 'Load more mounts', exact: true }).click();
+  await expect(options).toHaveCount(3);
+  expect(await readCount(page, '/v1/mounts?limit=50')).toBe(1);
+  expect(await readCount(page, '/v1/mounts?limit=50&after=more')).toBe(1);
+  expect(await readCount(page, '/v1/mounts/mount-other')).toBe(0);
+  expect(await writes(page)).toEqual([]);
+});
+
+test('Refine in GrainAtlas launches project and spot and refreshes a changed mount on return', async ({ page }) => {
+  await start(page, { fixtures: correctionFixtures }); await openBatch(page);
+  await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  await expect(capsule.locator('.source').getByTestId('tims-grain-image')).toHaveAttribute('data-image-state', 'ready');
+  const puckOutline = page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).locator('polygon.outline');
+  const puckBefore = await puckOutline.getAttribute('points');
+  const outline = capsule.locator('.source polygon.outline');
+  await expect(outline).toHaveCount(1); const before = await outline.getAttribute('points');
+  await capsule.getByRole('button', { name: 'Refine in GrainAtlas', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.filter(([command]) => command === 'grainatlas_launch'))).toEqual([
+    ['grainatlas_launch', { project: 'project-demo', server: 'http://localhost:8000', code: 'ONE-TIME-FIXTURE', spot: 'atlas-1' }],
+  ]);
+  await reply(page, '/v1/mounts/mount-demo', 200, { ...capsuleMount, content_revision: 2 });
+  await reply(page, `/v1/tims/batches/${batch.id}`, 200, { ...batch, fractions: batch.fractions.map(f => ({ ...f, sources: f.sources.map(source => ({ ...source, grain_label: 'Refined invented grain' })) })) });
+  await reply(page, '/v1/mounts/mount-demo/elements', 200, { ...correctionElements, grains: correctionElements.grains.map((grain, i) => i ? grain : { ...grain, polygon_um: [[580, 430], [700, 430], [900, 630]] }) });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(capsule).toContainText('Updated from GrainAtlas');
+  await expect(outline).not.toHaveAttribute('points', before!);
+  await expect(puckOutline).not.toHaveAttribute('points', puckBefore!);
+  await expect(capsule).toContainText('Grain: Refined invented grain');
+  expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(2);
+  expect(await readCount(page, `/v1/tims/batches/${batch.id}`)).toBe(2);
+  // Unchanged return visits revalidate only metadata, never download all grains again.
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(() => readCount(page, '/v1/mounts/mount-demo')).toBe(3);
+  expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(2);
+  expect(await writes(page)).toEqual([]);
+});
+
+test('a successful assignment keeps the mount and sample and clears a search hiding other grains', async ({ page }) => {
+  const sample = batch.fractions[0].sample.name;
+  const next = { ...correctedFraction(), id: 'fraction-assigned', capsule_number: 3, capsule_label: 'K3' };
+  await start(page, { fixtures: { ...correctionFixtures, '/v1/mounts/mount-demo/elements': { ...correctionElements, grains: correctionElements.grains.map(grain => ({ ...grain, sample })) } }, apiReplies: { 'POST /v1/fractions': { status: 200, body: next } } });
+  const picker = await openSpotPicker(page);
+  await chooseMount(picker, capsuleMount.label);
+  await picker.getByRole('combobox', { name: 'Sample', exact: true }).selectOption(sample);
+  await picker.getByRole('searchbox', { name: 'Filter grains' }).fill('Demo-12');
+  await picker.getByRole('button', { name: /Demo-12 · grain/ }).click();
+  await picker.getByRole('button', { name: 'Load into K3', exact: true }).click();
+  const capsule = page.getByRole('region', { name: 'Capsule details' });
+  await expect(capsule).toContainText('Loaded z1 into K3.');
+  await capsule.getByRole('button', { name: 'Next capsule' }).click();
+  await expect(picker.getByRole('combobox', { name: 'Mount', exact: true })).toHaveValue(capsuleMount.label);
+  await expect(picker.getByRole('combobox', { name: 'Sample', exact: true })).toHaveValue(sample);
+  await expect(picker.getByRole('searchbox', { name: 'Filter grains' })).toHaveValue('');
+  expect(await writes(page)).toHaveLength(1);
+  expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(1);
+});
+
+test('Refine falls back to the atlas grain when the source has no spot', async ({ page }) => {
+  await start(page, { fixtures: correctionFixtures }); await openBatch(page);
+  await page.getByRole('button', { name: /^K2 z2(?: · |$)/ }).click();
+  await page.getByRole('region', { name: 'Capsule details' }).getByRole('button', { name: 'Refine in GrainAtlas', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __fake: { calls: [string, unknown][] } }).__fake.calls.filter(([command]) => command === 'grainatlas_launch'))).toEqual([
+    ['grainatlas_launch', { project: 'project-demo', server: 'http://localhost:8000', code: 'ONE-TIME-FIXTURE', grain: 'atlas-grain-1' }],
+  ]);
+  expect(await writes(page)).toEqual([]);
+});
+
+test('refine polling pauses when hidden and stops after 10 minutes', async ({ page }) => {
+  await page.clock.install();
+  await start(page, { fixtures: correctionFixtures }); await openBatch(page);
+  await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
+  await page.getByRole('region', { name: 'Capsule details' }).getByRole('button', { name: 'Refine in GrainAtlas', exact: true }).click();
+  await expect.poll(() => readCount(page, '/v1/mounts/mount-demo')).toBe(1);
+  await page.clock.runFor(20_000);
+  await expect.poll(() => readCount(page, '/v1/mounts/mount-demo')).toBe(2);
+  await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
+  await page.clock.runFor(20_000);
+  expect(await readCount(page, '/v1/mounts/mount-demo')).toBe(2);
+  await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
+  await expect.poll(() => readCount(page, '/v1/mounts/mount-demo')).toBe(3);
+  await page.clock.fastForward(10 * 60_000);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  expect(await readCount(page, '/v1/mounts/mount-demo')).toBe(3);
+  expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(1);
+  expect(await writes(page)).toEqual([]);
 });

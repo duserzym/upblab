@@ -14,6 +14,7 @@
     defaultMineral: Mineral; editable: boolean; oncreated: (fraction: FractionOut) => void;
   } = $props();
 
+  const uid = $props.id();
   const isBlank = $derived(preparation === 'lab-blank');
   let query = $state(''), searched = $state(false), loading = $state(false), saving = $state(false);
   let searchError = $state(''), saveError = $state('');
@@ -73,7 +74,8 @@
   }
 </script>
 
-<section class="stack" aria-label={`${capsulePreparations[preparation]} setup`}>
+<section class="stack sample-capsule" aria-label={`${capsulePreparations[preparation]} setup`}>
+  <div class="sample-scroll stack">
   <h4>{isBlank ? 'Set up a lab blank' : 'Assign a TIMS-only sample'}</h4>
   <form class="row search" onsubmit={e => { e.preventDefault(); void search(); }}>
     <input type="search" aria-label={isBlank ? 'Find a lab blank sample' : 'Find a sample'}
@@ -86,7 +88,7 @@
     <p class="small muted">{isBlank ? 'No visible samples with Material set to Lab blank on this page.' : 'No matching samples on this page.'}</p>
   {/if}
   {#if rows.length}
-    <form class="stack" onsubmit={e => { e.preventDefault(); void save(); }}>
+    <form id={`${uid}-sample`} class="stack" onsubmit={e => { e.preventDefault(); void save(); }}>
       <label>{isBlank ? 'Lab blank sample' : 'Sample'}
         <select bind:value={sampleId} required disabled={loading || saving}>
           <option value="">Choose {isBlank ? 'a lab blank' : 'a sample'}</option>
@@ -105,9 +107,6 @@
         <label>{isBlank ? 'Blank notes' : 'Fraction notes'} <textarea rows="2" bind:value={notes} disabled={saving}></textarea></label>
         {#if writeReason}<p class="small muted">{writeReason}</p>{/if}
         {#if saveError}<p class="small error" role="status">{saveError}</p>{/if}
-        <button type="submit" class="btn primary" disabled={!editable || loading || saving || !!writeReason}>
-          {isBlank ? `Set ${label} as a lab blank` : `Assign sample to ${label}`}
-        </button>
       {/if}
     </form>
   {/if}
@@ -124,9 +123,17 @@
       <button type="button" class="btn small" onclick={openSampleRegistration}>Open sample registration in UPbDB</button>
     {/if}
   </details>
+  </div>
+  {#if sample}<div class="actions"><button type="submit" form={`${uid}-sample`} class="btn primary" disabled={!editable || loading || saving || !!writeReason}>
+          {isBlank ? `Set ${label} as a lab blank` : `Assign sample to ${label}`}
+        </button></div>{/if}
 </section>
 
 <style>
+  .sample-capsule { flex: 1; min-height: 0; gap: 0; }
+  .sample-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 2px; }
+  .sample-scroll > :global(*) { flex-shrink: 0; }
+  .actions { flex-shrink: 0; margin-top: auto; padding-top: var(--space-2); }
   h4, p { margin: 0; }
   label { display: grid; gap: 4px; }
   .search { flex-wrap: wrap; }

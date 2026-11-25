@@ -4,9 +4,9 @@
   import { capsulePreparations, readCapsulePreparation } from '../../lib/tims-capsule-intake';
   import GrainImage from './GrainImage.svelte';
 
-  let { batch, geometry, geometryError, selected, onselect }: {
+  let { batch, geometry, geometryError, selected, onselect, compact = false }: {
     batch: BatchDetail; geometry: Record<string, MountGeometry>; geometryError: string;
-    selected: number | null; onselect: (position: number) => void;
+    compact?: boolean; selected: number | null; onselect: (position: number) => void;
   } = $props();
 
   const pucks = $derived(capsulePucks(batch.capsule_set.positions, batch.capsule_set.positions_per_puck));
@@ -29,7 +29,7 @@
   }
 </script>
 
-<div class="puck-set">
+<div class="puck-set" class:compact>
   {#each pucks as puck, index (puck[0])}
     <section class="puck" aria-label={`Puck ${index + 1}`}>
       <div class="positions" class:ring={batch.capsule_set.positions_per_puck <= 6} class:bsu={batch.capsule_set.positions_per_puck === 5}>
@@ -62,6 +62,16 @@
 
 <style>
   .puck-set { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: var(--space-3); align-items: start; }
+  .compact { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .compact .puck { max-width: 116px; }
+  .compact .positions.ring { --well-size: 32px; }
+  .compact .caption { gap: 2px; margin-top: 4px; }
+  .compact .caption span { font-size: .65rem; }
+  @media (max-width: 1279px) {
+    .compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+    .compact .puck { max-width: 104px; }
+    .compact .positions.ring { --well-size: 30px; }
+  }
   .puck { min-width: 0; width: 100%; max-width: 226px; justify-self: center; }
   .positions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(48px, 100%), 1fr)); gap: 4px; padding: var(--space-2); border-radius: var(--radius); background: var(--row-hover); }
   .positions.ring { --well-size: 38px; position: relative; display: block; isolation: isolate; aspect-ratio: 1; padding: 0; background: none; }

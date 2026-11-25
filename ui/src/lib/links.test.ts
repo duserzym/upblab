@@ -294,3 +294,11 @@ it('opens TIMS batch links and refuses route-changing ids', () => {
   expect(resolve('upbdb://tims/batch/invented-batch')).toMatchObject({ kind: 'tims-batch', id: 'invented-batch' });
   expect(resolve('upbdb://tims/batch/%2Fother')).toMatchObject({ kind: 'refused' });
 });
+
+it('centres a hosted GrainAtlas grain when no spot is supplied and clears stale object targets', () => {
+  vi.stubGlobal('location', { href: 'https://invented.example/desk/' });
+  const url = new URL(atlasEditorUrl('https://invented.example/atlas/?spot=old&grain=old', 'project', null, 'grain-new'));
+  expect(url.searchParams.get('grain')).toBe('grain-new');
+  expect(url.searchParams.has('spot')).toBe(false);
+  vi.unstubAllGlobals();
+});

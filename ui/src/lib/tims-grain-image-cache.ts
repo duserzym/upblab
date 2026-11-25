@@ -11,9 +11,18 @@ export class GrainImageCache {
   private generation = 0;
   private listings = new Map<string, { until: number; promise: Promise<AtlasListing> }>();
   private manifests = new Map<string, { promise: Promise<GrainAtlas>; until: number }>();
+  private mountManifests = new Map<string, Set<string>>();
+  private mountGenerations = new Map<string, number>();
   private geometry = new Map<string, Promise<MountGeometry>>();
   constructor(private json: (url: string) => Promise<GrainAtlas> = atlasJson, private now = Date.now) {}
-  clear() { this.generation++; this.scope = ''; this.listings.clear(); this.manifests.clear(); this.geometry.clear(); }
+  clear() { this.generation++; this.scope = ''; this.listings.clear(); this.manifests.clear(); this.geometry.clear(); this.mountManifests.clear(); this.mountGenerations.clear(); }
+  invalidateMount(mount: string) {
+    this.geometry.delete(mount);
+    this.listings.delete(mount);
+    this.mountGenerations.set(mount, (this.mountGenerations.get(mount) ?? 0) + 1);
+    for (const key of this.mountManifests.get(mount) ?? []) this.manifests.delete(key);
+    this.mountManifests.delete(mount);
+  }
   private enter(scope: string) { if (scope !== this.scope) { this.clear(); this.scope = scope; } }
   elements(scope: string, mount: string, read: () => Promise<MountGeometry>, revalidate = false) {
     this.enter(scope);
@@ -22,7 +31,8 @@ export class GrainImageCache {
   }
   async published(scope: string, server: string, mount: string, read: () => Promise<AtlasListing>, failed?: PublishedGrainAtlas): Promise<PublishedGrainAtlas> {
     this.enter(scope);
-    const generation = this.generation;
+    const generation = this.generation, mountGeneration = this.mountGenerations.get(mount) ?? 0;
+    const stale = () => generation !== this.generation || mountGeneration !== (this.mountGenerations.get(mount) ?? 0);
     let entry = this.listings.get(mount);
     // Image error events hide HTTP status (including 401/403). Renew once per shared
     // failed grant. Concurrent failures reuse that renewal instead of reading per grain.
@@ -34,7 +44,7 @@ export class GrainImageCache {
       void record.promise.catch(() => { record.until = this.now() + 30_000; });
     }
     const listing = await entry.promise;
-    if (generation !== this.generation) throw new Error('The account or server changed.');
+    if (stale()) throw new Error('The account or server changed, or the mount was refreshed.');
     if (!listing.current || !listing.access) {
       entry.until = Math.min(entry.until, this.now() + 30_000);
       throw new Error(!listing.current ? 'No atlas is published for this mount.' : 'The atlas listing supplied no read access.');
@@ -44,6 +54,7 @@ export class GrainImageCache {
     const base = server.replace(/\/+$/, '') + current.base_url;
     const url = (path: string) => `${base}${path}?${new URLSearchParams({ version: String(current.version), access: listing.access! })}`;
     const key = `${server}/${current.project_id}/${current.version}`;
+    const keys = this.mountManifests.get(mount) ?? new Set<string>(); keys.add(key); this.mountManifests.set(mount, keys);
     if ((this.manifests.get(key)?.until ?? Infinity) <= this.now()) this.manifests.delete(key);
     if (!this.manifests.has(key)) {
       const record = { promise: this.json(url('')), until: Infinity };
@@ -55,11 +66,11 @@ export class GrainImageCache {
     let atlas: GrainAtlas;
     try { atlas = await this.manifests.get(key)!.promise; }
     catch (error) {
-      if (generation !== this.generation) throw new Error('The account or server changed.');
+      if (stale()) throw new Error('The account or server changed, or the mount was refreshed.');
       if (!failed && error instanceof AtlasHttpError && [401, 403].includes(error.status)) return this.published(scope, server, mount, read, { grant: entry, listing, atlas: { tile_size: 0, areas: [] }, url });
       throw error;
     }
-    if (generation !== this.generation) throw new Error('The account or server changed.');
+    if (stale()) throw new Error('The account or server changed, or the mount was refreshed.');
     return { grant: entry, atlas, listing, url };
   }
 }

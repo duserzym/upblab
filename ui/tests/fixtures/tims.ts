@@ -52,5 +52,6 @@ export const fixtures: Record<string, unknown> = {
   [`/v1/tims/spikes/versions/${version.id}`]: version,
   ...Object.fromEntries([publishedVersion, labVersion, earlierVersion, withdrawnVersion].map(v => [`/v1/tims/spikes/versions/${v.id}`, v])),
   ...atlasFixtures,
+  '/v1/mounts?limit=50': [{ id: 'mount-demo', label: 'Invented mount S', atlas: { project_id: 'project-demo' } }],
   '/v1/history/batch/batch-synthetic': [{ id: 'history-invented', at: base.created_at, actor: 'Invented analyst', action: 'updated', before: { notes: 'old' }, after: { notes: 'new' } }],
 };

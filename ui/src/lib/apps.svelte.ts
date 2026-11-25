@@ -38,7 +38,7 @@ export async function editInAtlas(target: AtlasTarget, from: string) {
         await launchGrainAtlas(target.project, undefined, undefined, target.revision, target.spot, target.grain);
         if (current() && copy === connectivity.offlineCopy) connectivity.grainAtlasLocal = view;
       } else {
-        const url = new URL(atlasEditorUrl(shell.homeUrl('images'), target.project, target.spot), location.href);
+        const url = new URL(atlasEditorUrl(shell.homeUrl('images'), target.project, target.spot, target.grain), location.href);
         url.searchParams.delete('server'); url.searchParams.delete('code');
         window.open(url.href, '_blank', 'noopener');
       }
@@ -46,9 +46,9 @@ export async function editInAtlas(target: AtlasTarget, from: string) {
       return;
     }
     if (!isDesktop) {
-      window.open(atlasEditorUrl(shell.homeUrl('images'), target.project, target.spot), '_blank', 'noopener');
+      window.open(atlasEditorUrl(shell.homeUrl('images'), target.project, target.spot, target.grain), '_blank', 'noopener');
       if (seq === atlasSequence) apps.atlas = { ...request, state: 'fallback' };
-      if (current()) appWatch.atlas(target.project, target.mount);
+      if (current() && from !== 'tims') appWatch.atlas(target.project, target.mount);
       return;
     }
     const server = identity.target?.server;
@@ -57,7 +57,7 @@ export async function editInAtlas(target: AtlasTarget, from: string) {
     if (!server || !code) throw new Error('Sign in to open this project in GrainAtlas.');
     await launchGrainAtlas(target.project, server, code, target.revision, target.spot, target.grain);
     if (seq === atlasSequence) apps.atlas = { ...request, state: 'launched' };
-    if (current()) appWatch.atlas(target.project, target.mount);
+    if (current() && from !== 'tims') appWatch.atlas(target.project, target.mount);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (seq === atlasSequence) apps.atlas = { ...request, state: message.startsWith('GrainAtlas is not installed') ? 'missing' : 'failed', message };

@@ -218,3 +218,46 @@ elapsed times, cover token renewal, and check the six-tile queue. Five thousand 
 bounded account request. Browser acceptance
 coverage lives in `ui/tests/tims.spec.ts` and `ui/tests/tims-review.spec.ts` (Chromium
 and WebKit). The client and Review details remain in [tims-client.md](tims-client.md).
+
+An assigned source offers **Replace grain**. The picker names the source being
+replaced, shows whether the sample will change, and accepts an optional reason.
+The server keeps the old source as a replaced record. For a different sample,
+it either moves the capsule, chemistry and spikes to a new fraction or explains
+why replacement is blocked. Source history shows the viewer, date and reason;
+a new fraction also names the fraction it replaces. Older servers report that
+Replace grain is unavailable. Like source add and retire, replacement requires
+an online connection and keeps one idempotency key across retries. Queued
+chemistry edits continue to say “Saved here, not sent yet”.
+
+At 1440 × 900 and 1280 × 800 px the open capsule bench has three columns:
+compact puck map, capsule record, and GrainAtlas picker. At 1024 × 640 px the
+map sits above the record on the left, with the picker beside them. Capsule
+forms and the picker scroll inside their own panels; their action bars stay
+visible. The grain gallery also scrolls independently. **Previous** and
+**Next capsule** follow capsule positions in puck order.
+
+An empty capsule opens the picker directly. Mount, sample filter and search
+carry forward to the next capsule. These preferences are held in memory and
+viewer-local storage under server, account and batch keys. Mount and sample
+stay after assignment; the grain search text is cleared after a successful
+assignment. **Change mount** opens an in-flow searchable list. It filters loaded
+labels, sample names and projects without making requests while typing.
+The last five mounts appear under Recent, then mounts are grouped by project
+or sample. Rows show magnification, sample and grain counts and sample names.
+Arrow keys, Home, End, Enter and Escape navigate the list. **Load more mounts**
+pages the server list; **Find mount** submits a server search. No mount detail
+request is made for a list row.
+
+**Refine in GrainAtlas** opens the standalone editor at the source's project
+and spot, or grain when there is no spot. On the web it uses the configured
+hosted editor. UPb Lab checks the mount's content revision on return and every
+20 s while visible for 10 minutes. A changed revision refreshes that mount's
+elements, image metadata, capsule labels and puck outlines, and says “Updated
+from GrainAtlas”. Missing revisions on older servers cannot prove a change;
+use Refresh batch there. UPb Lab never edits registered grains or spots or
+adds capsule fields to their sync hashes.
+
+The hosted GrainAtlas URL parser currently reads spot targets but not grain
+targets. Grain-only centring on the web needs that parser and its selection
+path to accept the grain parameter. The desktop launch parser already accepts
+spot and grain arguments; the installed app still needs a smoke test.

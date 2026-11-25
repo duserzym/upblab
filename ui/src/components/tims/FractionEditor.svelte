@@ -2,7 +2,8 @@
   import { untrack, onDestroy } from 'svelte';
   import { tims, statusWords, parameterSummary, type BatchDetail, type FractionOut, type FractionStatus, type StepOut, type Parameters, type SourceOut } from '../../lib/tims-api';
   import { fractionStatuses, choices, effectiveParameters, parameterDefinitions, parameterKey, validateParameters } from '../../lib/tims-model';
-  import { editInAtlas } from '../../lib/apps.svelte';
+  import { isDesktop } from '../../lib/platform';
+  import { shell } from '../../lib/shell.svelte';
   import { sourceNames, type MountGeometry } from '../../lib/tims-geometry';
   import { ReplyScope } from '../../lib/tims-requests';
   import { columnProtocol, readCapsuleNotes, readColumnNotes, validMass, writeCapsuleNotes, writeColumnNotes } from '../../lib/tims-protocol';
@@ -15,11 +16,15 @@
   import { labProtocol, labProtocols, useLabProtocols } from '../../lib/tims-lab-protocols.svelte';
   import ColumnProtocol from './ColumnProtocol.svelte';
 
-  let { batch, fraction, editable, geometry, geometryError = '', activeStep, onstep, onbatchstep, onpick, createSpikeStep }: {
+  let { batch, fraction, editable, geometry, geometryError = '', activeStep, onstep, onbatchstep, onpick, onreplace, onrefine, createSpikeStep }: {
     batch: BatchDetail; fraction: FractionOut; editable: boolean; geometry: Record<string, MountGeometry>; geometryError?: string;
     activeStep: string; onstep: (id: string) => void; onbatchstep: (id: string) => void; onpick: () => void;
+    onreplace: (source: SourceOut) => void; onrefine: (source: SourceOut) => Promise<void>;
     createSpikeStep: (session: StepOut) => Promise<StepOut>;
   } = $props();
+  const uid = $props.id();
+  let statusOpen = $state(false), recordOpen = $state(false), replaceSourceId = $state('');
+  const replaceSource = $derived(fraction.sources.find(s => !s.retired_at && s.id === replaceSourceId) ?? fraction.sources.find(s => !s.retired_at));
   useLabProtocols(() => batch.lab_id);
   let status = $state<FractionStatus>(untrack(() => fraction.status)), notes = $state(untrack(() => readCapsulePreparation(fraction.notes).notes));
   const preparation = $derived(readCapsulePreparation(fraction.notes).preparation);
@@ -162,7 +167,8 @@
   }
 </script>
 
-<div class="stack">
+<div class="stack fraction-editor">
+  <div class="fraction-scroll stack">
   <div class="picker-steps" role="group" aria-label="Capsule navigation">
     <button class="btn small" type="button" aria-pressed={!activeStep} onclick={() => onstep('')}>{preparation ? 'Capsule record' : 'Sources'}</button>
     {#if batch.steps.length}
@@ -200,20 +206,31 @@
             <p class="small muted">Mount: {names.mount} · Grain: {names.grain}</p>
             {#each [...new Set(sources.filter(s => s.is_fragment).map(s => s.fragment_note))] as fragmentNote}<p class="small warning">Fragment · {fragmentNote}</p>{/each}
             {#each [...new Set(sources.map(s => s.note).filter(Boolean))] as note}<p class="small">{note}</p>{/each}
-            <button type="button" class="btn small" disabled={!editable || !mount?.current_project_uuid || !source.atlas_grain_id}
-              title={!mount?.current_project_uuid ? 'No GrainAtlas project is available for this mount.' : ''}
-              onclick={() => void run(() => editInAtlas({ project: mount!.current_project_uuid!, mount: source.mount_id, grain: source.atlas_grain_id, spot: source.atlas_spot_id }, 'tims'))}>Open in GrainAtlas</button>
+            {#each sources as linked (linked.id)}
+              <div class="row" aria-label={`Source ${sourceNames(linked, mount).spot}`}>
+                <button type="button" class="btn small" disabled={!editable} onclick={() => onreplace(linked)}>Replace grain</button>
+                {#if isDesktop || shell.homeUrl('images')}<button type="button" class="btn small" disabled={!editable || !mount?.current_project_uuid}
+                  onclick={() => void onrefine(linked)}>Refine in GrainAtlas</button>{/if}
+              </div>
+            {/each}
           </div>
         </article>
       {:else}<p class="muted">No grain linked to this fraction.</p>{/each}
       {/if}
+      {#each fraction.replaced_sources ?? [] as retired (retired.id)}
+        {@const names = sourceNames(retired)}
+        <p class="small muted">Replaced {names.grain}{names.spot !== 'Not recorded' ? ` (spot ${names.spot})` : ''} · {retired.retired_by_name ?? 'Unknown viewer'} · {retired.retired_at ? new Date(retired.retired_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'Date unrecorded'}{retired.reason ? ` · ${retired.reason}` : ''}</p>
+      {/each}
+      {#if fraction.replaces}
+        <p class="small muted">Replaces {fraction.replaces.name} · {fraction.replaces.sample_name} · {fraction.replaces.retired_by_name ?? 'Unknown viewer'} · {fraction.replaces.retired_at ? new Date(fraction.replaces.retired_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : 'Date unrecorded'}{fraction.replaces.source_labels?.length ? ` · ${fraction.replaces.source_labels.join(', ')}` : ''}</p>
+        {#each fraction.replaces.sources ?? [] as retired}<p class="small muted">Replaced {sourceNames(retired).grain} (spot {sourceNames(retired).spot})</p>{/each}
+      {/if}
     </section>
-    <details class="details">
+    <details class="details" ontoggle={event => statusOpen = event.currentTarget.open}>
       <summary>Fraction status and notes</summary>
-      <form class="stack" onsubmit={e => { e.preventDefault(); void run(() => tims.patchFraction(fraction.id, { status, notes: writeCapsulePreparation(preparation, notes) })); }}>
+      <form id={`${uid}-status`} class="stack" onsubmit={e => { e.preventDefault(); void run(() => tims.patchFraction(fraction.id, { status, notes: writeCapsulePreparation(preparation, notes) })); }}>
         <label>Status <select bind:value={status} disabled={!editable || busy}>{#each fractionStatuses as s}<option value={s}>{statusWords(s)}</option>{/each}</select></label>
         <label>Fraction notes <textarea rows="3" bind:value={notes} disabled={!editable || busy}></textarea></label>
-        <button class="btn" disabled={!editable || busy}>Save fraction here</button>
       </form>
     </details>
   {:else}
@@ -236,7 +253,7 @@
           </div>
         {/if}
         {#if addition || session?.bottles.length}
-          <form class="stack spike-form" onsubmit={e => { e.preventDefault(); void saveSpike(); }}>
+          <form id={`${uid}-spike`} class="stack spike-form" onsubmit={e => { e.preventDefault(); void saveSpike(); }}>
             {#if !addition}
               <label>Spike bottle
                 <select value={bottle?.bottleId ?? ''} required disabled={!editable || busy}
@@ -276,7 +293,6 @@
             {#if addition?.warnings.includes('spike_version_not_current')}<p class="warning">The recorded spike version is no longer current.</p>{/if}
             <label>Spike comment <textarea rows="2" bind:value={spikeNotes} disabled={!editable || busy} placeholder="Missed drops, repeat additions, or other observations"></textarea></label>
             <div class="row">
-              <button class="btn primary" disabled={!editable || busy || !addition && !usedWeight}>Save spike here</button>
               {#if repeatDraft}<button class="btn" type="button" disabled={busy} onclick={() => resetSpikeForm(false)}>Cancel entry</button>
               {:else if addition && session?.bottles.length && editable}
                 <button class="btn" type="button" disabled={busy || !emptyRepeat && !!onlineOnlyReason()}
@@ -287,19 +303,18 @@
         {:else}
           <p class="small muted">Use Spiking session to set the beginning weight for each bottle.</p>
         {/if}
-        {#if step.id === sessionStep?.id && !repeatDraft}<details class="details">
+        {#if step.id === sessionStep?.id && !repeatDraft}<details class="details" ontoggle={event => recordOpen = event.currentTarget.open}>
           <summary>Spiking step record{skipped ? ' · skipped' : ''}</summary>
-          <form class="stack" onsubmit={e => { e.preventDefault(); void saveRecord(); }}>
+          <form id={`${uid}-record`} class="stack" onsubmit={e => { e.preventDefault(); void saveRecord(); }}>
             <ParameterFields definitions={step.parameter_definitions} values={overrides} onchange={v => overrides = v} inherited={step.parameters} knownVersions={batch.spike_versions} fraction disabled={!editable || busy} lab={batch.lab_id} />
             <label class="check"><input type="checkbox" bind:checked={skipped} disabled={!editable || busy} /> Skipped</label>
             <label>Step note <textarea rows="2" bind:value={outcomeNote} disabled={!editable || busy}></textarea></label>
-            <button class="btn" disabled={!editable || busy}>Save capsule record here</button>
           </form>
         </details>{/if}
       {:else}
         {@const values = effectiveParameters(step.parameters, { parameters: overrides })}
         {@const outcomes = choices(step.parameter_definitions.find(d => d.role === 'outcome') ?? { name: 'outcome' })}
-        <form class="stack" onsubmit={e => { e.preventDefault(); void saveRecord(); }}>
+        <form id={`${uid}-record`} class="stack" onsubmit={e => { e.preventDefault(); void saveRecord(); }}>
           {#if values.length}<p class="small muted">{values.map(p => `${parameterSummary(step.parameter_definitions.find(d => parameterKey(d) === p.key) ?? { name: p.key }, p.value, batch.spike_versions)}${p.overridden ? ' (overridden)' : ''}`).join(' · ')}</p>{/if}
           <label>Capsule date <input type="date" bind:value={date} disabled={!editable || busy} /></label>
           {#if step.performed_on}<p class="small muted">Batch date · {step.performed_on}</p>{/if}
@@ -316,16 +331,38 @@
               context={`${batch.capsule_set.name} · ${fraction.capsule_label} · ${date || step.performed_on || 'Date unrecorded'}`} />
           {/if}
           <label>Step note <textarea rows="2" bind:value={outcomeNote} disabled={!editable || busy}></textarea></label>
-          <button class="btn primary" disabled={!editable || busy}>Save capsule record here</button>
         </form>
       {/if}
     {/key}
   {/if}
   {#if error}<p class="error" role="status">{error}</p>{/if}
   {#if feedback}<p class="small muted" role="status">{feedback}</p>{/if}
+  </div>
+  <div class="actions row" role="group" aria-label="Capsule actions">
+    {#if !step}
+      {#if !isBlank}<button class="btn small" type="button" disabled={!editable} onclick={onpick}>Add source</button>{/if}
+      {#if replaceSource}
+        {#if fraction.sources.filter(s => !s.retired_at).length > 1}
+          <select aria-label="Source to replace" bind:value={replaceSourceId}>
+            {#each fraction.sources.filter(s => !s.retired_at) as source (source.id)}<option value={source.id}>{sourceNames(source, source.mount_id ? geometry[source.mount_id] : undefined).spot}</option>{/each}
+          </select>
+        {/if}
+        <button class="btn small" type="button" disabled={!editable} onclick={() => onreplace(replaceSource!)}>Replace grain</button>
+      {/if}
+      {#if statusOpen}<button class="btn small" form={`${uid}-status`} disabled={!editable || busy}>Save fraction here</button>{/if}
+    {:else if spiking}
+      {#if addition || session?.bottles.length}<button class="btn primary small" form={`${uid}-spike`} disabled={!editable || busy || !addition && !usedWeight}>Save spike here</button>{/if}
+      {#if recordOpen}<button class="btn small" form={`${uid}-record`} disabled={!editable || busy}>Save capsule record here</button>{/if}
+    {:else}<button class="btn primary small" form={`${uid}-record`} disabled={!editable || busy}>Save capsule record here</button>{/if}
+  </div>
 </div>
 
 <style>
+  .fraction-editor { gap: 0; }
+  .fraction-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 2px; gap: var(--space-2); }
+  .fraction-scroll > :global(*) { flex-shrink: 0; }
+  .actions { flex-shrink: 0; border-top: 1px solid var(--hairline); padding-top: var(--space-2); gap: 4px; background: var(--bg); }
+  .actions select { max-width: 10rem; }
   h4, p { margin: 0; }
   .row { flex-wrap: wrap; }
   .heading { justify-content: space-between; }
@@ -333,7 +370,7 @@
   .picker-steps select { flex: 1; }
   .picker-steps .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
   .picker-steps .btn { white-space: normal; }
-  .source { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
+  .source { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
   .labels { min-width: 0; gap: var(--space-1); overflow-wrap: anywhere; }
   ul { padding-left: 1.2em; margin: 0; font-size: .78rem; }
   label { display: grid; gap: 4px; }

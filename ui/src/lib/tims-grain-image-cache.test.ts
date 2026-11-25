@@ -95,3 +95,18 @@ it('does not renew an old grant under another account after a late manifest refu
   await expect(pending).rejects.toThrow('account or server changed');
   expect(read).toHaveBeenCalledTimes(1);
 });
+it('refreshes one refined mount for 5000 grains while retaining other mounts', async () => {
+  const json = vi.fn().mockResolvedValue(inventedAtlas), cache = new GrainImageCache(json);
+  const elements = vi.fn().mockResolvedValue(inventedElements), listings = vi.fn().mockResolvedValue(atlasListing);
+  const other = vi.fn().mockResolvedValue({ ...atlasListing, current: { ...atlasListing.current, project_id: 'other', base_url: '/atlas/projects/other/' } });
+  const load = (mount: string) => Promise.all([cache.elements('viewer', mount, elements), cache.published('viewer', 'https://invented.example', mount, mount === 'one' ? listings : other)]);
+  const before = performance.now();
+  await Promise.all(Array.from({ length: 5000 }, () => load('one'))); await load('two');
+  expect(elements).toHaveBeenCalledTimes(2); expect(json).toHaveBeenCalledTimes(2);
+  const beforeMs = performance.now() - before;
+  cache.invalidateMount('one');
+  const start = performance.now();
+  await Promise.all(Array.from({ length: 5000 }, () => load('one'))); await load('two');
+  expect(elements).toHaveBeenCalledTimes(3); expect(listings).toHaveBeenCalledTimes(2); expect(other).toHaveBeenCalledTimes(1); expect(json).toHaveBeenCalledTimes(3);
+  console.info(`TIMS refine, 5000 images: initial 6 shared metadata reads in ${beforeMs.toFixed(2)} ms; refresh adds 3 shared reads in ${(performance.now() - start).toFixed(2)} ms. Unchanged revision adds only one mount detail check.`);
+});

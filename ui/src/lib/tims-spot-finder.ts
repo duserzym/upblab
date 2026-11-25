@@ -3,7 +3,13 @@ import type { MountGeometry } from './tims-geometry';
 import { mountElements } from './tims-requests';
 import { buildSpotSearchIndex, searchSpots, type SpotSearchIndex, type SpotSearchMatch } from './tims-spot-search';
 
-export interface PickerMount { id: string; label: string; atlas: { project_id: string } | null }
+export interface PickerMount {
+  id: string; label: string; atlas: { project_id: string } | null;
+  grain_count?: number; sample_count?: number; sample_names?: string[];
+  projects?: (string | { name?: string; code?: string; id?: string })[];
+  mineral?: string | null; magnification?: number | string | null;
+  last_changed_at?: string | null; content_revision?: number | string | null;
+}
 export interface FoundMount { mount: PickerMount; geometry: MountGeometry; matches: SpotSearchMatch[] }
 export interface SpotMountSearch { matches: FoundMount[]; errors: string[]; checked: number; hasMore: boolean }
 const indexes = new WeakMap<MountGeometry, SpotSearchIndex>();

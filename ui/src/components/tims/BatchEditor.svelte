@@ -6,12 +6,16 @@
   import { tims, read, statusWords, parameterSummary, type BatchDetail, type RecipeOut, type FractionOut, type SourceOut, type StepOut } from '../../lib/tims-api';
   import { outbox, onlineOnlyReason, type OutboxEntry } from '../../lib/outbox.svelte';
   import { overlayBatch, batchAffected } from '../../lib/tims-overlay';
-  import { batchGeometry, OnlineAction, ReplyScope } from '../../lib/tims-requests';
+  import { batchGeometry, OnlineAction, ReplyScope, mountElements } from '../../lib/tims-requests';
   import { type MountGeometry } from '../../lib/tims-geometry';
   import { reorder, snapshotName, effectiveParameters, type MethodCode, withDefaults } from '../../lib/tims-model';
   import { oversight, READ_ONLY_REASON } from '../../lib/oversight.svelte';
   import { spikingSessionId, spikingSessionLink } from '../../lib/tims-spiking';
   import { capsulePreparations, readCapsulePreparation, type CapsulePreparation } from '../../lib/tims-capsule-intake';
+  import { apps, editInAtlas } from '../../lib/apps.svelte';
+  import { grainImages } from '../../lib/tims-grain-image-cache';
+  import { revisionChanged, type MountRevision } from '../../lib/tims-refine';
+  import { sourceGeometry, sourceNames } from '../../lib/tims-geometry';
   import FractionEditor from './FractionEditor.svelte';
   import AtlasPicker from './AtlasPicker.svelte';
   import SampleCapsule from './SampleCapsule.svelte';
@@ -26,6 +30,10 @@
   let view = $state<typeof views[number]>('Capsules');
   let selectedStep = $state(''), batchStep = $state(''), selected = $state<number | null>(null);
   let picking = $state(false), pickerOpened = $state(false), imported = $state(''), editing = $state(false), started = $state(''), operator = $state(''), operatorAccount = $state(false), notes = $state('');
+  let replacing = $state.raw<SourceOut>();
+  let refreshRevision = $state(0), refineNote = $state('');
+  const pendingRefines = new Map<string, { revision: MountRevision; until: number }>();
+  let checkingRefines = false;
   let manualPreparation = $state<CapsulePreparation | null>(null);
   let add = $state(false), method = $state(''), parameters = $state.raw<Record<string, unknown>>({});
   let generation = 0, geometryGeneration = 0;
@@ -48,7 +56,7 @@
   const currentCapsuleStep = $derived(batch?.steps.find(s => s.id === selectedStep));
   const selectedMethod = $derived(methods.find(m => m.code === method));
   const source = () => `${identity.target?.server}:${identity.revision}`;
-  $effect(() => { void id; void identity.revision; void identity.target?.server; untrack(() => { generation++; geometryGeneration++; base = null; delivered = []; geometry = {}; selected = null; picking = false; pickerOpened = false; manualPreparation = null; imported = ''; editing = false; add = false; void load(true); }); });
+  $effect(() => { void id; void identity.revision; void identity.target?.server; untrack(() => { generation++; geometryGeneration++; base = null; delivered = []; geometry = {}; selected = null; picking = false; pickerOpened = false; manualPreparation = null; replacing = undefined; pendingRefines.clear(); refineNote = ''; imported = ''; editing = false; add = false; void load(true); }); });
   onMount(() => {
     const unsubscribe = outbox.subscribe(entry => {
       if (!base || !batchAffected(base, entry.objectKey)) return;
@@ -58,9 +66,14 @@
       }
       void load();
     });
-    return () => { generation++; geometryGeneration++; unsubscribe(); };
+    const check = () => void checkRefines();
+    window.addEventListener('focus', check);
+    document.addEventListener('visibilitychange', check);
+    const timer = setInterval(check, 20_000);
+    return () => { clearInterval(timer); window.removeEventListener('focus', check); document.removeEventListener('visibilitychange', check); generation++; geometryGeneration++; unsubscribe(); };
   });
   async function load(outlines = false, revalidateGeometry = false) {
+    if (destroyed) return;
     const gen = ++generation, owner = source(), current = replies.capture(); busy = true; error = '';
     try {
       const result = await tims.batch(id); if (gen !== generation || !current()) return; base = result; delivered = []; onlab(result.lab_id);
@@ -82,7 +95,10 @@
     selectedStep = step;
     imported = '';
     manualPreparation = null;
-    picking = false;
+    replacing = undefined;
+    const next = batch?.fractions.find(f => f.id === batch?.capsule_map[String(position)]);
+    picking = !step && editable && (!next || !readCapsulePreparation(next.notes).preparation);
+    if (picking) pickerOpened = true;
     view = 'Capsules';
   }
 
@@ -122,6 +138,67 @@
       imported = 'Grain source linked.';
       picking = false;
     }
+  }
+
+  function startReplacement(source: SourceOut) {
+    const names = sourceNames(source, source.mount_id ? geometry[source.mount_id] : undefined);
+    replacing = { ...source, grain_label: String(names.grain), spot_label: names.spot };
+    picking = true; pickerOpened = true;
+  }
+
+  async function acceptReplacement(value: FractionOut) {
+    if (destroyed || !base || value.batch_id !== base.id) return;
+    const position = selected;
+    acceptFraction(value);
+    if (selected === value.capsule_number) { replacing = undefined; imported = 'Grain replaced.'; }
+    await load(true);
+    if (selected === position && selected === value.capsule_number) picking = true;
+  }
+
+  async function refine(source: SourceOut) {
+    if (!source.mount_id) return;
+    const current = replies.capture();
+    const mountId = source.mount_id;
+    try {
+      const metadata = await read<MountRevision & { atlas?: { project_id: string } | null }>(`/v1/mounts/${encodeURIComponent(mountId)}`);
+      if (!current()) return;
+      const mount = geometry[mountId], elements = sourceGeometry(source, mount);
+      const spot = source.atlas_spot_id ?? elements.spot?.atlas_spot_id ?? elements.spot?.id;
+      const grain = source.atlas_grain_id ?? elements.grain?.atlas_grain_id ?? elements.grain?.id;
+      const project = metadata.atlas?.project_id ?? mount?.current_project_uuid;
+      if (!project || !spot && !grain) throw new Error('No GrainAtlas project or grain is available for this source.');
+      pendingRefines.set(mountId, { revision: metadata, until: Date.now() + 10 * 60_000 });
+      refineNote = '';
+      await editInAtlas({ project, mount: mountId, ...(spot ? { spot } : { grain }) }, 'tims');
+      if (current() && (apps.atlas?.state === 'failed' || apps.atlas?.state === 'missing')) {
+        pendingRefines.delete(mountId); error = apps.atlas.message;
+      }
+    } catch (e) { if (current()) error = String(e); }
+  }
+  async function checkRefines() {
+    for (const [id, pending] of pendingRefines) if (Date.now() >= pending.until) pendingRefines.delete(id);
+    if (checkingRefines || document.visibilityState !== 'visible' || !pendingRefines.size) return;
+    const current = replies.capture(); checkingRefines = true;
+    let changed = false;
+    try {
+      await Promise.all([...pendingRefines].map(async ([mount, pending]) => {
+        try {
+          const latest = await read<MountRevision>(`/v1/mounts/${encodeURIComponent(mount)}`);
+          if (!current() || pendingRefines.get(mount) !== pending || Date.now() >= pending.until) return;
+          if (revisionChanged(pending.revision, latest)) {
+            grainImages.invalidateMount(mount);
+            const snapshot = await mountElements(mount, true);
+            if (!current() || pendingRefines.get(mount) !== pending) return;
+            geometry = { ...geometry, [mount]: snapshot };
+            pending.revision = latest;
+            refreshRevision++;
+            changed = true;
+            refineNote = 'Updated from GrainAtlas';
+          }
+        } catch (e) { if (current()) error = String(e); }
+      }));
+      if (changed && current()) await load();
+    } finally { checkingRefines = false; }
   }
 
   async function run(action: () => Promise<unknown>, success?: () => void) {
@@ -203,13 +280,13 @@
       {/each}
     </div>
 
-    <div class="bench" class:inspecting={selected !== null} class:inactive={view !== 'Capsules'}>
+    <div class="bench" class:inspecting={selected !== null} class:with-picker={picking} class:inactive={view !== 'Capsules'}>
         <section class="panel stack board" aria-label="Capsule grid">
           <div class="row heading">
             <h3>Capsule pucks</h3>
             <span class="small muted">{Object.values(batch.capsule_map).filter(Boolean).length} of {batch.capsule_set.positions} assigned</span>
           </div>
-          <PuckSet {batch} {geometry} {geometryError} {selected}
+          <PuckSet compact={picking} {batch} {geometry} {geometryError} {selected}
             onselect={position => {
               if (selected !== position) choose(position, currentCapsuleStep?.method_code === 'SP-TIMS-SPIKE' ? spikingSessionId(currentCapsuleStep) : '');
             }} />
@@ -224,9 +301,14 @@
               <div class="stack title"><h3>{label}{fraction ? ` · ${fraction.name}` : ''}</h3>
                 <p class="muted small">{fraction ? [preparation && capsulePreparations[preparation], fraction.sample.name, statusWords(fraction.status)].filter(Boolean).join(' · ') : 'Empty capsule'}</p>
               </div>
-              <button class="btn small" type="button" onclick={() => { selected = null; picking = false; }}>Close capsule</button>
+              <div class="row">
+                <button class="btn small" type="button" disabled={selected <= 1} onclick={() => choose(selected! - 1, selectedStep)} aria-label="Previous capsule">Previous</button>
+                <button class="btn small" type="button" disabled={selected >= batch.capsule_set.positions} onclick={() => choose(selected! + 1, selectedStep)}>Next capsule</button>
+                <button class="btn small" type="button" onclick={() => { selected = null; picking = false; replacing = undefined; }}>Close capsule</button>
+              </div>
             </div>
 
+            {#if refineNote}<p class="small muted" role="status">{refineNote}</p>{/if}
             {#if imported}<p class="small success" role="status">{imported}</p>{/if}
             {#if !fraction && editable}
               <div class="row intake" role="group" aria-label="Prepare empty capsule">
@@ -235,27 +317,28 @@
                 <button class="btn small" type="button" aria-pressed={manualPreparation === 'lab-blank'} onclick={() => { picking = false; manualPreparation = 'lab-blank'; }}>Lab blank</button>
               </div>
             {/if}
-            {#if pickerOpened}
-              <div class:inactive={!picking}>
-              <AtlasPicker batch={id} lab={batch.lab_id} position={selected} {label} {fraction} editable={fractionEditable}
-                {defaultMineral} oncreated={acceptFraction}
-                onlinked={acceptSource} close={() => picking = false} />
-              </div>
-            {/if}
             {#if !fraction && manualPreparation && editable}
               {#key `${selected}:${manualPreparation}`}
                 <SampleCapsule preparation={manualPreparation} batch={id} lab={batch.lab_id} position={selected} {label} {defaultMineral} {editable} oncreated={acceptFraction} />
               {/key}
-            {:else if !picking && fraction}
+            {:else if fraction}
               {#key fraction.id}
                 <FractionEditor {batch} {fraction} editable={fractionEditable} {geometry} {geometryError}
-                  activeStep={selectedStep} onstep={step => selectedStep = step}
+                  activeStep={selectedStep} onstep={step => { selectedStep = step; if (step) picking = false; }}
                   onbatchstep={step => { batchStep = step; view = 'Batch steps'; }} {createSpikeStep}
-                  onpick={() => { picking = true; pickerOpened = true; imported = ''; }} />
+                  onreplace={startReplacement} onrefine={refine}
+                  onpick={() => { replacing = undefined; picking = true; pickerOpened = true; imported = ''; }} />
               {/key}
             {:else if !picking}
               <p class="muted">{editable ? 'Choose how to prepare this capsule.' : 'This capsule is available.'}</p>
             {/if}
+          </section>
+        {/if}
+        {#if selected !== null && pickerOpened}
+          <section class="panel picker-panel" class:inactive={!picking} aria-label="Grain selection">
+            <AtlasPicker batch={id} lab={batch.lab_id} position={selected} {label} {fraction} {replacing} {refreshRevision} editable={fractionEditable}
+              {defaultMineral} oncreated={acceptFraction} onlinked={acceptSource} onreplaced={acceptReplacement}
+              close={() => { picking = false; replacing = undefined; }} />
           </section>
         {/if}
       </div>
@@ -321,19 +404,30 @@
   .views { gap: 4px; }
   .views .btn[aria-pressed=true], .step-list .btn[aria-pressed=true], .intake .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
   .inactive { display: none !important; }
-  .bench { display: grid; gap: var(--space-3); align-items: start; }
-  .bench.inspecting { grid-template-columns: minmax(0, 1.55fr) minmax(320px, 1fr); }
-  .board { background: linear-gradient(150deg, var(--glass-strong), var(--glass)); }
-  .board, .inspector { padding: var(--space-4); gap: var(--space-4); }
-  .legend { gap: var(--space-4); }
+  .batch { flex: 1; min-height: 0; gap: var(--space-2); }
+  .batch > header, .views { flex-shrink: 0; }
+  .bench { display: grid; gap: var(--space-2); align-items: stretch; min-height: 0; flex: 1; overflow: hidden; }
+  .bench.inspecting { grid-template-columns: minmax(170px, .8fr) minmax(0, 1.2fr); }
+  .bench.with-picker { grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1.15fr); }
+  .board { background: linear-gradient(150deg, var(--glass-strong), var(--glass)); overflow: auto; }
+  .board, .inspector, .picker-panel { padding: var(--space-2); min-height: 0; min-width: 0; gap: var(--space-2); }
+  .legend { gap: var(--space-2); }
   .legend span { display: flex; gap: var(--space-1); align-items: center; }
   .legend i { width: 10px; height: 10px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 50%; }
   .legend .empty { border-color: var(--hairline); background: var(--glass-edge); }
-  /* Keep scrolled controls inside the padding, away from fractional clip edges. */
-  .bench .inspector { margin: 0; max-height: min(620px, 68vh); overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; scroll-padding-block: var(--space-4); }
-  /* Scroll the full forms instead of shrinking their wrappers below the content. */
-  .inspector > :global(*) { flex-shrink: 0; }
-  .inspector-head { padding-bottom: var(--space-2); border-bottom: 1px solid var(--hairline); }
+  .inspector { overflow: hidden; }
+  .inspector-head { flex-shrink: 0; padding-bottom: var(--space-2); border-bottom: 1px solid var(--hairline); }
+  .picker-panel { overflow: hidden; }
+  .inspector :global(.fraction-editor) { flex: 1; min-height: 0; }
+  .steps, .matrix { overflow: auto; min-height: 0; }
+  @media (max-width: 1279px) {
+    .bench.with-picker { grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); grid-template-rows: 140px minmax(0, 1fr); }
+    .with-picker .board { grid-column: 1; grid-row: 1; }
+    .with-picker .inspector { grid-column: 1; grid-row: 2; }
+    .with-picker .picker-panel { grid-column: 2; grid-row: 1 / 3; }
+    .with-picker .board .legend, .with-picker .board > .heading { display: none; }
+    .inspector-head { gap: 4px; }
+  }
   .success { color: var(--ok); }
   .step-columns { display: grid; grid-template-columns: minmax(155px, 220px) minmax(0, 1fr); gap: var(--space-3); align-items: start; }
   .step-list { display: grid; gap: 4px; max-height: 62vh; overflow: auto; }
@@ -344,7 +438,7 @@
   textarea, select, input:not([type=checkbox]) { width: 100%; min-width: 0; }
   @media (max-width: 860px) {
     .bench.inspecting { grid-template-columns: minmax(0, 1fr); }
-    .bench .inspector { max-height: none; }
+
   }
   @media (max-width: 640px) {
     .step-columns { grid-template-columns: minmax(0, 1fr); }

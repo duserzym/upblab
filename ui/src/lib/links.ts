@@ -244,10 +244,12 @@ export function withoutTheme(url: string): string {
 }
 
 /** Reuse the module's configured home, preserving server and theme parameters. */
-export function atlasEditorUrl(home: string, project: string, spot?: string | null): string {
+export function atlasEditorUrl(home: string, project: string, spot?: string | null, grain?: string | null): string {
   const url = new URL(home, location.href);
   url.searchParams.set('project', project);
+  url.searchParams.delete('spot'); url.searchParams.delete('grain');
   if (spot) url.searchParams.set('spot', spot);
+  else if (grain) url.searchParams.set('grain', grain);
   return url.href;
 }
 

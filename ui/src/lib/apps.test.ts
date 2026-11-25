@@ -209,3 +209,8 @@ it('opens the hosted build in a new window on web without minting a code', async
     expect(webConnectivity.grainAtlasLocal).toBeNull();
   } finally { vi.unstubAllGlobals(); vi.doUnmock('./platform'); }
 });
+it('lets TIMS own its bounded revision watcher instead of adding a second project poll', async () => {
+  await editInAtlas({ project: 'synthetic-project', mount: 'synthetic-mount', grain: 'synthetic-grain' }, 'tims');
+  expect(platform.launchGrainAtlas).toHaveBeenCalledExactlyOnceWith('synthetic-project', 'https://lab', 'CODE', undefined, undefined, 'synthetic-grain');
+  expect(appWatch.atlas).not.toHaveBeenCalled();
+});
