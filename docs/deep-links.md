@@ -10,6 +10,8 @@ three schemes with the operating system and routes them to a tab or an app:
 | `upbdb://sample/<id>` | Sessions tab, `<server>/app/#/samples/<id>` |
 | `upbdb://mount/<id>` | Sessions tab, `<server>/app/#/mounts/<id>` (the mount page with its atlas view) |
 | `upbdb://ingest?path=<folder>` | Sessions tab, `<server>/app/#/ingest?path=<folder>` (the ingest dialog, folder prefilled; desktop) |
+| `upbdb://laser-logs[?path=<file>]` | Sessions tab, `<server>/app/#/laser-logs[?path=<file>]`; one `.lase` arrives through `open-files`, with the upload form prefilled |
+| `upbdb://laser-log/<id>[?tie=1]` | Sessions tab, `<server>/app/#/laser-logs/<id>[?tie=1]`; `tie=1` opens the tie dialog after the log loads when allowed |
 | `upbdb://search?label=<label>` | Sessions tab, `<server>/app/#/search?label=<label>` |
 | `upbdb://auth/callback?code=<code>`, `?error=<slug>` | completes the shell's ORCID or Google sign-in, or shows why it failed (only one the shell started in the last ten minutes, only from the OS) |
 | `grainatlas://project/<id>` | standalone grainatlas on that project (desktop); the hosted build `<server>/atlas/?project=<id>` in a new browser tab (web) |
@@ -45,7 +47,12 @@ The resolver is `ui/src/lib/links.ts`; its tests are the specification.
   on Windows); on the web the page asks you to open grainatlas in a new
   browser tab and drop them there. Session files reach UPbDB through
   `@lab/bridge` `open-files` (bridge/README.md); `ui/src/lib/drop.ts`
-  decides where.
+  decides where. A lone `.lase` opens `upbdb://laser-logs?path=<file>`
+  instead of ingest. The shell probes `/v1/laser-logs?limit=1` once per
+  server and identity: 404 refuses the file; network failure still hands it
+  over for the module to handle, including a local offline mirror. The
+  capability cache expires on sign-out or a server change. Upload (including
+  a duplicate) opens the log with `tie=1`; closing the dialog removes it.
 - **The web delivery.** `/desk/open?url=<encoded link>`.
 
 ## Web delivery

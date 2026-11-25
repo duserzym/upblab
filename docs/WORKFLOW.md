@@ -1,6 +1,6 @@
 # The lab workflow and the hand-offs between the apps
 
-**Status:** v1.3, 2026-11-14. This is the cross-repository contract for how a
+**Status:** v1.4, 2026-11-25. This is the cross-repository contract for how a
 sample travels through the four applications. Each repository's own plan
 points here for the hand-offs and keeps its internal design to itself:
 `upbdb/docs/DATABASE_ARCHITECTURE_PLAN.md` section 8,
@@ -16,6 +16,10 @@ standalone apps in context (section 4a).
 Changed in v1.3: UPb Lab has no Images tab. Uploads and edits go to
 standalone grainatlas; Review shows the images read-only; grainatlas and
 Studio leave a notice file when they change the database (section 4a).
+
+Changed in v1.4: Home’s **Laser log** hands one Chromium `.lase` file to
+UPbDB for upload and tying to the day’s sessions. Session cards show a tied
+log and whether it has laser times.
 
 ## 1. The workflow
 
@@ -35,7 +39,7 @@ Studio leave a notice file when they change the database (section 4a).
 | 1. Mount and polish | UPbDB mount page | `mount`, `mount_slot` (which sample sits where) | mount id |
 | 2. Image | Home’s **Upload image set** hands the SEM package, `.grainatlas` folder or `.gaproj` file to standalone grainatlas (web: the hosted build in a new tab); stitch, correct, segment, scale | grainatlas project (local folder) **published** to UPbDB as an *atlas bundle* attached to the mount | `atlas://` project id; grain rows |
 | 3. Place spots | grainatlas, with the mount's sample names | `physical_spot` rows in UPbDB (spot sync) with `atlas_project_id`, `atlas_spot_id` | laser spot list (registered to the laser stage) |
-| 4. Laser session | instrument; Qtegra per-spot export with the spot name as the acquisition label | nothing yet | the export folder |
+| 4. Laser session | instrument; Qtegra per-spot export with the spot name as the acquisition label; Home’s **Laser log** uploads the Chromium `.lase` record to UPbDB | `laser_log` with its scans and firings; after the tie, `session_laser_log` and `acquisition_laser_link` per acquisition. A log of placed scans only keeps settings and stage positions without laser times | the export folder; the `.lase` file, tied in UPbDB's tie dialog |
 | 5. Upload | Home’s **Upload LA-ICP-MS session** opens UPbDB ingest (also UI drag-drop, or the command) | `session`, `acquisition` (matched to `physical_spot` by label), raw assets, sweep Parquet | "Reduce in UPbRPy Studio" |
 | 6. Open from database | UPbRPy Studio in **database mode**: fetches the *session bundle* over HTTP and opens it as a project | local project cache with `.upbr` carrying its `origin` | |
 | 7. Reduce | UPbRPy Studio, locally, exactly as standalone | `.upbr`, reduction bundle on disk | "Submit to database" |
@@ -176,6 +180,12 @@ links the pipeline and never reduces.
    hands the paths to standalone grainatlas, which opens each as a mount
    tab; segmenting and publishing happen there (decision of 2026-11-14,
    which removed UPb Lab's Images tab).
+
+5. **Laser log** (Home, or one `.lase` opened or dropped on the window)
+   hands the file through `open-files` to UPbDB’s Laser logs upload form.
+   The user checks lab and time zone before uploading. A new or duplicate
+   upload opens the log’s tie dialog. Session cards open the session’s Laser
+   section through the session page.
 
 Arguments, links and notice files are specified in `docs/deep-links.md`
 (Openers; Notices from the standalone apps).
