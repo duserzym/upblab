@@ -1,7 +1,7 @@
 {
   "name": "upbstudio",
   "private": true,
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "UPb Lab: the unified desktop and web shell for the lab's LA-ICP-MS workflow",
   "license": "MIT",
   "type": "module",
