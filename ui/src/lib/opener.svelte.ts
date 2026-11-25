@@ -15,6 +15,10 @@ import type { OpenFilesTransfer } from '@lab/bridge';
 import { classify, expandOpened, formatBytes, type FileTab, type Routed, type WebSet } from './drop';
 import { desktopFiles, openGrainAtlasPaths, isDesktop, logInfo, logWarn } from './platform';
 import { shell } from './shell.svelte';
+import { identity } from './identity.svelte';
+import { laserScope, takesLaserLogs } from './laser-support';
+
+export type OpenWant = FileTab | 'laser';
 
 export const MODULE_OF: Record<FileTab, string> = { images: 'grainatlas', sessions: 'upbdb' };
 const TAB_OF: Record<string, FileTab> = { grainatlas: 'images', upbdb: 'sessions', images: 'images', sessions: 'sessions' };
@@ -45,6 +49,7 @@ function describe(r: Extract<Routed, { target: FileTab }>): string {
     export: 'Qtegra export',
     zip: 'zip',
     csv: 'CSV files',
+    lase: 'laser log',
   };
   const n = r.picks.length;
   return `${kinds[r.kind] ?? r.kind} ${r.name}, ${n} file${n === 1 ? '' : 's'} (${formatBytes(r.bytes)})`;
@@ -71,11 +76,21 @@ class Opener {
     this.report({ type: 'outcome', module, event });
     shell.note(String(event.name ?? 'images'), module, String(event.outcome ?? ''));
   }
-  private destination(r: Routed, want?: FileTab): Routed {
-    if (!want || !r.target || r.target === want) return r;
+  private destination(r: Routed, want?: OpenWant): Routed {
+    if (!want || !r.target) return r;
+    if (want === 'laser') return r.kind === 'lase' ? r : { target: null, reason: 'This button takes one .lase laser log file.' };
+    if (r.target === want && r.kind !== 'lase') return r;
     return { target: null, reason: want === 'sessions'
-      ? 'This button takes a Rich CSV, per-spot export folder, zip, or a Rich CSV and its per-spot folder.'
+      ? 'This button takes a Rich CSV, per-spot export folder, zip, or a Rich CSV and its per-spot folder. For a laser log use Laser log.'
       : 'This button takes an SEM package folder or a .grainatlas project folder.' };
+  }
+  private async laserRefusal(r: Extract<Routed, { target: FileTab }>): Promise<string | null> {
+    if (r.kind !== 'lase') return null;
+    const scope = laserScope(identity);
+    const supported = await takesLaserLogs(identity);
+    if (oversight.viewAs) return READ_ONLY_REASON;
+    if (scope !== laserScope(identity)) return 'The account or server changed. Open the laser log again.';
+    return supported ? null : 'This UPbDB server does not take laser logs yet.';
   }
   /** Web delivery: nudge a module iframe (set by lib/incoming.ts). */
   pushFrame: ((tab: FileTab) => void) | null = null;
@@ -95,10 +110,11 @@ class Opener {
     void logWarn(`[open] ${what} from ${from}: ${msg}`);
   }
 
-  /** Show the tab; Sessions opens its ingest route (desktop with the path, `upbdb://ingest?path=`). */
+  /** Show Sessions on its ingest or laser-log route, retaining the desktop path. */
   private route(r: Extract<Routed, { target: FileTab }>, from: string) {
-    if (isDesktop && r.path) void shell.handleLink(`upbdb://ingest?path=${encodeURIComponent(r.path)}`, from);
-    else shell.go('sessions', '/app/ingest');
+    const route = r.kind === 'lase' ? 'laser-logs' : 'ingest';
+    if (isDesktop && r.path) void shell.handleLink(`upbdb://${route}?path=${encodeURIComponent(r.path)}`, from);
+    else shell.go('sessions', `/app/${route}`);
   }
 
   private offered(id: string, r: Extract<Routed, { target: FileTab }>, what: string, from: string) {
@@ -125,7 +141,7 @@ class Opener {
   }
 
   /** Desktop: paths from a drop, the OS or the Open dialog. */
-  async openPaths(paths: string[], from: string, want?: FileTab): Promise<Routed> {
+  async openPaths(paths: string[], from: string, want?: OpenWant): Promise<Routed> {
     const list = expandOpened(paths);
     const what = list.length <= 1 ? (list[0] ?? '') : `${list[0]} and ${list.length - 1} more`;
     if (!list.length) return { target: null, reason: 'nothing to open' };
@@ -145,6 +161,8 @@ class Opener {
         this.refuse(what, from, scan.missing.length ? `could not read ${scan.missing.join(', ')}` : r.reason);
         return r;
       }
+      const refusal = await this.laserRefusal(r);
+      if (refusal) { this.refuse(what, from, refusal); return { target: null, reason: refusal }; }
       this.report({ type: 'listed', from, routed: r });
       if (scan.truncated) void logWarn(`[open] ${what}: listing cut short at ${scan.entries.length} files`);
       if (r.target === 'images') {
@@ -173,7 +191,7 @@ class Opener {
   }
 
   /** Web delivery: files dropped on the shell page or chosen in Home. */
-  openWebFiles(set: WebSet, from: string, want?: FileTab): Routed {
+  async openWebFiles(set: WebSet, from: string, want?: OpenWant): Promise<Routed> {
     const what = set.roots.length <= 1 ? (set.roots[0]?.name ?? '') : `${set.roots[0].name} and ${set.roots.length - 1} more`;
     if (oversight.viewAs) {
       this.refuse(what || 'drop', from, READ_ONLY_REASON);
@@ -183,6 +201,11 @@ class Opener {
     if (!r.target) {
       this.refuse(what || 'drop', from, r.reason);
       return r;
+    }
+    if (r.kind === 'lase') {
+      this.status = { what, outcome: 'checking laser log support…', state: 'busy' };
+      const refusal = await this.laserRefusal(r);
+      if (refusal) { this.refuse(what, from, refusal); return { target: null, reason: refusal }; }
     }
     this.report({ type: 'listed', from, routed: r });
     if (r.target === 'images') {

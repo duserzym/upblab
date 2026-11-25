@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const scans: Record<string, unknown> = {};
+vi.mock('./laser-support', () => ({ clearLaserSupport: vi.fn(), laserScope: () => 'server-account', takesLaserLogs: vi.fn(async () => true) }));
 vi.mock('./platform', () => ({
   isDesktop: true,
   logWarn: vi.fn(async () => {}),
@@ -65,7 +66,7 @@ describe('opener (desktop)', () => {
     expect(await opener.openPaths([PKG], 'os')).toMatchObject({ target: null, reason: expect.stringContaining('read-only') });
     expect(platform.desktopFiles.scan).not.toHaveBeenCalled();
     expect(platform.openGrainAtlasPaths).not.toHaveBeenCalled();
-    expect(opener.openWebFiles({ roots: [], entries: [], files: [] }, 'drop')).toMatchObject({ target: null });
+    expect(await opener.openWebFiles({ roots: [], entries: [], files: [] }, 'drop')).toMatchObject({ target: null });
     expect(opener.takeWeb('sessions', true)).toBeNull();
   });
 
@@ -130,7 +131,7 @@ describe('opener (desktop)', () => {
 });
 
 describe('opener (web delivery)', () => {
-  it('tells the user to open grainatlas in a new tab for images and holds nothing', () => {
+  it('tells the user to open grainatlas in a new tab for images and holds nothing', async () => {
     const push = vi.fn();
     opener.pushFrame = push;
     const events: unknown[] = [];
@@ -140,7 +141,7 @@ describe('opener (web delivery)', () => {
       entries: [{ root: 0, rel: 'a.jpg', size: 1 }],
       files: [new File(['x'], 'a.jpg')],
     };
-    const r = opener.openWebFiles(set, 'drop');
+    const r = await opener.openWebFiles(set, 'drop');
     stop();
     expect(r.target).toBe('images');
     expect(push).not.toHaveBeenCalled();
@@ -155,12 +156,49 @@ describe('opener (web delivery)', () => {
       entries: [{ root: 0, rel: 'Apatite_demo_1.csv', size: 1 }, { root: 0, rel: 'Apatite_demo_10.csv', size: 1 }],
       files: [new File(['x'], 'Apatite_demo_1.csv'), new File(['y'], 'Apatite_demo_10.csv')],
     };
-    const r = opener.openWebFiles(set, 'drop');
+    const r = await opener.openWebFiles(set, 'drop');
     expect(r.target).toBe('sessions');
     expect(opener.takeWeb('grainatlas', true)).toBeNull();
     expect(opener.takeWeb('upbdb', false)?.files).toHaveLength(2);
     const t = opener.takeWeb('upbdb', true);
     expect(await t?.files[0].file.text()).toBe('x');
     expect(opener.takeWeb('upbdb', true)).toBeNull();
+  });
+});
+
+
+describe('laser log hand-off', () => {
+  const path = '/invented/day.lase';
+  const set = { roots: [{ name: 'day.lase', dir: false }], entries: [{ root: 0, rel: 'day.lase', size: 1 }], files: [new File(['x'], 'day.lase')] };
+  beforeEach(() => {
+    vi.clearAllMocks(); oversight.reset(); settings.serverUrl = 'http://localhost:8000'; settings.mode = 'server'; shell.view = 'home';
+    opener.takeWeb('upbdb', true);
+    scans[path] = { scan: 'laser-scan', roots: [{ ...set.roots[0], path }], entries: set.entries, missing: [], truncated: false };
+  });
+  it('offers a desktop laser log and routes to laser-logs with its path', async () => {
+    expect(await opener.openPaths([path], 'Laser log', 'laser')).toMatchObject({ kind: 'lase' });
+    expect(platform.desktopFiles.offer).toHaveBeenCalledWith(expect.objectContaining({ kind: 'lase', module: 'sessions', nudge: false, path }));
+    expect(shell.targets.sessions?.url).toContain('#/laser-logs?path=%2Finvented%2Fday.lase');
+  });
+  it('offers real web Files once to Sessions on the laser route', async () => {
+    expect(await opener.openWebFiles(set, 'drop')).toMatchObject({ kind: 'lase' });
+    expect(shell.targets.sessions?.url).toContain('#/laser-logs');
+    expect(opener.status?.outcome).toContain('laser log');
+    expect(opener.takeWeb('upbdb', true)).toMatchObject({ kind: 'lase', files: [{ path: 'day.lase', file: set.files[0] }] });
+    expect(opener.takeWeb('upbdb', true)).toBeNull();
+  });
+  it('refuses unsupported servers before either desktop or web delivery', async () => {
+    const { takesLaserLogs } = await import('./laser-support');
+    vi.mocked(takesLaserLogs).mockResolvedValueOnce(false).mockResolvedValueOnce(false);
+    for (const result of [await opener.openPaths([path], 'open dialog'), await opener.openWebFiles(set, 'drop')]) {
+      expect(result).toEqual({ target: null, reason: 'This UPbDB server does not take laser logs yet.' });
+    }
+    expect(platform.desktopFiles.offer).not.toHaveBeenCalled(); expect(opener.takeWeb('upbdb', true)).toBeNull();
+    expect(opener.status?.state).toBe('refused');
+  });
+  it('keeps the session tile and the laser tile restricted to their file types', async () => {
+    expect(await opener.openWebFiles(set, 'session upload', 'sessions')).toMatchObject({ target: null, reason: expect.stringContaining('For a laser log use Laser log.') });
+    const csv = { roots: [{ name: 'a.csv', dir: false }], entries: [{ root: 0, rel: 'a.csv', size: 1 }], files: [new File(['x'], 'a.csv')] };
+    expect(await opener.openWebFiles(csv, 'Laser log', 'laser')).toMatchObject({ target: null, reason: 'This button takes one .lase laser log file.' });
   });
 });

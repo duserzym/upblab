@@ -317,7 +317,7 @@ describe('open-files (protocol v2)', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
-  it('postMessage: the push makes the module ask, and Files come back', async () => {
+  it.each(['csv', 'lase'] as const)('postMessage: %s files come back when the push makes the module ask', async kind => {
     const { env, parentTarget, child, childTarget, origin } = framePair();
     let waiting: OpenedFiles | null = null;
     const stop = createFrameHost(
@@ -339,7 +339,8 @@ describe('open-files (protocol v2)', () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(got).toHaveLength(0); // nothing waiting at registration
 
-    waiting = { id: 'w1', kind: 'csv', name: 'Apatite_demo', files: [{ path: 'a.csv', file: new File(['x,y'], 'a.csv') }] };
+    const name = kind === 'lase' ? 'day.lase' : 'a.csv';
+    waiting = { id: 'w1', kind, name, files: [{ path: name, file: new File(['x,y'], name) }] };
     // The shell's push, as the parent posts it into the iframe.
     pushOpenFiles(
       {
@@ -349,7 +350,8 @@ describe('open-files (protocol v2)', () => {
       origin,
     );
     await vi.waitFor(() => expect(got).toHaveLength(1));
-    expect(got[0].kind).toBe('csv');
+    expect(got[0].kind).toBe(kind);
+    expect(got[0].files[0].file.name).toBe(name);
     expect(await got[0].files[0].file.text()).toBe('x,y');
     expect(waiting).toBeNull();
     stop();

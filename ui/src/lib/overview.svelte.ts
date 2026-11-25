@@ -27,6 +27,8 @@ export interface SessionOut {
   status?: string;
   started_at: string | null;
   acquisition_count: number;
+  laser_log_count?: number;
+  laser_has_times?: boolean;
   run_count?: number;
   spot_kinds?: Record<string, number>;
   kind_counts?: Record<string, number>;

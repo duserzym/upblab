@@ -11,6 +11,7 @@
 //   loose image files                         -> Images, images
 //   a folder of CSVs (a Qtegra export)        -> Sessions, export
 //   zips                                      -> Sessions, zip
+//   one loose `.lase` file                     -> Sessions, lase
 //   loose CSVs                                -> Sessions, csv
 //
 // Images and CSVs in one set: the larger group wins, images on a tie.
@@ -128,6 +129,13 @@ export function fileUrlToPath(url: string): string | null {
 
 export function classify(roots: DropRoot[], entries: DropEntry[]): Routed {
   if (!roots.length || !entries.length) return { target: null, reason: 'nothing to open: no files found' };
+  // Only loose roots count: a log in an export folder or mixed set must not
+  // change the existing image / Qtegra classification.
+  if (roots.every(r => !r.dir && /\.lase$/i.test(r.name))) {
+    if (roots.length > 1) return { target: null, reason: 'Open one laser log at a time.' };
+    return { target: 'sessions', kind: 'lase', name: roots[0].name,
+      picks: [{ index: 0, path: entries[0].rel }], bytes: entries[0].size, path: roots[0].path };
+  }
   const dirs = roots.filter((r) => r.dir);
   const oneFolder = roots.length === 1 && roots[0].dir;
   const where = (e: DropEntry) => (oneFolder || !roots[e.root].dir ? e.rel : `${roots[e.root].name}/${e.rel}`);

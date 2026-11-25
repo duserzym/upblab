@@ -590,7 +590,9 @@ export type OpenFilesKind =
   /** UPbDB: zips of an export */
   | 'zip'
   /** UPbDB: loose per-spot CSVs */
-  | 'csv';
+  | 'csv'
+  /** UPbDB: one Chromium laser log file; older modules may ignore this kind. */
+  | 'lase';
 
 /** One file of an offer, without its bytes. */
 export interface OpenFilesEntry {
@@ -610,7 +612,7 @@ export interface OpenFilesManifest {
   kind: OpenFilesKind;
   /** Folder name, zip name or the files' common stem: a name for the set. */
   name: string;
-  /** Desktop: the host path that was dropped (folder, zip, or the folder of loose files). */
+  /** Desktop: the host path that was dropped (folder, zip, laser log, or the folder of loose files). */
   path?: string;
   files: OpenFilesEntry[];
 }

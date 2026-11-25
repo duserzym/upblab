@@ -216,7 +216,7 @@
     if (isDesktop || firstRun || !hasFiles(e)) return;
     e.preventDefault();
     opener.dragging = false;
-    opener.openWebFiles(await fromDataTransfer(e.dataTransfer!), 'drop');
+    void opener.openWebFiles(await fromDataTransfer(e.dataTransfer!), 'drop');
   }
 </script>
 

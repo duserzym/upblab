@@ -7,6 +7,8 @@
 //   upbdb://session/<id>              -> Sessions, /app/sessions/<id>
 //   upbdb://sample/<id>               -> Sessions, /app/samples/<id>
 //   upbdb://mount/<id>                -> Sessions, /app/mounts/<id> (the mount page with its atlas)
+//   upbdb://laser-logs[?path=<file>] -> Sessions, /app/laser-logs
+//   upbdb://laser-log/<id>[?tie=1]    -> Sessions, /app/laser-logs/<id>
 //   upbdb://ingest?path=<folder>      -> Sessions, /app/ingest?path=<folder> (desktop: the ingest dialog)
 //   upbdb://search?label=<label>      -> Sessions, /app/search?label=<label>
 //   upbdb://data-model[/<table>[/<column>]] -> Sessions, /app/data-model[/…] (UPbDB's Data Model tab)
@@ -120,16 +122,18 @@ export function resolve(input: string): Resolution {
         sample: 'samples',
         project: 'projects',
         mount: 'mounts',
+        'laser-log': 'laser-logs',
       };
       if (parts.length === 2 && kind in routes) {
-        const panel = kind === 'session' && u.searchParams.get('panel') === 'sharing' ? '?panel=sharing' : '';
+        const panel = kind === 'laser-log' && u.searchParams.get('tie') === '1' ? '?tie=1' : kind === 'session' && u.searchParams.get('panel') === 'sharing' ? '?panel=sharing' : '';
         return { kind: 'tab', tab: 'sessions', route: `/app/${routes[kind]}/${id}${panel}`, url };
       }
       // Query links: only the one known parameter is passed on, re-encoded.
-      const queries: Record<string, string> = { ingest: 'path', search: 'label' };
+      const queries: Record<string, string> = { ingest: 'path', search: 'label', 'laser-logs': 'path' };
       if (parts.length === 1 && kind in queries) {
         const name = queries[kind];
         const value = u.searchParams.get(name);
+        if (kind === 'laser-logs' && value === null) return { kind: 'tab', tab: 'sessions', route: '/app/laser-logs', url };
         if (!value || value.length > 2048 || /[\u0000-\u001f]/.test(value)) return refuse(url, `${kind} link without a valid ${name}`);
         return { kind: 'tab', tab: 'sessions', route: `/app/${kind}?${name}=${encodeURIComponent(value)}`, url };
       }

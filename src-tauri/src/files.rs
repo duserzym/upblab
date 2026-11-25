@@ -34,7 +34,9 @@ const MAX_FILE: u64 = 2 << 30;
 const KEEP_SCANS: usize = 4;
 
 /// Kinds a module may be told (bridge/src/protocol.ts `OpenFilesKind`).
-const KINDS: [&str; 7] = ["package", "area", "images", "project", "export", "zip", "csv"];
+const KINDS: [&str; 8] = [
+    "package", "area", "images", "project", "export", "zip", "csv", "lase",
+];
 
 /// Shell events (names mirrored in ui/src/lib/incoming.ts).
 pub const EVENT_DROP: &str = "shell://drop";
@@ -633,6 +635,23 @@ mod tests {
         assert_eq!(entries[0].size, 3);
         assert_eq!(missing.len(), 1);
         assert!(!truncated);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn lone_laser_log_is_listed_and_accepted() {
+        let dir = tmp("laser");
+        let path = dir.join("synthetic.LASE");
+        fs::write(&path, "[Scans]\r\n").unwrap();
+        let (roots, entries, missing, truncated) = walk(std::slice::from_ref(&path));
+        assert_eq!(roots.len(), 1);
+        assert!(!roots[0].dir);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].abs, path);
+        assert_eq!(entries[0].rel, "synthetic.LASE");
+        assert!(missing.is_empty());
+        assert!(!truncated);
+        assert!(KINDS.contains(&"lase"));
         let _ = fs::remove_dir_all(&dir);
     }
 

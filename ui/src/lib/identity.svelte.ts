@@ -16,6 +16,7 @@
 // Module tabs reload when the account changes (`revision`), so they pick up
 // the new token, or their own sign-in screen after a sign-out.
 
+import { clearLaserSupport } from './laser-support';
 import { grainImages } from './tims-grain-image-cache';
 import { oversight, WriteError } from './oversight.svelte';
 import { connectivity } from './connectivity.svelte';
@@ -301,7 +302,7 @@ class Identity {
     this.state = next;
     const who = (s: AuthState) => (s.signedIn ? (s.account?.username ?? '?') : '');
     if (before.signedIn !== next.signedIn || (next.account && who(before) !== who(next))) {
-      oversight.reset(); webReads.clear(); grainImages.clear();
+      oversight.reset(); webReads.clear(); grainImages.clear(); clearLaserSupport();
       const copy = connectivity.offlineCopy;
       connectivity.reset(); connectivity.offlineCopy = copy; this.revision += 1;
     }
@@ -315,7 +316,7 @@ class Identity {
     if (this.restoring === id) return;
     this.restoring = id;
     const switched = this.target?.key !== target.key || this.target?.server !== target.server;
-    if (switched) { connectivity.reset(); this.changed(SIGNED_OUT); }
+    if (switched) { clearLaserSupport(); connectivity.reset(); this.changed(SIGNED_OUT); }
     this.target = target;
     this.checking = true;
     try {
@@ -343,7 +344,7 @@ class Identity {
     this.error = '';
     try {
       const next = await this.backend.login(target, username.trim(), password);
-      if (this.target?.server !== target.server || this.target?.key !== target.key) connectivity.reset();
+      if (this.target?.server !== target.server || this.target?.key !== target.key) { clearLaserSupport(); connectivity.reset(); }
       this.target = target;
       this.changed(next);
       if (next.signedIn) this.authentication++;

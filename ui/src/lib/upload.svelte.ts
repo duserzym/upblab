@@ -92,7 +92,7 @@ export class Upload {
   }
 
   async openWebFiles(set: WebSet) {
-    if (await this.begin(set.roots.map(r => r.name))) opener.openWebFiles(set, this.from, this.target);
+    if (await this.begin(set.roots.map(r => r.name))) await opener.openWebFiles(set, this.from, this.target);
   }
 
   private progress(event: OpenProgress) {

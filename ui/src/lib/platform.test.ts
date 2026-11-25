@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(async () => null) }));
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
 it('omits server and code from GrainAtlas IPC for a known copy, including local path opens', async () => {
@@ -35,4 +36,13 @@ it('passes both source grain and spot identities to the GrainAtlas host', async 
   const platform = await import('./platform'); const { invoke } = await import('@tauri-apps/api/core');
   await platform.launchGrainAtlas('synthetic-project', 'https://lab', 'synthetic-code', undefined, 'synthetic-spot', 'synthetic-grain');
   expect(invoke).toHaveBeenLastCalledWith('grainatlas_launch', { project: 'synthetic-project', server: 'https://lab', code: 'synthetic-code', spot: 'synthetic-spot', grain: 'synthetic-grain' });
+});
+
+it('picks one .lase file with the existing native dialog', async () => {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const { pickLaserLog } = await import('./platform');
+  vi.mocked(open).mockResolvedValueOnce('/invented/day.lase').mockResolvedValueOnce(null);
+  expect(await pickLaserLog()).toEqual(['/invented/day.lase']);
+  expect(open).toHaveBeenCalledWith({ multiple: false, filters: [{ name: 'Laser log', extensions: ['lase'] }] });
+  expect(await pickLaserLog()).toEqual([]);
 });

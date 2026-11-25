@@ -115,7 +115,7 @@ for (const desktop of [true, false]) {
         expect(box.height).toBeGreaterThanOrEqual(32);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-      await expect(page.getByTestId('open-panel').getByRole('button')).toHaveCount(4);
+      await expect(page.getByTestId('open-panel').getByRole('button')).toHaveCount(5);
       const rows = await page.getByTestId('session-card').evaluateAll(cards => cards.map(c => ({ x: Math.round(c.getBoundingClientRect().x), y: Math.round(c.getBoundingClientRect().y) })));
       expect(new Set(rows.filter(r => r.y === rows[0].y).map(r => r.x)).size).toBe(1);
       await expect(page.getByTestId('mount-card')).toHaveCount(6);

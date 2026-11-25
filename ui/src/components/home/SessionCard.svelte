@@ -28,6 +28,10 @@
   </div>
   <div class="byline">
     <p class="muted small byline-text" title={byline}>{#if date || people}{#if date}<span class="date">{date}</span>{/if}{#if date && people}<span aria-hidden="true">·</span>{/if}{#if people}<span class="ellipsis">{people}</span>{/if}{:else}<span class="ellipsis">{byline}</span>{/if}</p>
+    {#if (s.laser_log_count ?? 0) > 0}
+      {@const label = `${s.laser_log_count} laser log${s.laser_log_count === 1 ? '' : 's'} tied, ${s.laser_has_times ? 'with laser times' : 'no laser times'}`}
+      <button class="chip access" title={label} aria-label={label} onclick={() => void shell.handleLink(`upbdb://session/${s.id}`, 'home')}>Laser log</button>
+    {/if}
     {#if local}<span class="chip">Local copy</span>{/if}
     {#if row.access}<span class="chip access" title={row.access.owner ? `Session owner: ${row.access.owner}` : 'Your session access'}>{row.access.role}</span>{/if}
   </div>

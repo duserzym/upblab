@@ -21,7 +21,7 @@
   import MountCard from '../components/home/MountCard.svelte';
   import { notReduced, sessionsShown, sessionsByMineral, mountsShown, spotKinds, kindColor, type Sort } from '../lib/home';
   import { overview } from '../lib/overview.svelte';
-  import { isDesktop, pickPaths, probe, studioStatus, type StudioStatus } from '../lib/platform';
+  import { isDesktop, pickPaths, pickLaserLog, probe, studioStatus, type StudioStatus } from '../lib/platform';
   import { fromFileList } from '../lib/drop';
   import { opener } from '../lib/opener.svelte';
   import { settings } from '../lib/settings.svelte';
@@ -34,6 +34,7 @@
   let linkInput = $state('');
   let folderInput = $state<HTMLInputElement>();
   let filesInput = $state<HTMLInputElement>();
+  let laserInput = $state<HTMLInputElement>();
   let expandedUpload = $state<'sessions' | 'images' | null>(null);
   const uploadCards = $state<Record<'sessions' | 'images', UploadCard | undefined>>({ sessions: undefined, images: undefined });
   // One click: the tile starts the upload itself (picker or web file input) and its card shows the progress.
@@ -90,8 +91,23 @@
   }
   function chosen(input: HTMLInputElement | undefined) {
     if (!input?.files?.length) return;
-    opener.openWebFiles(fromFileList(input.files), 'open dialog');
+    void opener.openWebFiles(fromFileList(input.files), 'open dialog');
     input.value = '';
+  }
+  async function chooseLaser() {
+    if (oversight.viewAs) return;
+    if (!isDesktop) { laserInput?.click(); return; }
+    try {
+      const paths = await pickLaserLog();
+      if (paths.length) await opener.openPaths(paths, 'Laser log', 'laser');
+    } catch (error) {
+      opener.status = { what: 'Laser log', outcome: String(error), state: 'failed' };
+    }
+  }
+  function laserChosen() {
+    if (!laserInput?.files?.length) return;
+    void opener.openWebFiles(fromFileList(laserInput.files), 'Laser log', 'laser');
+    laserInput.value = '';
   }
   const openColor = (s: string) => (s === 'refused' || s === 'failed' ? 'var(--danger)' : s === 'taken' ? 'var(--ok)' : 'var(--text-faint)');
 
@@ -182,6 +198,8 @@
       <button class="glass panel action-tile" aria-label="Open files…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void openDialog(false)}><Icon kind="files" /><span><strong>Open files</strong><small>Open images or session CSVs</small></span></button>
       <button class="glass panel action-tile" aria-label="Upload LA-ICP-MS session…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-controls="home-upload-sessions" onclick={() => startUpload('sessions')}><Icon kind="session" /><span><strong>Upload LA-ICP-MS session</strong><small>Import a session, then Review</small></span></button>
       <button class="glass panel action-tile" aria-label="Upload image set…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-controls="home-upload-images" onclick={() => startUpload('images')}><Icon kind="images" /><span><strong>Upload image set</strong><small>Publish mount images, then Review</small></span></button>
+      <button class="glass panel action-tile" aria-label="Laser log" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : 'Tie a .lase file to its sessions'} onclick={() => void chooseLaser()}><Icon kind="laser" /><span><strong>Laser log</strong><small>Tie a .lase file to its sessions</small></span></button>
+      {#if !isDesktop}<input bind:this={laserInput} aria-label="Laser log file" type="file" accept=".lase" hidden onchange={laserChosen} />{/if}
     </div>
     <nav class="row records-nav" aria-label="Home view">
       <button class="chip" aria-pressed={!recordsOpen} onclick={() => chooseView('overview')}>Overview</button>

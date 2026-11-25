@@ -148,3 +148,22 @@ describe('fromFileList', () => {
     expect(classify(set.roots, set.entries).target).toBe('images');
   });
 });
+
+describe('laser logs', () => {
+  it('routes exactly one loose laser log, case-insensitively', () => {
+    expect(classify([file('day.LASE')], [e(0, 'day.LASE', 12)])).toEqual({
+      target: 'sessions', kind: 'lase', name: 'day.LASE', picks: [{ index: 0, path: 'day.LASE' }], bytes: 12, path: '/data/day.LASE',
+    });
+  });
+  it('refuses several laser log roots', () => {
+    expect(classify([file('a.lase'), file('b.lase')], [e(0, 'a.lase'), e(1, 'b.lase')])).toEqual({ target: null, reason: 'Open one laser log at a time.' });
+  });
+  it('preserves Qtegra classification for folders and mixed loose files', () => {
+    const folder = classify([dir('export')], [...qtegra, e(0, 'day.lase')]);
+    expect(folder).toMatchObject({ target: 'sessions', kind: 'export' });
+    if (folder.target) expect(folder.picks).toHaveLength(qtegra.length);
+    expect(classify([file('a.csv'), file('day.lase')], [e(0, 'a.csv'), e(1, 'day.lase')])).toMatchObject({ target: 'sessions', kind: 'csv', picks: [{ index: 0, path: 'a.csv' }] });
+    expect(classify([dir('logs')], [e(0, 'day.lase')]).target).toBeNull();
+    expect(classify([dir('area')], [e(0, 'a.jpg'), e(0, 'day.lase')])).toMatchObject({ target: 'images', kind: 'area' });
+  });
+});

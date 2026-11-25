@@ -302,3 +302,12 @@ it('centres a hosted GrainAtlas grain when no spot is supplied and clears stale 
   expect(url.searchParams.has('spot')).toBe(false);
   vi.unstubAllGlobals();
 });
+
+it('routes laser log list, file and tie links with only known query parameters', () => {
+  expect(resolve('upbdb://laser-logs')).toMatchObject({ kind: 'tab', tab: 'sessions', route: '/app/laser-logs' });
+  expect(resolve('upbdb://laser-logs?path=%2Flab%2Fday%20one.lase&other=1')).toMatchObject({ route: '/app/laser-logs?path=%2Flab%2Fday%20one.lase' });
+  expect(resolve('upbdb://laser-log/log-1?tie=1&other=1')).toMatchObject({ route: '/app/laser-logs/log-1?tie=1' });
+  expect(resolve('upbdb://laser-log/log-1')).toMatchObject({ route: '/app/laser-logs/log-1' });
+  expect(resolve('upbdb://laser-logs?path=%00bad').kind).toBe('refused');
+  expect(resolve('upbdb://laser-log/a%2Fb').kind).toBe('refused');
+});

@@ -220,3 +220,16 @@ it('keeps a submitted run version across the first Home list load and later reva
   await overview.load({ force: true });
   expect(overview.sessions[0].preferred).toMatchObject({ id: 'new-preferred', pipeline_version: '0.3.0' });
 });
+
+it('keeps optional laser summaries from list rows without any detail request', async () => {
+  const rows = [
+    { id: 'laser', session_key: 'Invented tied', material: 'zircon', started_at: null, acquisition_count: 2, run_count: 0, laser_log_count: 1, laser_has_times: true },
+    { id: 'older', session_key: 'Invented older', material: 'apatite', started_at: null, acquisition_count: 1, run_count: 0 },
+  ];
+  get.mockImplementation(async path => ({ status: 200, body: path.startsWith('/v1/sessions') ? rows : [] }));
+  await overview.load({ force: true });
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(overview.sessions[0].session).toMatchObject({ laser_log_count: 1, laser_has_times: true });
+  expect(overview.sessions[1].session.laser_log_count).toBeUndefined();
+  expect(overview.sessions[1].session.laser_has_times).toBeUndefined();
+});
