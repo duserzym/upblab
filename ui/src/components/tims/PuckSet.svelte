@@ -2,6 +2,7 @@
   import { statusWords, type BatchDetail, type FractionStepRecord } from '../../lib/tims-api';
   import { capsulePucks, puckSlotCoordinates, sourceSpotNames, type MountGeometry } from '../../lib/tims-geometry';
   import { capsulePreparations, readCapsulePreparation } from '../../lib/tims-capsule-intake';
+  import { batchReadiness } from '../../lib/tims-readiness';
   import GrainImage from './GrainImage.svelte';
 
   let { batch, geometry, geometryError, selected, onselect, compact = false }: {
@@ -9,6 +10,8 @@
     compact?: boolean; selected: number | null; onselect: (position: number) => void;
   } = $props();
 
+  const readiness = $derived(batchReadiness(batch));
+  const readinessByPosition = $derived(new Map(readiness.capsules.map(c => [c.capsule_number, c])));
   const pucks = $derived(capsulePucks(batch.capsule_set.positions, batch.capsule_set.positions_per_puck));
   const fractions = $derived(new Map(batch.fractions.map(f => [f.id, f])));
   const methods = $derived(new Map(batch.steps.map(s => [s.id, s.method_code])));
@@ -52,6 +55,7 @@
               {:else}<span class="empty-mark" aria-hidden="true">+</span>{/if}
             </span>
             <strong>{label}</strong>
+            <span class="readiness-mark" title={`${label}: grain ${readinessByPosition.get(position)?.grain ? 'complete' : 'pending'} · spike ${readinessByPosition.get(position)?.spike ? 'complete' : 'pending'}`}>G {readinessByPosition.get(position)?.grain ? '✓' : '·'} S {readinessByPosition.get(position)?.spike ? '✓' : '·'}</span>
           </button>
         {/each}
       </div>
@@ -67,11 +71,8 @@
   .compact .positions.ring { --well-size: 32px; }
   .compact .caption { gap: 2px; margin-top: 4px; }
   .compact .caption span { font-size: .65rem; }
-  @media (max-width: 1279px) {
-    .compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
-    .compact .puck { max-width: 104px; }
-    .compact .positions.ring { --well-size: 30px; }
-  }
+  .readiness-mark { width: 46px; height: 12px; font-size: .55rem; white-space: nowrap; }
+  .compact .puck { width: 116px; min-height: 150px; }
   .puck { min-width: 0; width: 100%; max-width: 226px; justify-self: center; }
   .positions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(48px, 100%), 1fr)); gap: 4px; padding: var(--space-2); border-radius: var(--radius); background: var(--row-hover); }
   .positions.ring { --well-size: 38px; position: relative; display: block; isolation: isolate; aspect-ratio: 1; padding: 0; background: none; }

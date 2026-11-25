@@ -20,11 +20,14 @@ export type ColumnScheme = 'HCl anion' | 'HBr-HCl';
 export interface ColumnProtocolOut extends BaseOut { lab_id: string; scheme: ColumnScheme; title: string; text: string; attribution: string; source_url: string; revision: number }
 export type ColumnProtocolInput = Pick<ColumnProtocolOut, 'lab_id' | 'scheme' | 'title' | 'text' | 'attribution' | 'source_url'>;
 export type ColumnProtocolPatch = Partial<Pick<ColumnProtocolOut, 'title' | 'text' | 'attribution' | 'source_url'>> & { revision: number };
-export interface BatchOut extends BaseOut { lab_id: string; capsule_set_id: string; started_on: string; operator_id: string | null; operator_name: string; recipe_id: string | null; recipe_snapshot: RecipeStep[]; recipe_name?: string | null; fraction_count?: number; capsule_set_name?: string; capsule_set_code?: string; notes: string; retired_at: string | null }
+export interface BatchOut extends BaseOut { lab_id: string; capsule_set_id: string; started_on: string; operator_id: string | null; operator_name: string; recipe_id: string | null; recipe_snapshot: RecipeStep[]; recipe_name?: string | null; fraction_count?: number; capsule_set_name?: string; capsule_set_code?: string; notes: string; retired_at: string | null; completed_at?: string | null; completed_by_name?: string | null }
 export interface ParameterDefinition { name: string; config_key?: string; meaning?: string; unit?: string | null; type?: string; choices?: (string | number | { value: string | number; label?: string })[]; default?: unknown; min?: number; max?: number; required?: boolean; scope?: 'batch' | 'fraction'; role?: 'parameter' | 'outcome' }
 export interface StepOut extends BaseOut { batch_id: string; ordinal: number; method_code: string; method_name: string; parameters: Parameters; parameter_definitions: ParameterDefinition[]; performed_on: string | null; notes: string }
 export interface FractionStepRecord extends BaseOut { fraction_id: string; step_id: string; parameters: Parameters; skipped: boolean; outcome: string; outcome_note: string }
-export interface SpikeAddition extends BaseOut { fraction_id: string; step_id: string; spike_version_id: string; spike_weight_g: string; bottle_before_g: string | null; bottle_after_g: string | null; bottle_difference_g: string | null; notes: string; warnings: string[] }
+export interface SpikeAddition extends BaseOut { fraction_id: string; step_id: string; spike_version_id: string; spike_weight_g: string; bottle_before_g: string | null; bottle_after_g: string | null; bottle_difference_g: string | null; notes: string; warnings: string[]; weighed_by_id?: string | null; weighed_by_name?: string; weighed_by_display_name?: string | null; weighed_at?: string; balance_readability_g?: string | null; weight_uncertainty_g?: string | number | null; tracer?: TracerAmount[] }
+export interface TracerAmount { isotope: string; mol: number; mol_u1s: number | null; basis: 'concentration' | 'ratio'; ratio?: string; uncertainty_incomplete?: boolean }
+export interface CapsuleReadiness { capsule_number: number; fraction_id: string; capsule_label?: string | null; fraction_name?: string; grain: boolean; spike: boolean; missing: string[] }
+export interface BatchReadiness { capsules: CapsuleReadiness[]; totals: { capsules: number; grain: number; spike: number; ready: number; pending: number } }
 export type VersionStatus = 'current' | 'superseded' | 'withdrawn';
 export interface CompactVersion { id: string; version: string; status: VersionStatus; source: string; source_display: string; content_sha256: string; calibrated?: string }
 export interface SpikeSubfraction extends BaseOut { lab_id: string | null; origin: string; sub_id: string; name: string; notes: string; versions: CompactVersion[] }
@@ -32,7 +35,7 @@ export interface SpikeSolution extends BaseOut { registry_id: string; name: stri
 export interface CompositionValue { value: number; unit?: 'mol/g'; uncertainty?: number; uncertainty_type?: '1sd_rel_pct' | '2sd_rel_pct' | '1sd_abs' | '2sd_abs' }
 export interface Composition { concentrations: Record<string, CompositionValue>; ratios: Record<string, CompositionValue> }
 export interface VersionOut extends BaseOut { solution_id: string; registry_id: string; solution_name: string; subfraction_id: string; subfraction: string; subfraction_name: string; version: string; status: VersionStatus; supersedes_id: string | null; calibrated: string; source: string; source_display: string; locator: string; notes: string; composition: Composition; content_sha256: string; registry_revision: string; is_current: boolean }
-export interface BatchDetail extends BatchOut { capsule_set: CapsuleOut; steps: StepOut[]; capsule_map: Record<string, string | null>; fractions: FractionOut[]; fraction_step_records: FractionStepRecord[]; spikes: SpikeAddition[]; spike_versions: Record<string, VersionOut> }
+export interface BatchDetail extends BatchOut { capsule_set: CapsuleOut; steps: StepOut[]; capsule_map: Record<string, string | null>; fractions: FractionOut[]; fraction_step_records: FractionStepRecord[]; spikes: SpikeAddition[]; spike_versions: Record<string, VersionOut>; readiness?: BatchReadiness }
 export interface PickNoteRequest { text: string; lab_id: string; first_line?: number; last_line?: number; filename?: string; started_on?: string }
 export interface PickNoteLine { number: number; text: string; kind: 'date' | 'set_heading' | 'sample_heading' | 'pick' | 'ignored'; parsed: Parameters; resolved: Parameters; status: 'ok' | 'refused' | 'skipped' | 'ignored'; code: string; message: string; refusals: { code: string; message: string }[]; normalisations: string[] }
 export interface PickNotePlan { lab_id: string; filename: string; first_line: number; last_line: number; lines: PickNoteLine[]; summary: Record<string, number>; batches: { set_id: string; started_on: string; action: 'create' | 'reuse'; id: string | null; recipe: Parameters | null; explanation?: string }[] }
@@ -48,7 +51,7 @@ export type BatchInput = Pick<BatchOut, 'capsule_set_id' | 'started_on'> & Parti
 export type BatchPatch = Partial<Pick<BatchOut, 'started_on' | 'operator_id' | 'operator_name' | 'notes' | 'retired_at'>>;
 export interface StepInput { method_code: string; parameters?: Parameters; performed_on?: string | null; notes?: string }
 export interface RecordInput { parameters?: Parameters; skipped?: boolean; outcome?: string; outcome_note?: string }
-export interface SpikeInput { spike_version_id?: string; spike_weight_g: string; bottle_before_g?: string | null; bottle_after_g?: string | null; notes?: string }
+export interface SpikeInput { spike_version_id?: string; spike_weight_g: string; bottle_before_g?: string | null; bottle_after_g?: string | null; notes?: string; weighed_by_id?: string | null; weighed_by_name?: string; weighed_at?: string; balance_readability_g?: string | null; expected_updated_at?: string | null }
 export interface VersionInput { lab_id?: string; subfraction?: string; subfraction_name?: string; version: string; supersedes_id?: string | null; status?: VersionStatus; calibrated?: string; source?: string; source_display?: string; locator?: string; notes?: string; composition: Composition }
 export interface SolutionInput { lab_id: string; registry_id: string; name: string; spike_type: string; aliases?: string[]; isotopes?: string[]; description?: string; first_version: VersionInput }
 export interface ListPage<T> { items: T[]; nextCursor: string | null; more(): Promise<ListPage<T> | null> }
@@ -103,7 +106,7 @@ function edit(objectKey: string, path: string, body: unknown, method: 'PATCH' | 
   return outbox.enqueue({ objectKey, path, body, method });
 }
 /** Retain one form per exact input across manual retries; changing input needs a new form/key. */
-export function onlineForm<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown, objectKey?: string) {
+export function onlineForm<T>(path: string, method: 'POST' | 'PATCH' | 'DELETE' | 'PUT', body?: unknown, objectKey?: string) {
   const source = () => JSON.stringify([identity.target?.server, identity.account?.id ?? identity.account?.username, identity.revision]);
   const owner = source(), idempotencyKey = crypto.randomUUID(), payload = body === undefined ? undefined : structuredClone(body);
   return { idempotencyKey, get disabledReason() { return onlineOnlyReason(); }, send: async () => {
@@ -157,6 +160,13 @@ export const tims = {
   patchColumnProtocol: (protocol: string, body: ColumnProtocolPatch) => protocolForm(`/v1/tims/column-protocols/${id(protocol)}`, 'PATCH', body, `column-protocol:${protocol}`),
   batches: (filters: Record<string, string> = {}) => firstPage<BatchOut>('/v1/tims/batches', filters),
   batch: (batch: string) => read<BatchDetail>(batchPath(batch)),
+  completeBatch: (batch: string) => onlineForm<BatchDetail>(`${batchPath(batch)}/complete`, 'POST', {}, `batch:${batch}`),
+  reopenBatch: (batch: string) => onlineForm<BatchDetail>(`${batchPath(batch)}/reopen`, 'POST', {}, `batch:${batch}`),
+  /** Before/after history of a fraction's spike additions (newest first); null on servers without it. */
+  spikeHistory: async (fraction: string) => {
+    try { return await firstPage<HistoryRow>(`/v1/fractions/${id(fraction)}/spikes/history`, { limit: '50' }); }
+    catch (error) { if (error instanceof TimsReadError && error.status === 404) return null; throw error; }
+  },
   createBatch: (body: BatchInput) => onlineForm<BatchDetail>('/v1/tims/batches', 'POST', body),
   patchBatch: (batch: string, body: BatchPatch) => edit(`batch:${batch}`, batchPath(batch), body),
   createStep: (batch: string, body: StepInput) => onlineForm<StepOut>(`${batchPath(batch)}/steps`, 'POST', body),
@@ -164,7 +174,6 @@ export const tims = {
   deleteStep: (batch: string, step: string) => onlineForm<{ deleted: boolean }>(stepPath(batch, step), 'DELETE', undefined, `batch:${batch}`),
   orderSteps: (batch: string, step_ids: string[]) => edit(`batch:${batch}`, `${batchPath(batch)}/steps/order`, { step_ids }, 'PUT'),
   putRecord: (batch: string, fraction: string, step: string, body: RecordInput) => edit(`batch:${batch}`, recordPath(batch, fraction, step), body, 'PUT'),
-  putSpike: (batch: string, fraction: string, step: string, body: SpikeInput) => edit(`batch:${batch}`, `${recordPath(batch, fraction, step)}/spike`, body, 'PUT'),
   spikes: (filters: Record<string, string> = {}) => firstPage<SpikeSolution>('/v1/tims/spikes', filters),
   version: (version: string) => read<VersionOut>(`/v1/tims/spikes/versions/${id(version)}`),
   createSpike: (body: SolutionInput) => onlineForm<SpikeSolution>('/v1/tims/spikes', 'POST', body),

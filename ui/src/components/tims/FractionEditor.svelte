@@ -1,25 +1,28 @@
 <script lang="ts">
   import { untrack, onDestroy } from 'svelte';
-  import { tims, statusWords, parameterSummary, type BatchDetail, type FractionOut, type FractionStatus, type StepOut, type Parameters, type SourceOut } from '../../lib/tims-api';
-  import { fractionStatuses, choices, effectiveParameters, parameterDefinitions, parameterKey, validateParameters } from '../../lib/tims-model';
+  import { tims, statusWords, parameterSummary, type BatchDetail, type FractionOut, type FractionStatus, type StepOut, type Parameters, type SourceOut, type SpikeInput, type SpikeAddition } from '../../lib/tims-api';
+  import { choices, effectiveParameters, parameterDefinitions, parameterKey, validateParameters } from '../../lib/tims-model';
   import { isDesktop } from '../../lib/platform';
   import { shell } from '../../lib/shell.svelte';
   import { sourceNames, type MountGeometry } from '../../lib/tims-geometry';
-  import { ReplyScope } from '../../lib/tims-requests';
-  import { columnProtocol, readCapsuleNotes, readColumnNotes, validMass, writeCapsuleNotes, writeColumnNotes } from '../../lib/tims-protocol';
-  import { laterWeighing, latestBottleReading, readSpikingSession, repeatedBottleLoss, spikeMassUsed, spikingSessionId, usesBottle } from '../../lib/tims-spiking';
-  import { onlineOnlyReason } from '../../lib/outbox.svelte';
+  import { OnlineAction, ReplyScope } from '../../lib/tims-requests';
+  import { columnProtocol, readCapsuleNotes, readColumnNotes, writeCapsuleNotes, writeColumnNotes } from '../../lib/tims-protocol';
+  import { laterWeighing, latestBottleReading, readSpikingSession, spikingSessionId } from '../../lib/tims-spiking';
+  import { outbox, onlineOnlyReason } from '../../lib/outbox.svelte';
   import { readCapsulePreparation, writeCapsulePreparation } from '../../lib/tims-capsule-intake';
   import GrainImage from './GrainImage.svelte';
   import ParameterFields from './ParameterFields.svelte';
-  import SpikePicker from './SpikePicker.svelte';
+  import { stableScroll } from '../../lib/tims-scroll';
+  import RequiredSpike from './RequiredSpike.svelte';
+  import { fractionStatusReadiness, timsError } from '../../lib/tims-readiness';
   import { labProtocol, labProtocols, useLabProtocols } from '../../lib/tims-lab-protocols.svelte';
   import ColumnProtocol from './ColumnProtocol.svelte';
 
-  let { batch, fraction, editable, geometry, geometryError = '', activeStep, onstep, onbatchstep, onpick, onreplace, onrefine, createSpikeStep }: {
+  let { batch, fraction, editable, geometry, geometryError = '', activeStep, onstep, onbatchstep, onpick, onreplace, onrefine, createSpikeStep, onspike }: {
     batch: BatchDetail; fraction: FractionOut; editable: boolean; geometry: Record<string, MountGeometry>; geometryError?: string;
     activeStep: string; onstep: (id: string) => void; onbatchstep: (id: string) => void; onpick: () => void;
     onreplace: (source: SourceOut) => void; onrefine: (source: SourceOut) => Promise<void>;
+    onspike: (row: SpikeAddition) => void;
     createSpikeStep: (session: StepOut) => Promise<StepOut>;
   } = $props();
   const uid = $props.id();
@@ -27,15 +30,19 @@
   const replaceSource = $derived(fraction.sources.find(s => !s.retired_at && s.id === replaceSourceId) ?? fraction.sources.find(s => !s.retired_at));
   useLabProtocols(() => batch.lab_id);
   let status = $state<FractionStatus>(untrack(() => fraction.status)), notes = $state(untrack(() => readCapsulePreparation(fraction.notes).notes));
+  const statusReadiness = $derived(fractionStatusReadiness(batch.spikes, fraction.id));
+  const rejected = $derived(outbox.entries.find(entry => entry.stopped && (entry.objectKey === `fraction:${fraction.id}` || entry.objectKey === `batch:${batch.id}`) && ['spike_required', 'batch_completed'].includes(entry.errorCode ?? '')));
   const preparation = $derived(readCapsulePreparation(fraction.notes).preparation);
   const isBlank = $derived(preparation === 'lab-blank');
   let error = $state(''), busy = $state(false), feedback = $state('');
   let overrides = $state.raw<Parameters>({}), skipped = $state(false), outcome = $state(''), outcomeNote = $state('');
   let date = $state(''), protocolDraft = $state('');
-  let version = $state(''), bottleChoice = $state(''), weight = $state(''), before = $state(''), after = $state(''), spikeNotes = $state('');
+  let bottleChoice = $state('');
+  let spikeCanSave = $state(false);
   let repeatDraft = $state(false);
   const replies = new ReplyScope(() => [batch.id, fraction.id]);
   let formGeneration = 0;
+  const spikeSave = new OnlineAction<SpikeAddition>();
   onDestroy(() => replies.invalidate());
 
   const step = $derived(batch.steps.find(s => s.id === activeStep));
@@ -70,24 +77,20 @@
   const emptyRepeat = $derived(sessionSteps.find(s => s.id !== sessionStep?.id && !recordSteps.has(s.id)));
   const session = $derived(sessionStep ? readSpikingSession(sessionStep.notes) : null);
   const additionVersion = $derived(addition ? batch.spike_versions[addition.spike_version_id] : undefined);
-  const legacySpike = $derived(!!addition && !(addition.bottle_before_g && addition.bottle_after_g));
   const bottle = $derived(session?.bottles.find(row => addition
     ? row.versionId === addition.spike_version_id || row.bottleId === additionVersion?.subfraction_id
     : row.bottleId === bottleChoice) ?? (!addition && !bottleChoice && session?.bottles.length === 1 ? session.bottles[0] : undefined));
   const latest = $derived(step && (bottle || addition) ? latestBottleReading(batch.spikes, sessionStepIds, bottle ?? {
     bottleId: additionVersion?.subfraction_id ?? '', versionId: addition!.spike_version_id, label: '', before: '',
   }, batch.spike_versions) : undefined);
-  const capsuleBottleTotal = $derived(bottle && addition ? repeatedBottleLoss(batch.spikes.filter(row =>
-    sessionStepIds.has(row.step_id) && row.fraction_id === fraction.id && usesBottle(row, bottle, batch.spike_versions))) : '');
   const historicalSpike = $derived(!!addition && !!latest && laterWeighing(latest, addition));
   const startWeight = $derived(addition?.bottle_before_g ?? (addition ? '' : latest?.bottle_after_g ?? bottle?.before ?? ''));
-  const usedWeight = $derived(addition && (historicalSpike || after.trim() === addition.bottle_after_g)
-    ? addition.spike_weight_g : spikeMassUsed(startWeight, after.trim()));
   const spikeKeys = ['spike_weight_g', 'bottle_before_g', 'bottle_after_g'];
 
   $effect(() => {
-    const id = activeStep;
+    const id = activeStep; void fraction.id;
     untrack(() => {
+      status = fraction.status; notes = readCapsulePreparation(fraction.notes).notes;
       formGeneration++;
       busy = false;
       error = '';
@@ -107,12 +110,7 @@
 
   function resetSpikeForm(repeat: boolean) {
     repeatDraft = repeat;
-    version = addition?.spike_version_id ?? String(overrides.spike_version ?? sessionStep?.parameters.spike_version ?? '');
-    bottleChoice = session?.bottles.find(row => row.versionId === version)?.bottleId ?? '';
-    weight = addition?.spike_weight_g ?? '';
-    before = addition?.bottle_before_g ?? '';
-    after = addition?.bottle_after_g ?? '';
-    spikeNotes = addition?.notes ?? '';
+    bottleChoice = session?.bottles.find(row => row.versionId === addition?.spike_version_id)?.bottleId ?? '';
     error = '';
     feedback = '';
   }
@@ -126,7 +124,7 @@
       await action();
       if (settled()) feedback = 'Saved here.';
     } catch (e) {
-      if (settled()) error = String(e);
+      if (settled()) error = timsError(e);
     } finally {
       if (settled()) busy = false;
     }
@@ -142,33 +140,20 @@
     }));
   }
 
-  async function saveSpike() {
-    if (!step) return;
-    const end = after.trim();
-    const versionId = legacySpike && !historicalSpike ? version : addition?.spike_version_id ?? bottle?.versionId;
-    const used = legacySpike && !historicalSpike ? weight.trim() : usedWeight;
-    const start = historicalSpike ? addition!.bottle_before_g : legacySpike ? before.trim() : startWeight;
-    const final = historicalSpike ? addition!.bottle_after_g : end;
-    if (!versionId) { error = 'Choose a spike bottle for this capsule.'; return; }
-    if (!validMass(used)) { error = legacySpike ? 'Enter a positive spike weight in grams.' : 'Enter an ending weight below the starting weight, with up to 12 decimal places.'; return; }
-    if (!historicalSpike && [start, final].some(value => value && !validMass(value))) { error = 'Enter positive decimal bottle weights in grams.'; return; }
-    const body = {
-      spike_version_id: versionId, spike_weight_g: used, bottle_before_g: start || null, bottle_after_g: final || null, notes: spikeNotes,
-    };
-    const isRepeat = repeatDraft;
-    const batchId = batch.id, fractionId = fraction.id, previous = step.id, reusable = emptyRepeat, root = sessionStep!;
+  async function saveSpike(body: SpikeInput): Promise<SpikeAddition> {
+    if (!step || !sessionStep) throw new Error('Choose a spiking step first.');
     const current = replies.capture(() => [activeStep, repeatDraft]);
-    await run(async () => {
-      const stepId = isRepeat ? (reusable ?? await createSpikeStep(root)).id : previous;
-      if (batch.id !== batchId) return;
-      await tims.putSpike(batchId, fractionId, stepId, body);
-      if (isRepeat && current()) onstep(stepId);
-    });
+    const batchId = batch.id, fractionId = fraction.id;
+    const target = repeatDraft ? (emptyRepeat ?? await createSpikeStep(sessionStep)).id : step.id;
+    const row = await spikeSave.send(`/v1/tims/batches/${encodeURIComponent(batchId)}/fractions/${encodeURIComponent(fractionId)}/steps/${encodeURIComponent(target)}/spike`, 'PUT', body, `batch:${batchId}`);
+    if (repeatDraft && current()) { onspike(row); onstep(target); }
+    return row;
   }
+
 </script>
 
 <div class="stack fraction-editor">
-  <div class="fraction-scroll stack">
+  <div class="fraction-scroll stack" use:stableScroll={`${batch.id}:capsule`}>
   <div class="picker-steps" role="group" aria-label="Capsule navigation">
     <button class="btn small" type="button" aria-pressed={!activeStep} onclick={() => onstep('')}>{preparation ? 'Capsule record' : 'Sources'}</button>
     {#if batch.steps.length}
@@ -228,10 +213,11 @@
     </section>
     <details class="details" ontoggle={event => statusOpen = event.currentTarget.open}>
       <summary>Fraction status and notes</summary>
-      <form id={`${uid}-status`} class="stack" onsubmit={e => { e.preventDefault(); void run(() => tims.patchFraction(fraction.id, { status, notes: writeCapsulePreparation(preparation, notes) })); }}>
-        <label>Status <select bind:value={status} disabled={!editable || busy}>{#each fractionStatuses as s}<option value={s}>{statusWords(s)}</option>{/each}</select></label>
+      {#if statusOpen}<form id={`${uid}-status`} class="stack" onsubmit={e => { e.preventDefault(); void run(() => { if (statusReadiness.options.some(option => option.value === status && option.disabled)) throw new Error(statusReadiness.message); return tims.patchFraction(fraction.id, { status, notes: writeCapsulePreparation(preparation, notes) }); }); }}>
+        <label>Status <select aria-label="Status" aria-describedby={statusReadiness.message ? `${uid}-spike-required` : undefined} bind:value={status} disabled={!editable || busy}>{#each statusReadiness.options as option (option.value)}<option value={option.value} disabled={option.disabled}>{statusWords(option.value)}</option>{/each}</select></label>
+        {#if statusReadiness.message}<p id={`${uid}-spike-required`} class="small muted">{statusReadiness.message}</p>{/if}
         <label>Fraction notes <textarea rows="3" bind:value={notes} disabled={!editable || busy}></textarea></label>
-      </form>
+      </form>{/if}
     </details>
   {:else}
     {#key activeStep}
@@ -252,57 +238,11 @@
             {#if repeatDraft}<strong class="small">New spike entry</strong>{/if}
           </div>
         {/if}
-        {#if addition || session?.bottles.length}
-          <form id={`${uid}-spike`} class="stack spike-form" onsubmit={e => { e.preventDefault(); void saveSpike(); }}>
-            {#if !addition}
-              <label>Spike bottle
-                <select value={bottle?.bottleId ?? ''} required disabled={!editable || busy}
-                  onchange={e => { bottleChoice = e.currentTarget.value; after = ''; }}>
-                  <option value="" disabled>Choose a session bottle</option>
-                  {#each session?.bottles ?? [] as row (row.bottleId)}<option value={row.bottleId}>{row.label}</option>{/each}
-                </select>
-              </label>
-            {/if}
-            {#if legacySpike && !historicalSpike}
-              <SpikePicker knownVersions={batch.spike_versions} value={version} onchange={v => version = v} disabled={!editable || busy} lab={batch.lab_id} showComposition />
-              <label>Recorded spike weight (g) <input type="text" inputmode="decimal" bind:value={weight} required disabled={!editable || busy} /></label>
-              <details class="details">
-                <summary>Earlier bottle readings</summary>
-                <label>Bottle before this capsule (g) <input type="text" inputmode="decimal" bind:value={before} disabled={!editable || busy} /></label>
-                <label>Bottle after this capsule (g) <input type="text" inputmode="decimal" bind:value={after} disabled={!editable || busy} /></label>
-              </details>
-            {:else if addition || bottle}
-              <SpikePicker knownVersions={batch.spike_versions} value={addition?.spike_version_id ?? bottle?.versionId} lab={batch.lab_id} showComposition />
-              <div class="weighing">
-                <div class="start-weight">
-                  <span class="small muted">Bottle before this capsule</span>
-                  <strong>{startWeight ? `${startWeight} g` : 'Unrecorded'}</strong>
-                </div>
-                <label>Bottle after this capsule (g) <input type="text" inputmode="decimal" bind:value={after} required disabled={!editable || busy || historicalSpike} /></label>
-              </div>
-              <p>Spike used from bottle · <output><strong>{usedWeight ? `${usedWeight} g` : '—'}</strong></output></p>
-              {#if capsuleBottleTotal}<p class="small">Recorded loss from this bottle across entries · <strong>{capsuleBottleTotal} g</strong></p>{/if}
-              {#if historicalSpike}<p class="small muted">A later capsule uses this reading as a starting weight. The comment can still be edited.</p>{/if}
-              {#if after.trim() && !usedWeight}
-                <p class="small warning">{validMass(after.trim()) ? 'The ending weight must be below the starting weight.' : 'Enter the full weight in grams, with up to 12 decimal places.'}</p>
-              {/if}
-              {#if addition?.bottle_difference_g && addition.bottle_difference_g !== addition.spike_weight_g && after === addition.bottle_after_g}
-                <p class="small">Recorded bottle difference · {addition.bottle_difference_g} g</p>
-              {/if}
-            {/if}
-            {#if addition?.warnings.includes('spike_version_not_current')}<p class="warning">The recorded spike version is no longer current.</p>{/if}
-            <label>Spike comment <textarea rows="2" bind:value={spikeNotes} disabled={!editable || busy} placeholder="Missed drops, repeat additions, or other observations"></textarea></label>
-            <div class="row">
-              {#if repeatDraft}<button class="btn" type="button" disabled={busy} onclick={() => resetSpikeForm(false)}>Cancel entry</button>
-              {:else if addition && session?.bottles.length && editable}
-                <button class="btn" type="button" disabled={busy || !emptyRepeat && !!onlineOnlyReason()}
-                  title={emptyRepeat ? undefined : onlineOnlyReason()} onclick={() => resetSpikeForm(true)}>Add another spike entry</button>
-              {/if}
-            </div>
-          </form>
-        {:else}
-          <p class="small muted">Use Spiking session to set the beginning weight for each bottle.</p>
-        {/if}
+        {#key `${fraction.id}:${activeStep}:${repeatDraft}`}
+          <RequiredSpike {batch} {addition} bottles={(session?.bottles ?? []).map(bottle => ({ ...bottle, before: latestBottleReading(batch.spikes, sessionStepIds, bottle, batch.spike_versions)?.bottle_after_g ?? bottle.before }))} {startWeight} historical={historicalSpike} {editable} formId={`${uid}-spike`} onstate={canSave => spikeCanSave = canSave} onsave={saveSpike} onaccept={onspike} />
+        {/key}
+        {#if repeatDraft}<button class="btn small" type="button" onclick={() => resetSpikeForm(false)}>Cancel entry</button>
+        {:else if addition && editable}<button class="btn small" type="button" disabled={busy || !emptyRepeat && !!onlineOnlyReason()} onclick={() => resetSpikeForm(true)}>Add another spike entry</button>{/if}
         {#if step.id === sessionStep?.id && !repeatDraft}<details class="details" ontoggle={event => recordOpen = event.currentTarget.open}>
           <summary>Spiking step record{skipped ? ' · skipped' : ''}</summary>
           <form id={`${uid}-record`} class="stack" onsubmit={e => { e.preventDefault(); void saveRecord(); }}>
@@ -335,8 +275,7 @@
       {/if}
     {/key}
   {/if}
-  {#if error}<p class="error" role="status">{error}</p>{/if}
-  {#if feedback}<p class="small muted" role="status">{feedback}</p>{/if}
+  <p class="status-line small" class:error={!!error} role="status">{error || (rejected ? timsError({ code: rejected.errorCode, status: rejected.lastStatus }) : feedback)}</p>
   </div>
   <div class="actions row" role="group" aria-label="Capsule actions">
     {#if !step}
@@ -351,7 +290,7 @@
       {/if}
       {#if statusOpen}<button class="btn small" form={`${uid}-status`} disabled={!editable || busy}>Save fraction here</button>{/if}
     {:else if spiking}
-      {#if addition || session?.bottles.length}<button class="btn primary small" form={`${uid}-spike`} disabled={!editable || busy || !addition && !usedWeight}>Save spike here</button>{/if}
+      <button class="btn primary small" form={`${uid}-spike`} disabled={!spikeCanSave}>Save spike here</button>
       {#if recordOpen}<button class="btn small" form={`${uid}-record`} disabled={!editable || busy}>Save capsule record here</button>{/if}
     {:else}<button class="btn primary small" form={`${uid}-record`} disabled={!editable || busy}>Save capsule record here</button>{/if}
   </div>
@@ -359,9 +298,10 @@
 
 <style>
   .fraction-editor { gap: 0; }
-  .fraction-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 2px; gap: var(--space-2); }
+  .fraction-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overflow-anchor: none; padding: 2px; gap: var(--space-2); }
   .fraction-scroll > :global(*) { flex-shrink: 0; }
-  .actions { flex-shrink: 0; border-top: 1px solid var(--hairline); padding-top: var(--space-2); gap: 4px; background: var(--bg); }
+  .status-line { height: 42px; overflow: auto; }
+  .actions { min-height: 56px; align-content: start; flex-shrink: 0; border-top: 1px solid var(--hairline); padding-top: var(--space-2); gap: 4px; background: var(--bg); }
   .actions select { max-width: 10rem; }
   h4, p { margin: 0; }
   .row { flex-wrap: wrap; }
@@ -381,7 +321,4 @@
   /* Closed details must not leave offscreen form boxes in either engine. */
   .details:not([open]) > :not(summary) { display: none; }
   .details[open] summary { margin-bottom: var(--space-2); }
-  .spike-form { gap: var(--space-2); }
-  .weighing { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(145px, 100%), 1fr)); align-items: stretch; gap: var(--space-2); }
-  .start-weight { display: grid; align-content: center; gap: 4px; padding: var(--space-2); background: var(--accent-soft); border-radius: var(--radius-sm); }
 </style>

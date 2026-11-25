@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { batch, version } from '../../tests/fixtures/tims';
-import { laterWeighing, latestBottleReading, readSpikingSession, repeatedBottleLoss, spikeMassUsed, spikingSessionId, spikingSessionLink, writeSpikingSession } from './tims-spiking';
+import { laterWeighing, latestBottleReading, readSpikingSession, spikeMassUsed, spikingSessionId, spikingSessionLink, writeSpikingSession } from './tims-spiking';
 import type { SessionBottle } from './tims-spiking';
 import { writeSessionNotes } from './tims-protocol';
 
@@ -45,12 +45,4 @@ it('advances each bottle independently across capsule order, versions and repeat
   expect(latestBottleReading(rows, session, two, {})?.bottle_after_g).toBe('41.4900');
   expect(laterWeighing(rows[1], rows[0])).toBe(true);
   expect(laterWeighing(rows[0], rows[1])).toBe(false);
-});
-
-it('totals the measured loss from repeated additions without counting earlier records without both readings', () => {
-  const [saved] = batch.spikes;
-  const first = { ...saved, bottle_before_g: '28.41352', bottle_after_g: '28.40409' };
-  const second = { ...saved, bottle_before_g: '28.4000', bottle_after_g: '28.39693' };
-  expect(repeatedBottleLoss([first, saved])).toBe('');
-  expect(repeatedBottleLoss([first, second, saved])).toBe('0.01250');
 });

@@ -6,6 +6,7 @@ import { identity } from './identity.svelte';
 import { outbox, onlineOnlyReason } from './outbox.svelte';
 import { oversight, READ_ONLY_REASON, WriteError } from './oversight.svelte';
 import { capsuleLabel, firstPage, formatParameter, mineralWords, mountFractions, onlineForm, statusWords, tims } from './tims-api';
+import { OnlineAction } from './tims-requests';
 import { timsFraction } from '../../tests/fixtures/review';
 beforeEach(() => { vi.clearAllMocks(); oversight.reset(); vi.mocked(onlineOnlyReason).mockReturnValue(''); vi.mocked(identity.get).mockResolvedValue({ status: 200, body: [] }); vi.mocked(identity.write).mockResolvedValue({ status: 200, body: { id: 'synthetic' } }); });
 it('returns the first page immediately, retains filters and treats the cursor as opaque data', async () => {
@@ -70,11 +71,11 @@ it('routes every list and detail through the identity cache with bounded pages',
 it('sends all existing-record edits through the durable outbox, serializing batch children under the batch key', async () => {
   await tims.patchFraction('f', { notes: 'local' }); await tims.patchCapsuleSet('c', { active: false }); await tims.patchRecipe('r', { name: 'Synthetic' });
   await tims.patchBatch('b', { notes: 'local' }); await tims.patchStep('b', 's', { parameters: { duration_h: 12 } }); await tims.orderSteps('b', ['s']);
-  await tims.putRecord('b', 'f', 's', { skipped: true }); await tims.putSpike('b', 'f', 's', { spike_weight_g: '0.0001' }); await tims.patchVersion('v', { status: 'superseded' });
+  await tims.putRecord('b', 'f', 's', { skipped: true }); await tims.patchVersion('v', { status: 'superseded' });
   expect(vi.mocked(outbox.enqueue).mock.calls.map(([e]) => [e.objectKey, e.method, e.path])).toEqual([
     ['fraction:f', 'PATCH', '/v1/fractions/f'], ['capsule_set:c', 'PATCH', '/v1/tims/capsule-sets/c'], ['recipe:r', 'PATCH', '/v1/tims/recipes/r'],
     ['batch:b', 'PATCH', '/v1/tims/batches/b'], ['batch:b', 'PATCH', '/v1/tims/batches/b/steps/s'], ['batch:b', 'PUT', '/v1/tims/batches/b/steps/order'],
-    ['batch:b', 'PUT', '/v1/tims/batches/b/fractions/f/steps/s'], ['batch:b', 'PUT', '/v1/tims/batches/b/fractions/f/steps/s/spike'], ['spike_version:v', 'PATCH', '/v1/tims/spikes/versions/v'],
+    ['batch:b', 'PUT', '/v1/tims/batches/b/fractions/f/steps/s'], ['spike_version:v', 'PATCH', '/v1/tims/spikes/versions/v'],
   ]); expect(identity.write).not.toHaveBeenCalled();
 });
 it('routes every online-only operation with a form key, and preserves that key and exact body across manual retries', async () => {
@@ -189,4 +190,36 @@ it('filters a 5000-row invented protocol catalog to a single bounded lab request
   const page = await tims.columnProtocols({ lab: 'invented-lab-100', limit: '2' });
   expect(page.items).toHaveLength(2); expect(identity.get).toHaveBeenCalledTimes(1);
   console.info(`TIMS protocols catalog: 5000 invented rows, 1 bounded filtered request (previously 0), ${(performance.now() - start).toFixed(1)} ms (mock network).`);
+});
+it('spike PUT pins expected revision, exposes conflicts immediately, and never enters the outbox', async () => {
+  const current = { id: 'addition', spike_weight_g: '0.02', updated_at: 'newer' };
+  const body = { spike_version_id: 'version', spike_weight_g: '0.01', expected_updated_at: 'older', balance_readability_g: '0.00001', weighed_by_name: 'Invented analyst' };
+  vi.mocked(identity.write).mockRejectedValueOnce(new WriteError(409, { code: 'spike_changed', current }, 'HTTP 409 spike changed'));
+  await expect(new OnlineAction().send('/v1/tims/batches/b/fractions/f/steps/s/spike', 'PUT', body, 'batch:b')).rejects.toMatchObject({ status: 409, code: 'spike_changed', body: { current } });
+  expect(identity.write).toHaveBeenCalledWith('/v1/tims/batches/b/fractions/f/steps/s/spike', 'PUT', body, expect.objectContaining({ idempotencyKey: expect.any(String) }));
+  expect(outbox.enqueue).not.toHaveBeenCalled();
+});
+it('completion and reopen are explicit online operations, with server validation preserved', async () => {
+  await tims.completeBatch('b').send(); await tims.reopenBatch('b').send();
+  expect(vi.mocked(identity.write).mock.calls.map(([path, method]) => [path, method])).toEqual([['/v1/tims/batches/b/complete', 'POST'], ['/v1/tims/batches/b/reopen', 'POST']]);
+  vi.mocked(identity.write).mockRejectedValueOnce(new WriteError(422, { code: 'batch_incomplete', capsules: [{ capsule_number: 1, missing: ['spike'] }] }, 'HTTP 422 batch incomplete'));
+  await expect(tims.completeBatch('b').send()).rejects.toMatchObject({ code: 'batch_incomplete' });
+});
+it('history is lazy, paged and tolerates older servers without the endpoint', async () => {
+  vi.mocked(identity.get).mockResolvedValueOnce({ status: 404, body: {} });
+  expect(await tims.spikeHistory('addition')).toBeNull();
+  expect(vi.mocked(identity.get).mock.calls.map(([path]) => path)).toEqual(['/v1/fractions/addition/spikes/history?limit=50']);
+  vi.mocked(identity.get).mockClear();
+  const rows = Array.from({ length: 3000 }, (_, i) => ({ id: `history-${i}`, actor: 'Invented analyst' }));
+  vi.mocked(identity.get).mockImplementation(async path => {
+    const params = new URL(path, 'https://invented.example').searchParams;
+    const offset = Number(params.get('after') ?? '0');
+    expect(params.get('limit')).toBe('50');
+    return { status: 200, body: rows.slice(offset, offset + 50), nextCursor: String(offset + 50) } as never;
+  });
+  const start = performance.now();
+  const page = await tims.spikeHistory('addition'); expect(page?.items).toHaveLength(50);
+  expect(identity.get).toHaveBeenCalledTimes(1);
+  expect((await page?.more())?.items[0].id).toBe('history-50'); expect(identity.get).toHaveBeenCalledTimes(2);
+  console.info(`TIMS history: browsing 0 requests before/after; opening + Load more: 2 bounded requests from 3000 invented rows in ${(performance.now() - start).toFixed(1)} ms (mock network).`);
 });

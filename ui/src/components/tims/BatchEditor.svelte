@@ -3,7 +3,7 @@
   import { untrack, onMount, onDestroy } from 'svelte';
   import { identity } from '../../lib/identity.svelte';
   import { timsRights } from '../../lib/tims-rights.svelte';
-  import { tims, read, statusWords, parameterSummary, type BatchDetail, type RecipeOut, type FractionOut, type SourceOut, type StepOut } from '../../lib/tims-api';
+  import { tims, read, statusWords, parameterSummary, type BatchDetail, type RecipeOut, type FractionOut, type SourceOut, type StepOut, type SpikeAddition, type CapsuleReadiness } from '../../lib/tims-api';
   import { outbox, onlineOnlyReason, type OutboxEntry } from '../../lib/outbox.svelte';
   import { overlayBatch, batchAffected } from '../../lib/tims-overlay';
   import { batchGeometry, OnlineAction, ReplyScope, mountElements } from '../../lib/tims-requests';
@@ -23,10 +23,17 @@
   import StepEditor from './StepEditor.svelte';
   import ParameterFields from './ParameterFields.svelte';
   import History from './History.svelte';
+  import { batchReadiness, nextIncomplete, timsError } from '../../lib/tims-readiness';
+  import { guidedSteps, loadGuidedStep, saveGuidedStep, type GuidedStep } from '../../lib/tims-guidance';
+  import { WriteError } from '../../lib/oversight.svelte';
+  import { stableScroll } from '../../lib/tims-scroll';
   let { id, methods, recipes, onlab }: { id: string; methods: MethodCode[]; recipes: RecipeOut[]; onlab: (lab: string) => void } = $props();
   let base = $state.raw<BatchDetail | null>(null), geometry = $state.raw<Record<string, MountGeometry>>({}), error = $state(''), geometryError = $state(''), busy = $state(false);
   let delivered = $state.raw<OutboxEntry[]>([]);
   const views = ['Capsules', 'Batch steps', 'Step × capsule matrix'] as const;
+  let guided = $state<GuidedStep>(0), completionBusy = $state(false);
+  let refused = $state.raw<CapsuleReadiness[]>([]);
+  const viewer = () => ({ server: identity.target?.server ?? '', account: identity.account?.id ?? identity.account?.username ?? '' });
   let view = $state<typeof views[number]>('Capsules');
   let selectedStep = $state(''), batchStep = $state(''), selected = $state<number | null>(null);
   let picking = $state(false), pickerOpened = $state(false), imported = $state(''), editing = $state(false), started = $state(''), operator = $state(''), operatorAccount = $state(false), notes = $state('');
@@ -44,7 +51,9 @@
   let destroyed = false;
   onDestroy(() => { destroyed = true; replies.invalidate(); });
   const batch = $derived(base ? overlayBatch(base, [...delivered, ...outbox.entries]).batch : null);
-  const editable = $derived(!!batch && timsRights.canEdit(batch.lab_id, `batch:${batch.id}`));
+  const editable = $derived(!!batch && !batch.completed_at && timsRights.canEdit(batch.lab_id, `batch:${batch.id}`));
+  const readiness = $derived(batch ? batchReadiness(batch) : null);
+  const capsuleReady = $derived(readiness?.capsules.find(c => c.capsule_number === selected));
   const fraction = $derived(selected === null ? undefined : batch?.fractions.find(f => f.id === batch?.capsule_map[String(selected)]));
   const preparation = $derived(fraction ? readCapsulePreparation(fraction.notes).preparation : null);
   const defaultMineral = $derived(recipes.find(recipe => recipe.id === batch?.recipe_id)?.mineral ?? 'zircon');
@@ -56,7 +65,7 @@
   const currentCapsuleStep = $derived(batch?.steps.find(s => s.id === selectedStep));
   const selectedMethod = $derived(methods.find(m => m.code === method));
   const source = () => `${identity.target?.server}:${identity.revision}`;
-  $effect(() => { void id; void identity.revision; void identity.target?.server; untrack(() => { generation++; geometryGeneration++; base = null; delivered = []; geometry = {}; selected = null; picking = false; pickerOpened = false; manualPreparation = null; replacing = undefined; pendingRefines.clear(); refineNote = ''; imported = ''; editing = false; add = false; void load(true); }); });
+  $effect(() => { void id; void identity.revision; void identity.target?.server; untrack(() => { guided = loadGuidedStep(viewer(), id); refused = []; generation++; geometryGeneration++; base = null; delivered = []; geometry = {}; selected = null; picking = false; pickerOpened = false; manualPreparation = null; replacing = undefined; pendingRefines.clear(); refineNote = ''; imported = ''; editing = false; add = false; void load(true); }); });
   onMount(() => {
     const unsubscribe = outbox.subscribe(entry => {
       if (!base || !batchAffected(base, entry.objectKey)) return;
@@ -76,7 +85,7 @@
     if (destroyed) return;
     const gen = ++generation, owner = source(), current = replies.capture(); busy = true; error = '';
     try {
-      const result = await tims.batch(id); if (gen !== generation || !current()) return; base = result; delivered = []; onlab(result.lab_id);
+      const result = await tims.batch(id); if (gen !== generation || !current()) return; base = result; delivered = []; if (result.readiness) refused = []; onlab(result.lab_id);
       if (outlines) loadGeometry(result, revalidateGeometry);
     } catch (e) { if (gen === generation && owner === source() && current()) error = String(e); } finally { if (gen === generation && current()) busy = false; }
   }
@@ -92,14 +101,47 @@
 
   function choose(position: number, step = '') {
     selected = position;
-    selectedStep = step;
+    selectedStep = step || (guided === 2 ? batch?.steps.find(s => s.method_code === 'SP-TIMS-SPIKE')?.id ?? '' : guided === 3 ? batch?.steps.find(s => s.method_code !== 'SP-TIMS-SPIKE')?.id ?? '' : '');
     imported = '';
     manualPreparation = null;
     replacing = undefined;
     const next = batch?.fractions.find(f => f.id === batch?.capsule_map[String(position)]);
-    picking = !step && editable && (!next || !readCapsulePreparation(next.notes).preparation);
+    picking = !selectedStep && editable && (!next || !readCapsulePreparation(next.notes).preparation);
     if (picking) pickerOpened = true;
     view = 'Capsules';
+  }
+
+  function guide(index: GuidedStep) {
+    guided = index; saveGuidedStep(viewer(), id, index);
+    if (index === 1 || index === 2 || index === 3) choose(selected ?? 1, '');
+    if (index === 3) view = 'Batch steps';
+    if (index === 4) { picking = false; view = 'Capsules'; }
+  }
+  function incomplete() {
+    if (!readiness) return;
+    const next = nextIncomplete(readiness, selected, guided === 1 ? 'grain' : guided === 2 ? 'spike' : 'complete', batch?.capsule_set.positions ?? 0);
+    if (next !== null) choose(next);
+  }
+  function acceptSpike(row: SpikeAddition) {
+    if (!base || !base.fractions.some(f => f.id === row.fraction_id)) return;
+    base = { ...base, readiness: undefined, spikes: [...base.spikes.filter(s => s.id !== row.id && !(s.fraction_id === row.fraction_id && s.step_id === row.step_id)), row] };
+    refused = [];
+    // One revalidation after an explicit save; no per-capsule reads.
+    void load();
+  }
+  async function complete(reopen = false) {
+    if (!batch || completionBusy) return;
+    const current = replies.capture(); completionBusy = true; error = ''; refused = [];
+    try { await (reopen ? tims.reopenBatch(id) : tims.completeBatch(id)).send(); if (current()) await load(); }
+    catch (e) {
+      if (current()) {
+        error = e instanceof WriteError && e.status === 404 ? 'This server does not support batch completion yet.' : timsError(e);
+        if (e instanceof WriteError && e.code === 'batch_incomplete') {
+          const body = e.body as { capsules?: CapsuleReadiness[]; readiness?: { capsules: CapsuleReadiness[] }; missing?: CapsuleReadiness[] };
+          refused = body.readiness?.capsules ?? body.capsules ?? body.missing ?? [];
+        }
+      }
+    } finally { if (current()) completionBusy = false; }
   }
 
   function acceptFraction(value: FractionOut) {
@@ -108,7 +150,7 @@
     busy = false;
     const position = value.capsule_number;
     base = {
-      ...base,
+      ...base, readiness: undefined,
       fractions: [...base.fractions.filter(f => f.id !== value.id), value],
       capsule_map: { ...base.capsule_map, [position]: value.id },
     };
@@ -132,7 +174,7 @@
     generation++;
     busy = false;
     const updated = { ...target, sources: [...target.sources.filter(s => s.id !== source.id), source] };
-    base = { ...base, fractions: base.fractions.map(f => f.id === id ? updated : f) };
+    base = { ...base, readiness: undefined, fractions: base.fractions.map(f => f.id === id ? updated : f) };
     loadGeometry(base);
     if (target.capsule_number === selected) {
       imported = 'Grain source linked.';
@@ -213,6 +255,14 @@
     });
   }
 
+  async function ensureSpikeStep() {
+    const current = replies.capture();
+    await run(async () => {
+      const row = await extraSpikeStep.send(`/v1/tims/batches/${encodeURIComponent(id)}/steps`, 'POST', { method_code: 'SP-TIMS-SPIKE', parameters: {} }, `batch:${id}`);
+      if (current() && base) { base = { ...base, steps: [...base.steps, row] }; selectedStep = row.id; }
+    });
+  }
+
   async function createSpikeStep(session: StepOut) {
     const current = replies.capture();
     const created = await extraSpikeStep.send(`/v1/tims/batches/${encodeURIComponent(id)}/steps`, 'POST', {
@@ -234,11 +284,18 @@
 </script>
 
 <section class="stack batch" aria-label="Chemistry batch">
-  {#if error}<p class="error" role="status">{error}</p>{/if}
+  <p class="batch-status small" class:error={!!error} role="status">{error || (batch?.completed_at ? `Completed ${batch.completed_at} · ${batch.completed_by_name ?? 'Analyst not supplied'}` : '')}</p>
   {#if !batch}
     <p>{busy ? 'Loading batch…' : 'Batch unavailable.'}</p>
   {:else}
-    <header class="panel stack">
+    <nav class="panel stack guided-rail" aria-label="Batch setup steps">
+      <div class="guide-buttons">{#each guidedSteps as name, index}<button type="button" class="btn small" aria-current={guided === index ? 'step' : undefined} onclick={() => guide(index as GuidedStep)}>{index + 1}. {name}</button>{/each}</div>
+      <div class="row guide-actions"><span class="small progress">{guided === 2 ? `Spike ${readiness?.capsules.filter(c => c.spike).length} of ${readiness?.capsules.length}` : guided === 1 ? `Grains ${readiness?.capsules.filter(c => c.grain).length} of ${batch.capsule_set.positions}` : `${readiness?.capsules.filter(c => !c.missing.length).length} of ${readiness?.capsules.length} capsules complete`}</span>
+      <button type="button" class="btn small" disabled={guided === 0} onclick={() => guide((guided - 1) as GuidedStep)}>Back</button>
+      <button type="button" class="btn small" disabled={guided === 4} onclick={() => guide((guided + 1) as GuidedStep)}>Next</button>
+      <button type="button" class="btn small" onclick={incomplete}>Next incomplete</button></div>
+    </nav>
+    <header class="panel stack" use:stableScroll>
       <div class="row heading">
         <div class="stack title"><h2>{batch.capsule_set.name} ({batch.capsule_set.code}) · {batch.started_on}</h2>
           <p class="small muted"><OperatorName {batch} /> · {snapshotName(batch, recipes)}</p>
@@ -259,7 +316,7 @@
       </div>
       {#if batch.notes && !editing}<p class="small">{batch.notes}</p>{/if}
       {#if outbox.entries.some(e => batch && batchAffected(batch, e.objectKey))}<p class="small" role="status">Saved here, not sent yet</p>{/if}
-      {#if !editable}<p class="small muted">{oversight.viewAs ? READ_ONLY_REASON : timsRights.recordReason(`batch:${id}`) || 'Lab membership is required to edit this batch.'}</p>{/if}
+      {#if !editable}<p class="small muted">{oversight.viewAs ? READ_ONLY_REASON : timsRights.recordReason(`batch:${id}`) || (batch.completed_at ? 'Reopen this completed batch to edit it.' : 'Lab membership is required to edit this batch.')}</p>{/if}
       {#if editing}
         <form class="stack" onsubmit={e => {
           e.preventDefault();
@@ -280,13 +337,13 @@
       {/each}
     </div>
 
-    <div class="bench" class:inspecting={selected !== null} class:with-picker={picking} class:inactive={view !== 'Capsules'}>
-        <section class="panel stack board" aria-label="Capsule grid">
+    <div class="bench">
+        <section class="panel stack board" aria-label="Capsule grid" use:stableScroll>
           <div class="row heading">
             <h3>Capsule pucks</h3>
             <span class="small muted">{Object.values(batch.capsule_map).filter(Boolean).length} of {batch.capsule_set.positions} assigned</span>
           </div>
-          <PuckSet compact={picking} {batch} {geometry} {geometryError} {selected}
+          <PuckSet compact {batch} {geometry} {geometryError} {selected}
             onselect={position => {
               if (selected !== position) choose(position, currentCapsuleStep?.method_code === 'SP-TIMS-SPIKE' ? spikingSessionId(currentCapsuleStep) : '');
             }} />
@@ -295,10 +352,11 @@
           {#if geometryError}<p class="error small">Grain outlines unavailable: {geometryError}</p>{/if}
         </section>
 
-        {#if selected !== null}
           <section class="panel stack inspector" aria-label="Capsule details">
+            {#if selected !== null}
             <div class="row heading inspector-head">
-              <div class="stack title"><h3>{label}{fraction ? ` · ${fraction.name}` : ''}</h3>
+              <div class="stack title"><h3 title={fraction?.name}>{label}{fraction ? ` · ${fraction.name}` : ''}</h3>
+                <span class="small capsule-progress">grain {capsuleReady?.grain ? '✓' : 'pending'} · spike {capsuleReady?.spike ? '✓' : 'pending'}</span>
                 <p class="muted small">{fraction ? [preparation && capsulePreparations[preparation], fraction.sample.name, statusWords(fraction.status)].filter(Boolean).join(' · ') : 'Empty capsule'}</p>
               </div>
               <div class="row">
@@ -308,8 +366,7 @@
               </div>
             </div>
 
-            {#if refineNote}<p class="small muted" role="status">{refineNote}</p>{/if}
-            {#if imported}<p class="small success" role="status">{imported}</p>{/if}
+            <p class="inspector-status small" role="status">{refineNote || imported}</p>
             {#if !fraction && editable}
               <div class="row intake" role="group" aria-label="Prepare empty capsule">
                 <button class="btn small" type="button" aria-pressed={picking && !manualPreparation} onclick={() => { manualPreparation = null; picking = true; pickerOpened = true; }}>GrainAtlas</button>
@@ -322,26 +379,41 @@
                 <SampleCapsule preparation={manualPreparation} batch={id} lab={batch.lab_id} position={selected} {label} {defaultMineral} {editable} oncreated={acceptFraction} />
               {/key}
             {:else if fraction}
-              {#key fraction.id}
+                {#if guided === 2 && !batch.steps.some(s => s.method_code === 'SP-TIMS-SPIKE')}<button type="button" class="btn primary" disabled={!editable || !!onlineOnlyReason()} onclick={() => void ensureSpikeStep()}>Add required spiking step</button>{/if}
                 <FractionEditor {batch} {fraction} editable={fractionEditable} {geometry} {geometryError}
                   activeStep={selectedStep} onstep={step => { selectedStep = step; if (step) picking = false; }}
                   onbatchstep={step => { batchStep = step; view = 'Batch steps'; }} {createSpikeStep}
-                  onreplace={startReplacement} onrefine={refine}
+                  onreplace={startReplacement} onrefine={refine} onspike={acceptSpike}
                   onpick={() => { replacing = undefined; picking = true; pickerOpened = true; imported = ''; }} />
-              {/key}
             {:else if !picking}
               <p class="muted">{editable ? 'Choose how to prepare this capsule.' : 'This capsule is available.'}</p>
             {/if}
+            {:else}<p class="muted">Select a capsule to see its details.</p>{/if}
           </section>
-        {/if}
-        {#if selected !== null && pickerOpened}
-          <section class="panel picker-panel" class:inactive={!picking} aria-label="Grain selection">
+          <section class="panel picker-panel" aria-label="Grain selection" use:stableScroll>
+            {#if guided === 4}
+              <section class="stack review-summary" aria-label="Batch completion review">
+                <h3>Review & complete</h3>
+                <p class="small">Completion needs a spike for every remaining capsule; lost capsules and those dissolved during CA are exempt. Grains and chemistry are shown for checking.</p>
+                {#each (refused.length ? refused : readiness?.capsules ?? []) as row}
+                  <button class="btn small review-capsule" type="button" onclick={() => { guide(row.missing.length ? 2 : !row.grain ? 1 : 3); choose(row.capsule_number); }}>{batch.capsule_set.capsule_labels[row.capsule_number - 1]}: {row.missing.length ? row.missing.join(', ') + ' pending' : 'Complete'}</button>
+                {/each}
+                {#if batch.completed_at}<button class="btn" disabled={completionBusy || !timsRights.canEdit(batch.lab_id, `batch:${id}`)} onclick={() => void complete(true)}>Reopen batch</button>
+                {:else}<button class="btn primary" disabled={!editable || completionBusy || !!onlineOnlyReason() || !!readiness?.capsules.some(c => c.missing.length) || refused.some(c => c.missing.length)} title={readiness?.capsules.some(c => c.missing.length) ? 'Finish the missing capsule items first.' : ''} onclick={() => void complete()}>Complete batch</button>{/if}
+              </section>
+            {:else}
+              <div class="picker-content" class:inactive={!picking || selected === null}>
+            {#if selected !== null && pickerOpened}
             <AtlasPicker batch={id} lab={batch.lab_id} position={selected} {label} {fraction} {replacing} {refreshRevision} editable={fractionEditable}
               {defaultMineral} oncreated={acceptFraction} onlinked={acceptSource} onreplaced={acceptReplacement}
               close={() => { picking = false; replacing = undefined; }} />
+            {/if}
+              </div>
+              {#if !picking || selected === null}<div class="stack picker-placeholder"><h3>GrainAtlas picker</h3><p class="small muted">{guided === 2 ? 'Spike is required for every capsule. Record the weighing in Capsule details.' : guided === 3 ? 'Record batch defaults below, then each capsule’s outcome in Capsule details.' : 'Select a capsule and open GrainAtlas to choose a grain.'}</p></div>{/if}
+            {/if}
           </section>
-        {/if}
       </div>
+    <div class="step-rail panel" aria-label="Chemistry step rail">
     {#if view === 'Batch steps'}
       <section class="panel stack steps" aria-label="Step timeline">
         <div class="row heading"><h3>Batch steps</h3><button type="button" class="btn small" disabled={!editable || !!onlineOnlyReason()} title={onlineOnlyReason()} onclick={() => { formGeneration++; add = !add; }}>{add ? 'Cancel add' : 'Add step'}</button></div>
@@ -388,7 +460,8 @@
           </div></section>
         {:else}<p class="muted">No steps recorded.</p>{/each}
       </section>
-    {/if}
+    {:else}<p class="small muted">{guidedSteps[guided]} · {guided === 0 ? 'Check the capsule set, batch date, operator and recipe above.' : guided === 1 ? 'Assign each capsule, then continue to Spike.' : guided === 2 ? 'Save a spike version and weighed mass for every capsule.' : 'Use Batch steps and the matrix for chemistry records.'}</p>{/if}
+    </div>
   {/if}
 </section>
 
@@ -401,16 +474,17 @@
   .row { flex-wrap: wrap; }
   .heading { justify-content: space-between; }
   .title { gap: 3px; }
-  .views { gap: 4px; }
+  .views { gap: 4px; height: 32px; overflow: auto; flex-wrap: nowrap; }
+  .views .btn { height: 30px; padding: 2px 8px; font-size: .8rem; }
   .views .btn[aria-pressed=true], .step-list .btn[aria-pressed=true], .intake .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
   .inactive { display: none !important; }
-  .batch { flex: 1; min-height: 0; gap: var(--space-2); }
+  .batch { flex: 1; min-height: 0; gap: 6px; }
+  .batch > .panel, .bench > .panel { margin: 0; }
   .batch > header, .views { flex-shrink: 0; }
-  .bench { display: grid; gap: var(--space-2); align-items: stretch; min-height: 0; flex: 1; overflow: hidden; }
-  .bench.inspecting { grid-template-columns: minmax(170px, .8fr) minmax(0, 1.2fr); }
-  .bench.with-picker { grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1.15fr); }
-  .board { background: linear-gradient(150deg, var(--glass-strong), var(--glass)); overflow: auto; }
-  .board, .inspector, .picker-panel { padding: var(--space-2); min-height: 0; min-width: 0; gap: var(--space-2); }
+  .bench { display: grid; grid-template-columns: 180px calc((100% - 196px) * .48) calc((100% - 196px) * .52); grid-template-rows: minmax(0, 1fr); gap: 8px; align-items: stretch; min-height: 0; flex: 1; overflow: hidden; }
+  .board > :global(*) { flex-shrink: 0; }
+  .board { background: linear-gradient(150deg, var(--glass-strong), var(--glass)); overflow: auto; scrollbar-gutter: stable; }
+  .board, .inspector, .picker-panel { padding: 8px; min-height: 0; min-width: 0; gap: 8px; }
   .legend { gap: var(--space-2); }
   .legend span { display: flex; gap: var(--space-1); align-items: center; }
   .legend i { width: 10px; height: 10px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 50%; }
@@ -420,15 +494,6 @@
   .picker-panel { overflow: hidden; }
   .inspector :global(.fraction-editor) { flex: 1; min-height: 0; }
   .steps, .matrix { overflow: auto; min-height: 0; }
-  @media (max-width: 1279px) {
-    .bench.with-picker { grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); grid-template-rows: 140px minmax(0, 1fr); }
-    .with-picker .board { grid-column: 1; grid-row: 1; }
-    .with-picker .inspector { grid-column: 1; grid-row: 2; }
-    .with-picker .picker-panel { grid-column: 2; grid-row: 1 / 3; }
-    .with-picker .board .legend, .with-picker .board > .heading { display: none; }
-    .inspector-head { gap: 4px; }
-  }
-  .success { color: var(--ok); }
   .step-columns { display: grid; grid-template-columns: minmax(155px, 220px) minmax(0, 1fr); gap: var(--space-3); align-items: start; }
   .step-list { display: grid; gap: 4px; max-height: 62vh; overflow: auto; }
   .step-list .btn { display: flex; width: 100%; gap: var(--space-2); text-align: left; white-space: normal; }
@@ -436,12 +501,37 @@
   label { display: grid; gap: 4px; }
   .check { display: flex; }
   textarea, select, input:not([type=checkbox]) { width: 100%; min-width: 0; }
-  @media (max-width: 860px) {
-    .bench.inspecting { grid-template-columns: minmax(0, 1fr); }
+  .batch > header { height: 52px; overflow: auto; padding: 6px 8px; scrollbar-gutter: stable; overflow-anchor: none; }
+  .batch > header > .heading { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 8px; align-items: start; }
+  .batch > header .title h2 { font-size: 1rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .batch > header .title p { line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .batch-status { height: 20px; min-height: 20px; overflow: auto; scrollbar-gutter: stable; }
+  .guided-rail { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; height: 40px; flex: none; padding: 4px; gap: 8px; }
+  .guide-buttons { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, .7fr) minmax(0, .6fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: 4px; }
+  .guide-buttons .btn { width: 100%; max-width: 100%; min-width: 0; height: 28px; padding: 2px; font-size: .72rem; white-space: normal; line-height: 1.1; }
+  .guide-buttons [aria-current=step] { background: var(--accent-soft); border-color: var(--accent); }
+  .guide-actions .btn { height: 28px; padding: 2px 6px; font-size: .75rem; white-space: nowrap; }
+  .guide-actions { flex-wrap: nowrap; gap: 4px; }
+  .progress { width: clamp(100px, 10vw, 140px); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .inspector-head { height: 88px; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: start; gap: 4px; }
+  .inspector-head .title { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; width: 100%; min-width: 0; }
+  .inspector-head h3 { line-height: 20px; }
+  .inspector-head p { grid-column: 1 / -1; line-height: 17px; }
+  .inspector-head h3, .inspector-head p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .inspector-head > .row { flex-wrap: nowrap; gap: 4px; }
+  .inspector-head .btn { height: 28px; padding: 2px 6px; font-size: .75rem; white-space: nowrap; }
+  .capsule-progress { display: block; height: 18px; font-size: .68rem; white-space: nowrap; }
+  .inspector { gap: 4px; }
+  .inspector-status { height: 20px; min-height: 20px; overflow: auto; }
+  .picker-content { height: 100%; min-height: 0; }
+  .picker-placeholder, .review-summary { height: 100%; overflow: auto; scrollbar-gutter: stable; padding: 2px; }
+  .review-capsule { min-height: 34px; flex: none; white-space: normal; }
+  .step-rail { height: clamp(56px, calc(40vh - 200px), 160px); flex: none; overflow: auto; scrollbar-gutter: stable; padding: 6px; }
+  .step-rail .steps, .step-rail .matrix { overflow: visible; }
+  @media (max-width: 1279px) {
+    .bench { grid-template-columns: 160px calc((100% - 176px) * .5) calc((100% - 176px) * .5); }
+    .board > .heading { height: 48px; overflow: hidden; }
+    .board .legend { display: none; }
 
-  }
-  @media (max-width: 640px) {
-    .step-columns { grid-template-columns: minmax(0, 1fr); }
-    .step-list { max-height: 180px; }
   }
 </style>

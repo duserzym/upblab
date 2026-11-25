@@ -12,6 +12,7 @@
   import { WriteError } from '../../lib/oversight.svelte';
   import { sourceNames } from '../../lib/tims-geometry';
   import { loadPickerContext, savePickerContext, loadRecentMounts, rememberMount } from '../../lib/tims-picker-context';
+  import { stableScroll } from '../../lib/tims-scroll';
   import MountPicker from './MountPicker.svelte';
   import GrainImage from './GrainImage.svelte';
 
@@ -236,7 +237,7 @@
 </script>
 
 <section class="stack atlas-picker" aria-label="GrainAtlas picker">
-  <div class="picker-scroll stack">
+  <div class="picker-scroll stack" use:stableScroll={`${batch}:picker`}>
   <div class="row heading"><h3>GrainAtlas</h3><button class="btn small" type="button" onclick={close}>Back to capsule</button></div>
   {#if replacing}{@const names = sourceNames(replacing)}<p class="small">Replacing {names.grain} · spot {names.spot}</p>{/if}
   <MountPicker {mounts} {recent} selected={mounts.find(m => m.id === mountId)} busy={mountBusy} hasMore={!!mountsPage?.nextCursor}
@@ -318,7 +319,7 @@
         {#each matches.slice(0, count) as item (item.grain.server_id)}
           <button class="btn grain" type="button" onclick={() => select(item)}>
             {@render thumbnail(item, 62)}
-            <strong>{grainChoiceLabel(item)}</strong><span class="small muted">{plural(item.spots.length, 'spot')}</span>
+            <strong title={grainChoiceLabel(item)}>{grainChoiceLabel(item)}</strong><span class="small muted">{plural(item.spots.length, 'spot')}</span>
           </button>
         {:else}<p class="small muted">No registered grains match.</p>{/each}
       </div>
@@ -359,12 +360,13 @@
   .selection { padding: var(--space-3); border-radius: var(--radius-sm); }
   .fraction-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--space-2); }
   .atlas-picker { height: 100%; min-height: 0; gap: 0; }
-  .picker-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; padding: var(--space-2); }
+  .picker-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overflow-anchor: none; padding: var(--space-2); }
   .picker-scroll > :global(*) { flex-shrink: 0; }
   .action-note { flex-basis: 100%; }
-  .save-row { margin-top: auto; flex-shrink: 0; display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; justify-content: end; padding: var(--space-2); border-top: 1px solid var(--hairline); background: var(--bg); }
+  .save-row { height: 88px; overflow: auto; scrollbar-gutter: stable; margin-top: auto; flex-shrink: 0; display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; justify-content: end; padding: var(--space-2); border-top: 1px solid var(--hairline); background: var(--bg); }
   .gallery { max-height: min(300px, 32vh); min-height: 90px; overflow-y: auto; overflow-x: hidden; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1); }
-  .gallery .grain { display: grid; justify-items: center; align-content: start; gap: 2px; width: 100%; padding: 5px; border-radius: var(--radius-sm); white-space: normal; font-size: .78rem; overflow-wrap: anywhere; }
+  .gallery .grain { height: 124px; overflow: hidden; display: grid; justify-items: center; align-content: start; gap: 2px; width: 100%; padding: 5px; border-radius: var(--radius-sm); white-space: normal; font-size: .78rem; overflow-wrap: anywhere; }
+  .gallery .grain strong { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   fieldset { min-width: 0; border: 1px solid var(--hairline); border-radius: var(--radius-sm); }
   .warning { color: var(--warning); }
 </style>

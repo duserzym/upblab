@@ -131,7 +131,7 @@
 
 <style>
   .sample-capsule { flex: 1; min-height: 0; gap: 0; }
-  .sample-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 2px; }
+  .sample-scroll { min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overflow-anchor: none; padding: 2px; }
   .sample-scroll > :global(*) { flex-shrink: 0; }
   .actions { flex-shrink: 0; margin-top: auto; padding-top: var(--space-2); }
   h4, p { margin: 0; }

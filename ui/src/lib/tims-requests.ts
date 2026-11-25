@@ -44,7 +44,7 @@ export function operatorAccounts(): Promise<Account[]> {
 export class OnlineAction<T> {
   private signature = '';
   private form: ReturnType<typeof onlineForm<T>> | undefined;
-  async send(path: string, method: 'POST' | 'DELETE', body?: unknown, objectKey?: string) {
+  async send(path: string, method: 'POST' | 'DELETE' | 'PUT', body?: unknown, objectKey?: string) {
     const signature = JSON.stringify([identity.target?.server, identity.account?.id, identity.revision, path, method, body, objectKey]);
     if (signature !== this.signature) { this.signature = signature; this.form = onlineForm<T>(path, method, body, objectKey); }
     const form = this.form!;

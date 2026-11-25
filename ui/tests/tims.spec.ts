@@ -137,7 +137,7 @@ test('opens the Spiking pane for a source-free lab blank and saves its measured 
   const addition = { ...batch.spikes[0], id: 'spike-blank', fraction_id: added.id, spike_weight_g: '0.0080',
     bottle_before_g: '25.0000', bottle_after_g: '24.9920', bottle_difference_g: '0.0080', notes: 'Process blank' };
   const batchPath = `/v1/tims/batches/${batch.id}`;
-  await start(page, { fixtures: { [batchPath]: { ...batch, steps }, '/v1/samples?limit=50&q=blank': [sample, ordinary] },
+  await start(page, { fixtures: { [batchPath]: { ...batch, steps, spike_versions: { ...batch.spike_versions, [version.id]: { ...version, status: 'current', is_current: true } } }, '/v1/samples?limit=50&q=blank': [sample, ordinary] },
     apiReplies: { 'POST /v1/fractions': { status: 201, body: added }, [`PUT ${put}`]: { status: 200, body: addition } } });
   await openBatch(page);
   await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
@@ -155,7 +155,7 @@ test('opens the Spiking pane for a source-free lab blank and saves its measured 
   await expect(capsule.getByRole('heading', { name: 'Spiking', exact: true })).toBeVisible();
   await capsule.getByRole('textbox', { name: 'Bottle after this capsule (g)' }).fill('24.9920');
   await capsule.getByRole('textbox', { name: 'Spike comment' }).fill('Process blank');
-  await reply(page, batchPath, 200, { ...batch, steps, fractions: [...batch.fractions, added], capsule_map: { ...batch.capsule_map, 3: added.id }, spikes: [...batch.spikes, addition] });
+  await reply(page, batchPath, 200, { ...batch, steps, spike_versions: { ...batch.spike_versions, [version.id]: { ...version, status: 'current', is_current: true } }, fractions: [...batch.fractions, added], capsule_map: { ...batch.capsule_map, 3: added.id }, spikes: [...batch.spikes, addition] });
   await capsule.getByRole('button', { name: 'Save spike here' }).click();
   await expect.poll(async () => (await writes(page)).map(({ method, path, body }) => ({ method, path, body }))).toMatchObject([
     { method: 'POST', path: '/v1/fractions', body: { sample_id: sample.id, mineral: 'other', sources: [] } },
@@ -246,7 +246,7 @@ test('422 attention shows the server reason with Retry and Discard', async ({ pa
 });
 test('spike picker reviews composition and non-current warning before applying a registered version', async ({ page }) => {
   await start(page); await openBatch(page); const step = await openStep(page, 'Spiking'); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByRole('button', { name: 'Choose spike version' }).click();
-  const picker = page.getByRole('region', { name: 'Spike version picker' }); await expect(picker.getByLabel('Solution', { exact: true }).getByRole('option')).toHaveCount(solutions.length + 1); await picker.getByLabel('Solution', { exact: true }).selectOption('synthetic-solution'); await picker.getByLabel('Subfraction', { exact: true }).selectOption('synthetic-bottle'); await picker.getByLabel('Version', { exact: true }).selectOption(version.id);
+  const picker = page.getByRole('region', { name: 'Spike version picker' }); await expect(picker.getByLabel('Solution', { exact: true }).getByRole('option')).toHaveCount(solutions.length + 1); await picker.getByLabel('Solution', { exact: true }).selectOption('synthetic-solution'); await picker.getByLabel('Subfraction', { exact: true }).selectOption('synthetic-bottle'); await picker.getByRole('checkbox', { name: 'Show older versions' }).check(); await picker.getByLabel('Version', { exact: true }).selectOption(version.id);
   await expect(picker.getByRole('table', { name: 'Concentrations (mol/g)', exact: true })).toContainText('0.001'); await expect(picker).toContainText('uncertainty not given'); await expect(picker).toContainText('not current'); expect(await writes(page)).toHaveLength(0);
   await picker.getByRole('button', { name: 'Apply reviewed version' }).click(); await expect(picker).toHaveCount(0); expect(await writes(page)).toHaveLength(0);
   await expect(step).toContainText('Selected version: Synthetic spike · Master · v1 (superseded)');
@@ -642,6 +642,9 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1024, 640]]) for (cons
     const capsule = page.getByRole('region', { name: 'Capsule details' });
     await capsule.getByText('Fraction status and notes', { exact: true }).click();
     expect(await problems(page, 'TIMS fraction form')).toEqual([]);
+    await expect(capsule.getByLabel('Status', { exact: true })).toBeVisible();
+    await expect(capsule.getByLabel('Status', { exact: true })).toHaveAccessibleDescription('Record a spike version and positive weight before marking this capsule spiked or later.');
+    await expect(capsule.getByLabel('Status', { exact: true }).getByRole('option', { name: 'spiked', exact: true })).toHaveJSProperty('disabled', true);
     const saveFraction = capsule.getByRole('button', { name: 'Save fraction here', exact: true });
     // Capsule actions stay visible while the form scrolls independently.
     await expect(saveFraction).toBeInViewport({ ratio: 1 });
@@ -651,6 +654,13 @@ for (const [width, height] of [[1280, 800], [1440, 900], [1024, 640]]) for (cons
     expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(capsuleBox!.y + capsuleBox!.height);
     await expect(capsule.getByRole('button', { name: 'Next capsule' })).toBeInViewport({ ratio: 1 });
     await expect(page.getByRole('region', { name: 'GrainAtlas picker' }).getByRole('group', { name: 'Picker actions' })).toBeInViewport({ ratio: 1 });
+    // K1 has no spike; K2 has a pinned version and positive recorded weight.
+    // Switching capsules must update both the explanation and native option state.
+    await capsule.getByRole('button', { name: 'Next capsule', exact: true }).click();
+    await expect(capsule.getByRole('heading', { level: 3 })).toHaveText('K2 · z2');
+    if (!await capsule.getByLabel('Status', { exact: true }).isVisible()) await capsule.getByText('Fraction status and notes', { exact: true }).click();
+    await expect(capsule.getByLabel('Status', { exact: true })).toHaveAccessibleDescription('');
+    await expect(capsule.getByLabel('Status', { exact: true }).getByRole('option', { name: 'spiked', exact: true })).toHaveJSProperty('disabled', false);
     for (const name of ['Recipes', 'Capsule sets', 'Spikes', 'Import pick notes']) {
       await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name, exact: true }).click();
       if (name === 'Spikes') {

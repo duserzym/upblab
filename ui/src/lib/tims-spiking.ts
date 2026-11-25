@@ -57,7 +57,7 @@ export function laterWeighing(row: SpikeAddition, earlier: SpikeAddition) {
   return row.id !== earlier.id && timestamp(row.created_at) >= timestamp(earlier.created_at);
 }
 
-export function usesBottle(row: SpikeAddition, bottle: SessionBottle, versions: Record<string, VersionOut>) {
+function usesBottle(row: SpikeAddition, bottle: SessionBottle, versions: Record<string, VersionOut>) {
   return row.spike_version_id === bottle.versionId || versions[row.spike_version_id]?.subfraction_id === bottle.bottleId;
 }
 
@@ -79,14 +79,6 @@ export function spikeMassUsed(before: string, after: string): string {
   const places = decimalPlaces([before, after]);
   const difference = integerMass(before, places) - integerMass(after, places);
   return difference > 0n ? grams(difference, places) : '';
-}
-
-export function repeatedBottleLoss(rows: SpikeAddition[]) {
-  const losses = rows.map(row => spikeMassUsed(row.bottle_before_g ?? '', row.bottle_after_g ?? '')).filter(Boolean);
-  if (losses.length < 2) return '';
-  const places = decimalPlaces(losses);
-  const total = losses.reduce((sum, mass) => sum + integerMass(mass, places), 0n);
-  return grams(total, places);
 }
 
 function decimalPlaces(masses: string[]) {

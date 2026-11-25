@@ -73,8 +73,9 @@
   .heading strong { overflow-wrap: anywhere; }
   label { display: grid; gap: 4px; }
   input { min-width: 0; width: 100%; }
-  .options { max-height: 180px; min-height: 40px; overflow: auto; border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 4px; }
-  .option { display: grid; width: 100% !important; text-align: left; white-space: normal; gap: 2px; }
+  .options { height: 180px; min-height: 180px; overflow: auto; scrollbar-gutter: stable; border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 4px; }
+  .option { height: 82px; overflow: hidden; display: grid; width: 100% !important; text-align: left; white-space: normal; gap: 2px; }
+  .option strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .option.active { border-color: var(--accent); background: var(--accent-soft); }
   .samples { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   p { margin: 4px; }

@@ -176,8 +176,8 @@ the same tables before Apply; withdrawn versions cannot be applied. Non-current
 versions carry a warning, including any warning returned with a spike addition.
 Bottle differences come from the server. Creating spikes and versions is not included.
 
-Except for lab column protocols, existing-record changes are saved durably in
-the account-and-server-scoped outbox before transmission. Pending bodies overlay the last GET and say “Saved here,
+Except for lab column protocols and spike weighing, existing-record changes
+are saved durably in the account-and-server-scoped outbox before transmission. Pending bodies overlay the last GET and say “Saved here,
 not sent yet”. The indicator opens a list with the server reason, Retry and
 Discard. Definitive refusals stop that object's queue. A 401 waits for the same
 account to sign in again, including token renewal without a sign-out. Transient
@@ -229,9 +229,9 @@ Replace grain is unavailable. Like source add and retire, replacement requires
 an online connection and keeps one idempotency key across retries. Queued
 chemistry edits continue to say “Saved here, not sent yet”.
 
-At 1440 × 900 and 1280 × 800 px the open capsule bench has three columns:
-compact puck map, capsule record, and GrainAtlas picker. At 1024 × 640 px the
-map sits above the record on the left, with the picker beside them. Capsule
+At 1440 × 900, 1280 × 800 and 1024 × 640 px the capsule bench keeps three
+columns: compact puck map, capsule record, and GrainAtlas picker. The map
+track narrows at the smallest size without moving above the inspector. Capsule
 forms and the picker scroll inside their own panels; their action bars stay
 visible. The grain gallery also scrolls independently. **Previous** and
 **Next capsule** follow capsule positions in puck order.
@@ -261,3 +261,79 @@ The hosted GrainAtlas URL parser currently reads spot targets but not grain
 targets. Grain-only centring on the web needs that parser and its selection
 path to accept the grain parameter. The desktop launch parser already accepts
 spot and grain arguments; the installed app still needs a smoke test.
+
+## Guided capsule setup and required spike weighing
+
+The in-flow setup rail follows Batch & capsule set, Grains, Spike, Chemistry,
+then Review & complete. Back and Next change the guided step. Next incomplete
+wraps through capsules missing the current item. Capsules and chemistry steps
+remain directly selectable. The current guided step is saved per viewer, server
+and batch, with guarded local storage and an in-memory fallback. Browsing never
+writes chemistry records.
+
+All three bench columns stay mounted, including the empty inspector and closed
+picker. At widths of at least 1280 px, the map track is 180 px and the inspector
+and picker use 48 % and 52 % of the remaining width after 16 px of gaps. Below
+1280 px the map track is 160 px and each other track gets half the remaining
+width after 16 px of gaps. These tracks depend only on available width. Each
+puck is 116 px wide with at least 150 px reserved height. The inspector, picker,
+map and chemistry rail scroll internally with stable scrollbar gutters. The
+rail below the bench reserves a height between 56 px and 160 px according to
+window height; switching content does not change it. Status slots and action
+rows reserve their height. Disclosure and capsule changes preserve panel scroll;
+long rows truncate inside fixed boxes, with full labels in titles.
+
+Readiness from batch detail is authoritative when supplied. On older servers,
+the pure client fallback lists active fractions in the capsule map. A grain is
+ready with a live source or an explicit TIMS-only or Lab blank preparation. A
+spike is ready with a pinned version and positive mass at a batch spike step.
+Only a missing spike prevents completion; lost capsules and those dissolved
+during CA are exempt. Grains and chemistry are shown for checking. Totals count
+capsules, grain, spike, ready and pending. Empty positions are incomplete for
+Grains navigation, but are excluded from Spike and Review counts and navigation.
+Capsule marks show grain and spike independently. Chemistry statuses from spiked
+through measured require a spike addition; server `spike_required` rejections
+are explained in the capsule status slot.
+
+The required spike card accepts direct mass in g or the session bottle before
+and after readings. Bottle starts continue from the most recent reading for
+that bottle. Choose active solutions and current registered versions; Show
+older versions exposes superseded calibrations with a warning. Withdrawn
+versions are never offered as choices. An already pinned historical version
+remains readable. Composition starts collapsed. Readability defaults to the
+viewer's last successfully saved value (initially 0.00001 g). Analyst defaults
+to the signed-in account, with a name override. The weighing timestamp is
+entered in UTC and defaults to the current time.
+
+The tracer card displays only the server's stored `tracer` rows while the
+saved weighing is unchanged. An unsaved weighing or a response without tracer
+rows says “Save the weighing to see the server's tracer calculation.” Stored
+moles and their stored 1σ uncertainties are scaled to nmol or pmol for display;
+missing uncertainty says “± not given”. The TIMS formatter controls significant
+figures, with Full precision available and exact mol values in row titles.
+The shell calculates no tracer amounts or uncertainties.
+
+Spike saves require the reachable server so stale edits can be resolved in the
+card. Every PUT carries `expected_updated_at` (null for a new addition), plus
+the exact version, weighing metadata and bottle readings. A `spike_changed`
+409 preserves the draft and shows both entries. Keep mine updates the expected
+revision only after explicit comparison; a separate Save submits the draft.
+Take server's loads the current server entry. Retry keys persist for unchanged
+payloads. History is fetched only when opened, 50 rows per page, from
+`/v1/fractions/{fraction_id}/spikes/history`; a 404 from an older server hides the list.
+
+Review & complete lists each capsule's missing items. Complete batch is disabled
+until every remaining capsule has a spike, with the exemptions above. The
+server's `/complete` validation can still refuse with per-capsule missing items
+after another analyst changes the batch. Refresh
+after correcting them. Completed batches show who completed them and when;
+Reopen batch explicitly re-enables editing. Older servers without completion
+endpoints show a compatibility message. New detail fields are optional.
+
+`ui/tests/tims-guided.spec.ts` covers guidance, next incomplete, weighing,
+calculations, conflict comparison, required-spike errors, completion and reopen.
+The shared `ui/tests/tims-layout.ts` helper measures all four main regions
+before and after clicks, accepting at most 2 px displacement in each dimension
+at 1440 × 900, 1280 × 800 and 1024 × 640, in both themes. A mocked 3000-row history list took 0.1 ms for two 50-row page requests;
+browsing history made zero requests before and after this change. This measures
+client overhead rather than network latency.
