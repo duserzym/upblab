@@ -1,2 +1,0 @@
-- TIMS batches: a compact header (back button, title, views, Refresh/Edit/History) and the guided rail leave the rest of the window to the capsule bench. Batch steps and the Step × capsule matrix open in the third column instead of a strip below.
-- Capsule pucks sit side by side in a wider board (three pucks as a triangle) and are larger: about 180 px across at 1440 × 900 and 140 px at 1280 × 800, with 11 px capsule labels. Labels and G/S marks no longer slide under neighbouring wells.
