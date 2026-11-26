@@ -27,12 +27,12 @@ for (const [width, height] of [[1512, 982], [1280, 800]]) {
       };
 
       await page.locator('[data-spot-key="acq-1"]').click();
-      await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+      await page.getByRole('radio', { name: 'Depth profile', exact: true }).click();
       await page.getByRole('button', { name: /^Channels \(/ }).click();
       await measure('Depth-Channels', '#depth-channel-picker');
       await page.getByRole('button', { name: 'Close channel picker', exact: true }).click();
 
-      await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+      await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
       await page.getByRole('button', { name: 'Presets', exact: true }).click();
       await measure('Geochemistry-Presets', '#review-geochem-presets');
       await page.keyboard.press('Escape');

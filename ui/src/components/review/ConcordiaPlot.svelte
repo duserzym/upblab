@@ -1,4 +1,6 @@
 <script lang="ts">
+  import SegmentedControl from '../ui/SegmentedControl.svelte';
+  import IconButton from '../ui/IconButton.svelte';
   import { getContext, type Snippet } from 'svelte';
   import Plot from './Plot.svelte';
   import { PLOT_VISIBILITY, plotVisibility, type PlotVisibility } from './plot-visibility';
@@ -52,6 +54,7 @@
   }
 
   function setMode(next: ConcordiaMode) {
+    if (next === mode) return;
     mode = next;
     viewport = null;
     boxed = new Set();
@@ -70,20 +73,20 @@
 <svelte:window onkeydown={escape} />
 {#snippet controls(secondaryNavigation: Snippet)}
 <div class="row controls">
-  <label>Diagram <select aria-label="Concordia diagram" value={mode} onchange={e => setMode(e.currentTarget.value as ConcordiaMode)}><option value="wetherill">Wetherill</option><option value="tw">Tera-Wasserburg</option></select></label>
-  <button class="chip more" aria-label="More plot controls" aria-expanded={more} aria-controls="plot-more-controls" onclick={() => more = !more}>More</button>
+  <span>Diagram</span><SegmentedControl label="Concordia diagram" size="small" wrap options={[{value:'wetherill',label:'Wetherill'},{value:'tw',label:'Tera-W.',ariaLabel:'Tera-Wasserburg'}]} value={mode} onchange={value => setMode(value as ConcordiaMode)} />
+  <button class="btn plot-control more" aria-label="More plot controls" aria-expanded={more} aria-controls="plot-more-controls" onclick={() => more = !more}>More…</button>
   <div id="plot-more-controls" bind:this={moreControls} class="secondary" class:expanded={more}>
   {#if mode === 'tw'}
-    <button class="chip" title="Fit the reference curve from 100 to 4540 Ma" onclick={() => viewport = earthView}>Earth-age view</button>
+    <button class="btn plot-control" title="Fit the reference curve from 100 to 4540 Ma" onclick={() => viewport = earthView}>Earth-age view</button>
   {/if}
-  <button class="chip" disabled={!cluster} title="Fit the middle of the distribution, leaving extremes outside the view" onclick={() => viewport = cluster}>Fit cluster</button>
-  <button class="chip" aria-pressed={ellipses} title="Show or hide the 2σ uncertainty ellipses" onclick={() => ellipses = !ellipses}>2σ ellipses</button>
-  <button class="chip" disabled={!selected || !shown.some(m => m.spot.key === selected)} onclick={() => selected && onhide([selected])}>Hide selected</button>
+  <button class="btn plot-control" disabled={!cluster} title="Fit the middle of the distribution, leaving extremes outside the view" onclick={() => viewport = cluster}>Fit cluster</button>
+  <button class="btn plot-control" aria-pressed={ellipses} title="Show or hide the 2σ uncertainty ellipses" onclick={() => ellipses = !ellipses}>2σ ellipses</button>
+  <IconButton size="small" icon="hide" label="Hide selected" disabled={!selected || !shown.some(m => m.spot.key === selected)} onclick={() => selected && onhide([selected])} />
   {#if boxedKeys.length}
-    <button class="chip" onclick={hideBox}>Hide boxed ({boxedKeys.length})</button>
-    <button class="chip" onclick={() => boxed = new Set()}>Clear box</button>
+    <button class="btn plot-control" onclick={hideBox}>Hide boxed ({boxedKeys.length})</button>
+    <IconButton size="small" icon="close" label="Clear box" onclick={() => boxed = new Set()} />
   {/if}
-  {#if hidden.size}<button class="chip" onclick={onrestore}>Show hidden ({hidden.size})</button>{/if}
+  {#if hidden.size}<button class="btn plot-control" onclick={onrestore}>Show hidden ({hidden.size})</button>{/if}
   <span class="faint small" aria-live="polite">{shown.length}/{allMarks.length} plotted{outside ? ` · ${outside} outside view` : ''}</span>
   <div class="secondary-navigation">{@render secondaryNavigation()}</div>
   </div>
@@ -92,6 +95,9 @@
 <Plot {controls} {marks} {hidden} {guidesForBounds} emptyBounds={mode === 'tw' ? earthView : wetherillView} {selected} {onselect} bind:viewport onbox={selectBox} ontoggle={spot => onhide([spot.key])}
   xLabel={mode === 'tw' ? '238U/206Pb' : '207Pb/235U'} yLabel={mode === 'tw' ? '207Pb/206Pb' : '206Pb/238U'} />
 <style>
+  .plot-control { border-radius: var(--radius-sm); font-size: 12px; padding: 3px 7px; transition: none; }
+  .plot-control:active:not(:disabled) { transform: none; background-image: linear-gradient(var(--press), var(--press)); }
+  .plot-control[aria-pressed=true] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
   .controls {gap:5px;align-items:center;flex:none;min-width:0;}
   .secondary {display:contents;}
   .more,.secondary-navigation {display:none;}
@@ -101,5 +107,4 @@
     .secondary.expanded {display:flex;flex-wrap:wrap;align-items:center;gap:5px;flex:1 0 100%;padding:6px;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:var(--accent-soft);}
     .secondary-navigation {display:contents;}
   }
-  .controls .chip {font-size:0.74rem;padding:3px 7px;}
 </style>

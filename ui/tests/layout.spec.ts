@@ -13,11 +13,11 @@ for (const [width, height] of [[1512, 982], [1280, 800]]) {
     test(`${width}x${height} ${preset}: depth drawer stays in its tile beside SEM`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await openReview(page, { store: { reviewSplit: true } });
-      await page.getByRole('button', { name: preset, exact: true }).click();
-      await expect(page.getByRole('button', { name: preset, exact: true })).toHaveAttribute('aria-pressed', 'true');
+      await page.getByRole('radio', { name: preset, exact: true }).click();
+      await expect(page.getByRole('radio', { name: preset, exact: true })).toHaveAttribute('aria-checked', 'true');
       await expect.poll(() => saved(page)).toEqual(presetLayout(preset, true));
       await page.locator('[data-spot-key="acq-1"]').click();
-      await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+      await page.getByRole('radio', { name: 'Depth profile', exact: true }).click();
       await page.getByRole('button', { name: /^Channels \(/ }).click();
       const drawer = page.getByRole('group', { name: 'Depth profile channels', exact: true });
       await expect(drawer).toBeVisible();
@@ -37,7 +37,7 @@ for (const [width, height] of [[1512, 982], [1280, 800]]) {
       await page.getByRole('button', { name: `Maximise ${name}`, exact: true }).click();
       const restore = page.getByRole('button', { name: `Restore ${name}`, exact: true });
       await expect(restore).toHaveAttribute('aria-pressed', 'true');
-      await expect(restore).toHaveText('Restore');
+      await expect(restore).toHaveAccessibleName(`Restore ${name}`);
       await expect(page.locator('[data-review-panel]:visible')).toHaveCount(1);
       const max = (await tile(page, name).boundingBox())!;
       expect(max.width).toBe(width);
@@ -72,7 +72,7 @@ test('Escape closes a drawer or move menu before restoring the maximised tile', 
   await openReview(page, { store: { reviewSplit: true } });
   await page.locator('[data-spot-key="acq-1"]').click();
   await page.getByRole('button', { name: 'Maximise Age & plots', exact: true }).click();
-  await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+  await page.getByRole('radio', { name: 'Depth profile', exact: true }).click();
   await page.getByRole('button', { name: /^Channels \(/ }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('group', { name: 'Depth profile channels', exact: true })).toHaveCount(0);
@@ -136,9 +136,10 @@ test('plot controls use the More drawer at tile widths and size changes preserve
   await expect(more).toBeVisible();
   await expect(plots.getByRole('button', { name: 'Hide selected', exact: true })).toBeHidden();
   await more.click();
-  for (const name of ['Hide selected', '2σ ellipses', 'Fit cluster', 'Box select']) {
+  for (const name of ['Hide selected', '2σ ellipses', 'Fit cluster']) {
     await expect(plots.getByRole('button', { name, exact: true })).toBeVisible();
   }
+  await expect(plots.getByRole('radio', { name: 'Box select', exact: true })).toBeVisible();
   await expect(plots.getByRole('combobox', { name: 'Concordia zoom axes', exact: true })).toBeVisible();
   await inside(plots.locator('#plot-more-controls'), plots);
   await page.keyboard.press('Escape');
@@ -147,7 +148,7 @@ test('plot controls use the More drawer at tile widths and size changes preserve
   const chart = plots.getByTestId('review-plot');
   const viewport = await chart.getAttribute('data-viewport');
   const before = (await chart.locator('.uplot canvas').boundingBox())!;
-  await page.getByRole('button', { name: 'Image focus', exact: true }).click();
+  await page.getByRole('radio', { name: 'Image focus', exact: true }).click();
   await expect.poll(async () => (await chart.locator('.uplot canvas').boundingBox())!.width).toBeLessThan(before.width);
   await expect(chart).toHaveAttribute('data-viewport', viewport!);
   await page.setViewportSize({ width: 1512, height: 982 });
@@ -157,14 +158,14 @@ test('plot controls use the More drawer at tile widths and size changes preserve
 
 test('presets persist separately for solo and split mode', async ({ page }) => {
   await openReview(page, { store: { reviewSplit: true } });
-  await page.getByRole('button', { name: 'Image focus', exact: true }).click();
+  await page.getByRole('radio', { name: 'Image focus', exact: true }).click();
   await expect.poll(() => saved(page)).toEqual(presetLayout('Image focus', true));
   await page.getByRole('checkbox', { name: 'SEM images', exact: true }).uncheck();
-  await expect(page.getByRole('button', { name: 'Image focus', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Plots focus', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Image focus', exact: true })).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Plots focus', exact: true }).click();
   await expect.poll(() => saved(page, 'reviewDockSolo')).toEqual(presetLayout('Plots focus', false));
   await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
-  await expect(page.getByRole('button', { name: 'Image focus', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('radio', { name: 'Image focus', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect.poll(() => saved(page)).toEqual(presetLayout('Image focus', true));
 });
 
@@ -180,7 +181,7 @@ test('the compact Layout control expands within the toolbar at 1024x640', async 
   const box = (await drawer.boundingBox())!;
   expect((await tile(page, 'Age & plots').boundingBox())!.y).toBeGreaterThan(original.y);
   expect(box.y + box.height).toBeLessThanOrEqual((await tile(page, 'SEM images').boundingBox())!.y);
-  await drawer.getByRole('button', { name: 'Plots focus', exact: true }).click();
+  await drawer.getByRole('radio', { name: 'Plots focus', exact: true }).click();
   await expect(drawer).toHaveCount(0);
   await expect.poll(() => saved(page)).toEqual(presetLayout('Plots focus', true));
   await expect.poll(() => problems(page, 'Compact layout toolbar')).toEqual([]);

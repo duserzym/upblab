@@ -1,10 +1,10 @@
 <!-- Usage: <SegmentedControl {options} bind:value label="Views" />; view switches only. -->
 <script lang="ts">
   import { segmentedIndex, type SegmentedOption } from '../../lib/ui-controls';
-  let { options, value = $bindable(), label, onchange, size = 'normal' }: {
-    options: SegmentedOption[]; value: string; label: string; onchange?: (value: string) => void; size?: 'small' | 'normal';
+  let { options, value = $bindable(), label, onchange, size = 'normal', wrap = false, disabled = false }: {
+    options: SegmentedOption[]; value: string; label: string; onchange?: (value: string) => void; size?: 'small' | 'normal'; wrap?: boolean; disabled?: boolean;
   } = $props();
-  let buttons: HTMLButtonElement[] = [];
+  let buttons = $state<HTMLButtonElement[]>([]);
   const active = $derived(Math.max(0, options.findIndex(option => option.value === value)));
   function select(index: number) { value = options[index].value; onchange?.(value); }
   function keyboard(event: KeyboardEvent, index: number) {
@@ -13,11 +13,11 @@
     event.preventDefault(); select(next); buttons[next]?.focus();
   }
 </script>
-<div class="segments" class:small={size === 'small'} role="radiogroup" aria-label={label}>
+<div class="segments" class:small={size === 'small'} class:wrap role="radiogroup" aria-label={label}>
   {#each options as option, index (option.value)}
-    <button type="button" role="radio" aria-checked={value === option.value} aria-label={option.ariaLabel ?? option.label}
+    <button type="button" value={option.value} role="radio" aria-checked={value === option.value} aria-label={option.ariaLabel ?? option.label}
       title={option.title ?? option.ariaLabel ?? option.label} tabindex={index === active ? 0 : -1}
-      bind:this={buttons[index]} onclick={() => select(index)} onkeydown={event => keyboard(event, index)}>{option.label}</button>
+      {disabled} bind:this={buttons[index]} onclick={() => select(index)} onkeydown={event => keyboard(event, index)}>{option.label}</button>
   {/each}
 </div>
 <style>
@@ -31,4 +31,7 @@
   button:active { background-image: linear-gradient(var(--press), var(--press)); }
   button:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--accent); outline-offset: 2px; }
   .small button { height: 28px; padding: 2px 8px; font-size: 12px; }
+  .wrap { flex-wrap: wrap; width: fit-content; min-width: 0; max-width: 100%; }
+  .wrap button { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+  button:disabled { opacity: .5; cursor: default; }
 </style>

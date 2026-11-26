@@ -42,6 +42,7 @@
   @media (max-width: 1100px) { input { width: 10rem; } }
   .compact { display: block; }
   .compact .toolbar-title { margin-bottom: var(--space-1); }
+  .compact .toolbar-controls { column-gap: var(--space-1); }
   .compact h2 { font-size: 1rem; }
   .compact input { flex: 1 1 8rem; width: 0; min-width: max(8rem, 128px); }
   .compact :global(.btn), .compact :global(.chip) { font-size: 0.74rem; padding-inline: var(--space-1); white-space: nowrap; }

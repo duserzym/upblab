@@ -154,7 +154,7 @@ for (const desktop of [true, false]) for (const [width, height] of [[1280, 800],
     await expect(page.getByRole('region', { name: 'Narrow data by person, team and project' })).toHaveCount(0);
     expect(await sessionsFrame.boundingBox()).toEqual({ x: 0, y: 48, width, height: height - 48 });
     await page.getByRole('tab', { name: 'Home', exact: true }).click();
-    await page.getByRole('button', { name: 'Records · Samples and Projects', exact: true }).click();
+    await page.getByRole('radio', { name: 'Records · Samples and Projects', exact: true }).click();
     await expect(page.getByTestId('samples-row')).toContainText('Owner: Cedar Analyst');
     await expect(page.getByTestId('projects-row')).toContainText('Owner: Moss Analyst');
     await page.getByRole('button', { name: 'Show more samples', exact: true }).click();
@@ -166,7 +166,7 @@ for (const desktop of [true, false]) for (const [width, height] of [[1280, 800],
     await expect(sessionsFrame).toHaveAttribute('src', /#\/samples\/sample-one$/);
     await page.getByRole('tab', { name: 'Home', exact: true }).click();
     await expect(page.getByLabel('Person', { exact: true })).toHaveValue('cedar');
-    await page.getByRole('button', { name: 'Overview', exact: true }).click();
+    await page.getByRole('radio', { name: 'Overview', exact: true }).click();
     await expect(page.getByTestId('home-pins')).toBeVisible();
     await page.getByLabel('View as', { exact: true }).selectOption('cedar');
     await expect(page.getByTestId('home-pins')).toHaveCount(0);

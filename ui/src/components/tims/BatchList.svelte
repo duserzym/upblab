@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconButton from '../ui/IconButton.svelte';
   import { onDestroy, untrack, type Snippet } from 'svelte';
   import { identity } from '../../lib/identity.svelte';
   import { shell } from '../../lib/shell.svelte';
@@ -107,10 +108,10 @@
   {#if view !== 'rows' || busy}
   <div class="row view-toolbar">
     {#if view === 'calendar'}
-      <button class="btn small" onclick={() => month = shiftMonth(month, -1)} aria-label="Previous month">‹</button><strong>{monthTitle}</strong><button class="btn small" onclick={() => month = shiftMonth(month, 1)} aria-label="Next month">›</button><button class="btn small" onclick={() => month = `${today.slice(0, 7)}-01`}>Today</button>
+      <IconButton icon="chevron-left" label="Previous month" onclick={() => month = shiftMonth(month, -1)} /><strong>{monthTitle}</strong><IconButton icon="chevron-right" label="Next month" onclick={() => month = shiftMonth(month, 1)} /><IconButton icon="calendar" label="Today" onclick={() => month = `${today.slice(0, 7)}-01`} />
     {:else if view === 'lanes'}
       <SegmentedControl label="Lane zoom" options={[{ value: 'weeks', label: 'Weeks' }, { value: 'months', label: 'Months' }]} bind:value={zoom} size="small" />
-      <button class="btn small" onclick={() => window = extendLaneWindow(window, -1)}>Earlier</button><button class="btn small" onclick={() => window = extendLaneWindow(window, 1)}>Later</button><button class="btn small" onclick={scrollLanesToToday}>Today</button>
+      <IconButton icon="chevron-left" label="Earlier" onclick={() => window = extendLaneWindow(window, -1)} /><IconButton icon="chevron-right" label="Later" onclick={() => window = extendLaneWindow(window, 1)} /><IconButton icon="calendar" label="Today" onclick={scrollLanesToToday} />
     {/if}
     {#if busy}<span class="small muted" role="status">Loading batches…</span>{/if}
   </div>

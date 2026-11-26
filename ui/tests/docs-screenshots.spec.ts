@@ -302,12 +302,12 @@ async function prepareScreen(page: Page, screen: Screen, demo: Awaited<ReturnTyp
       await page.getByRole('button', { name: 'Fit cluster', exact: true }).click();
     }
     if (screen === 'review-geochemistry') {
-      await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+      await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
       await page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true }).click();
       await page.getByRole('group', { name: 'Choose Y quantity' }).getByRole('button', { name: 'REE pattern', exact: true }).click();
       await expect(page.getByText('CI chondrite, McDonough and Sun (1995)')).toBeVisible();
     } else if (screen === 'review-depth') {
-      await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+      await page.getByRole('radio', { name: 'Depth profile', exact: true }).click();
       await expect(page.getByLabel('Depth profile axis')).toBeVisible();
       await expect(page.getByLabel('Plotted depth channels')).toBeVisible();
     } else if (screen === 'review-images') {

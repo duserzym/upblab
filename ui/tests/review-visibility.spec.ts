@@ -27,7 +27,7 @@ for (const mode of ['wetherill', 'tw']) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openReview(page);
     const region = plots(page), plot = region.getByTestId('review-plot');
-    await page.getByLabel('Concordia diagram').selectOption(mode);
+    await page.getByRole('radiogroup', { name: 'Concordia diagram', exact: true }).locator(`[role=radio][value="${mode}"]`).click();
     await expect(region.getByRole('button', { name: '2σ ellipses', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.locator('[data-spot-key="acq-1"]').click();
     await page.mouse.move(0, 0);
@@ -86,6 +86,7 @@ for (const mode of ['wetherill', 'tw']) {
     const spot = plot.locator('[data-point-key="acq-1"]');
     await spot.click({ button: 'right' });
     await page.getByRole('menuitem', { name: 'Hide spot', exact: true }).click();
+    await expect(region.getByRole('button', { name: 'Show hidden (1)', exact: true })).toHaveText('Show hidden (1)');
     await geometry(plot, 'Sample A', 3, 3);
     await expect(spot).toHaveCount(0);
     await expect(targets(plot, 'Sample A')).toHaveCount(3);
@@ -118,7 +119,7 @@ test('A selected and hovered spot hidden by its sample has no ring or keyboard t
 test('Geochemistry legend hides scatter points and REE paths in every panel', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await openReview(page);
-  await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+  await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
   const panels = page.getByTestId('geochem-panel');
   await panels.first().getByRole('button', { name: 'Choose Y axis', exact: true }).click();
   await page.getByRole('group', { name: 'Choose Y quantity', exact: true }).getByRole('button', { name: 'REE pattern', exact: true }).click();
@@ -149,7 +150,7 @@ test('Geochemistry legend hides scatter points and REE paths in every panel', as
 test('Depth column chip removes its trace and uncertainty band together', async ({ page }) => {
   await openReview(page);
   await page.locator('[data-spot-key="acq-1"]').click();
-  await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+  await page.getByRole('radio', { name: 'Depth profile', exact: true }).click();
   const region = plots(page), plot = region.getByTestId('review-plot');
   await expect.poll(async () => (await drawn(plot, '206Pb/238U_age')).bands).toBe(1);
   await expect.poll(async () => (await drawn(plot, '206Pb/238U_age')).paths).toBe(1);

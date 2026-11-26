@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconButton from './components/ui/IconButton.svelte';
   import OutboxStatus from './components/OutboxStatus.svelte';
   import { outbox, currentOutboxScope } from './lib/outbox.svelte';
   import { timsRights } from './lib/tims-rights.svelte';
@@ -220,7 +221,6 @@
   }
 </script>
 
-
 <svelte:window ononline={() => { void connectivity.retryNow(); void outbox.flush(); }} onfocus={() => { void appWatch.check(); void outbox.flush(); }} />
 <svelte:document onvisibilitychange={() => { appWatch.visibilityChanged(); }} />
 <div class="shell">
@@ -255,21 +255,8 @@
         {#if identity.signedIn}<span class="dot" style="background: {connectivity.state === 'offline' || connectivity.state === 'server-error' ? 'var(--warning)' : 'var(--ok)'}"></span><span class="account-name" title={identity.label}>{identity.label}</span>{:else}Sign in{/if}
       </button>
     {/if}
-    <button
-      class="tab icon"
-      aria-label="Settings"
-      title="Settings (Ctrl/⌘ ,)"
-      aria-pressed={shell.view === 'settings'}
-      onclick={() => shell.show(shell.view === 'settings' ? (fixedTabs.find(t => t.id === settings.lastTab)?.id ?? 'home') : 'settings')}
-    >
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"
-        ><path
-          fill="currentColor"
-          d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"
-          transform="translate(-1 0)"
-        /></svg
-      >
-    </button>
+    <IconButton icon="settings" label="Settings" title="Settings (Ctrl/⌘ ,)" aria-pressed={shell.view === 'settings'}
+      onclick={() => shell.show(shell.view === 'settings' ? (fixedTabs.find(t => t.id === settings.lastTab)?.id ?? 'home') : 'settings')} />
     {/if}
   </header>
 

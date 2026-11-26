@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MetaChip from '../ui/MetaChip.svelte';
   import { oversight, READ_ONLY_REASON } from '../../lib/oversight.svelte';
   import { ownerName } from '../../lib/records.svelte';
   import { localInventory } from '../../lib/local-sessions.svelte';
@@ -24,7 +25,7 @@
   <div class="heading">
     <button class="main mono" title={`${s.session_key} · ${counts} · ${status.text}`} aria-label="Open session {s.session_key}" onclick={() => void shell.handleLink(`upbdb://session/${s.id}`, 'home')}><span class="key">{s.session_key}</span></button>
     {#if togglePin}<PinButton label={s.session_key} {pinned} toggle={togglePin} />{/if}
-    <span class="chip mineral"><MineralIcon mineral={s.material} /><span>{s.material || 'Unspecified'}</span></span>
+    <span class="mineral"><MetaChip text={s.material || 'Unspecified'}>{#snippet icon()}<MineralIcon mineral={s.material} />{/snippet}</MetaChip></span>
   </div>
   <div class="byline">
     <p class="muted small byline-text" title={byline}>{#if date || people}{#if date}<span class="date">{date}</span>{/if}{#if date && people}<span aria-hidden="true">·</span>{/if}{#if people}<span class="ellipsis">{people}</span>{/if}{:else}<span class="ellipsis">{byline}</span>{/if}</p>
@@ -32,8 +33,8 @@
       {@const label = `${s.laser_log_count} laser log${s.laser_log_count === 1 ? '' : 's'} tied, ${s.laser_has_times ? 'with laser times' : 'no laser times'}`}
       <button class="chip access" title={label} aria-label={label} onclick={() => void shell.handleLink(`upbdb://session/${s.id}`, 'home')}>Laser log</button>
     {/if}
-    {#if local}<span class="chip">Local copy</span>{/if}
-    {#if row.access}<span class="chip access" title={row.access.owner ? `Session owner: ${row.access.owner}` : 'Your session access'}>{row.access.role}</span>{/if}
+    {#if local}<MetaChip text="Local copy" />{/if}
+    {#if row.access}<span class="access" title={row.access.owner ? `Session owner: ${row.access.owner}` : 'Your session access'}><MetaChip text={row.access.role} /></span>{/if}
   </div>
   <details class="spot-details">
     <summary class="spot-line" title={counts} aria-label={`Spot breakdown for ${s.session_key}, ${plural(s.acquisition_count, 'spot')}`}>
@@ -75,7 +76,6 @@
   .main::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
   .chip { font-size: 0.72rem; padding: 0 var(--space-1); white-space: nowrap; }
   .mineral { display: flex; align-items: center; gap: 2px; max-width: 40%; text-transform: capitalize; }
-  .mineral span { overflow: hidden; text-overflow: ellipsis; }
   .byline { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); min-width: 0; }
   .access { position: relative; z-index: 1; }
   p { margin: 0; }

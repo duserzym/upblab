@@ -17,7 +17,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }])
       const canvas = plot.locator('.u-wrap canvas'); // The base canvas, excluding the hover overlay.
       const targets = plot.locator('.point-target');
       const layer = plot.locator('.point-targets');
-      await page.locator('select[aria-label="Concordia diagram"]').selectOption(mode);
+      await page.locator('[role=radiogroup][aria-label="Concordia diagram"]').locator(`[role=radio][value="${mode}"]`).click();
       await expect(plot).toHaveAttribute('data-point-count', String(n));
       await expect(targets).toHaveCount(n);
       // Let the existing debounced ResizeObserver settle before pixel comparisons.
@@ -59,7 +59,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }])
       const afterWheel = JSON.parse((await plot.getAttribute('data-viewport'))!) as { x: [number, number] };
       expect((afterWheel.x[1] - afterWheel.x[0]) / (beforeWheel.x[1] - beforeWheel.x[0])).toBeCloseTo(2 ** (56 / 280), 8);
 
-      await page.locator('[aria-label="Concordia navigation"] button', { hasText: /^Fit all$/ }).click();
+      await page.getByRole('group', { name: 'Concordia navigation', exact: true }).getByRole('button', { name: 'Fit all', exact: true }).click();
       await expect(plot).toHaveAttribute('data-viewport', original!);
       await expect(plot).toHaveAttribute('data-point-count', String(n));
       await page.mouse.move(0, 0);
@@ -94,13 +94,13 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }])
 
       // Axis changes retain uPlot and all keyboard/context-menu nodes.
       const baseNode = await canvas.elementHandle(), pointNode = await point.elementHandle();
-      const diagram = page.locator('select[aria-label="Concordia diagram"]');
-      await diagram.selectOption(mode === 'tw' ? 'wetherill' : 'tw');
+      const diagram = page.locator('[role=radiogroup][aria-label="Concordia diagram"]');
+      await diagram.locator(`[role=radio][value="${mode === 'tw' ? 'wetherill' : 'tw'}"]`).click();
       await expect(plot).toHaveAttribute('data-point-count', String(n));
       await expect.poll(async () => (await reference())?.paths).toBe(1);
       expect(await baseNode!.evaluate(element => element.isConnected)).toBe(true);
       expect(await pointNode!.evaluate(element => element.isConnected)).toBe(true);
-      await diagram.selectOption(mode);
+      await diagram.locator(`[role=radio][value="${mode}"]`).click();
       await expect(plot).toHaveAttribute('data-viewport', original!);
       expect(await baseNode!.evaluate(element => element.isConnected)).toBe(true);
 

@@ -57,13 +57,34 @@ for everything. The shared components live in `ui/src/components/ui/`.
 
 | Component | Purpose and props |
 | --- | --- |
-| `SegmentedControl` | Switch views inside one bordered group with dividers. `options: {value, label, title?, ariaLabel?}[]`, bindable `value: string`, `label: string`, optional `onchange(value)` and `size: 'small' \| 'normal'` (normal by default). The selected radio uses `--accent-soft` and `--accent`. |
+| `SegmentedControl` | Switch views inside one bordered group with dividers. `options: {value, label, title?, ariaLabel?}[]`, bindable `value: string`, `label: string`, optional `onchange(value)` and `size: 'small' \| 'normal'` (normal by default), `wrap` (bounded, wrapping labels) and `disabled` (all options). The selected radio uses `--accent-soft` and `--accent`. |
 | `Stepper` | Navigate a workflow. `steps: {label, fullName, detail, state: 'done' \| 'current' \| 'pending', hint?}[]`, `onselect(index)`, `label`, optional `trailing` snippet for actions. Short labels and counts appear below 22 px circles; full names and details form accessible names. Current hints are exposed in titles and accessible descriptions. Its row is 54 px high. |
 | `MetaChip` | Display a quiet neutral fact. `text: string`, optional `icon` (an `IconName` or snippet), `info: string` and `infoLabel: string`. Long text truncates with its complete value in `title`. An info button describes provenance without adding it to the fact. |
-| `IconButton` | A rare action with a named icon. `icon: IconName`, `label: string`, optional `title`, `disabled`, and standard button attributes and handlers, including `aria-expanded`. The label is its accessible name; the title defaults to that label. |
+| `IconButton` | A rare action with a named icon. `icon: IconName`, `label: string`, optional `title`, `disabled`, and standard button attributes and handlers, including `aria-expanded`, optional `size: 'small' \| 'normal'` (24 px or 30 px) and bindable `element` for popover anchors. The label is its accessible name; the title defaults to that label. |
 | `StatusChip` | A short state fact. `text: string`, optional `tone: 'neutral' \| 'warning' \| 'success'` (neutral by default). Warning and success tints mix the existing `--warning` and `--ok` tokens; the text also names the state. |
-| `ProgressBar` | A 5 px progress bar and an “n of m noun” caption. `value?: number \| null`, `total: number`, `noun: string`. Missing values show “— of m noun”, omit `aria-valuenow` and leave the bar empty. Zero totals have no fill. Values outside the range are clamped. |
-| `Icon` | Decorative inline SVG. `kind: 'refresh' \| 'edit' \| 'history' \| 'person' \| 'flask' \| 'building' \| 'info' \| 'check' \| 'chevron-left' \| 'calendar' \| 'rows' \| 'lanes'`. Uses a 24 × 24 viewBox, currentColor stroke, 1.6 px stroke width and round caps and joins; the default display is 18 × 18 px. |
+| `ProgressBar` | A 5 px progress bar and an “n of m noun” caption. `value?: number \| null`, `total: number`, `noun: string`. Missing values show “— of m noun”, omit `aria-valuenow` and leave the bar empty. Zero totals have no fill. Values outside the range are clamped. `hideCaption` hides the visible count when existing status text already describes progress; accessible values stay present. |
+| `Icon` | Decorative inline SVG. `kind: 'refresh' \| 'edit' \| 'history' \| 'person' \| 'flask' \| 'building' \| 'info' \| 'check' \| 'chevron-left' \| 'calendar' \| 'rows' \| 'lanes' \| 'chevron-right' \| 'close' \| 'more' \| 'maximize' \| 'restore' \| 'zoom-in' \| 'zoom-out' \| 'fit' \| 'hide' \| 'show' \| 'pin' \| 'settings'`. Uses a 24 × 24 viewBox, currentColor stroke, 1.6 px stroke width and round caps and joins; the default display is 18 × 18 px. |
+
+### Where each shape is used
+
+| Shape | Where |
+| --- | --- |
+| Segmented control | TIMS batch/list views and capsule chemistry/entry switches; Review plot, diagram, tool and layout choices; Home views and atlas filter; Settings theme and server mode. |
+| Stepper | TIMS batch setup workflow. |
+| Metadata chip | TIMS batch details and spike origin; Home session mineral, Local copy and access role. Session bylines and run status stay plain text. |
+| Status chip | TIMS batch, capsule readiness and spike states; shell upload handoff states. |
+| Icon button | Batch/capsule navigation, calendar/lane actions, Review plot/panel actions, Home refresh and pins, top-bar Settings. |
+| Text/list navigation | TIMS sections and batch breadcrumb. Main module and mount tabs remain navigation. |
+| Button | Primary actions; independent pressed options keep their existing names and states with compact rectangular outlines. |
+| Thin progress bar | TIMS batch readiness and shell upload handoff, with existing live status text. |
+
+Spatial capsule wells keep their measured geometry and pressed selection.
+Independent sample/legend selections, axis options and preset replacement
+commands keep their existing interaction models.
+
+Wrapping segmented groups keep content-sized segments and a rounded border;
+they wrap only when the panel runs out of width. Plot actions with counts
+keep those counts visible. Ambiguous fit actions keep short text labels.
 
 All colours come from the design tokens, so Light, Dark and System share the
 same controls. No new theme tokens are required. View and workflow changes

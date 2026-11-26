@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconButton from './ui/IconButton.svelte';
   import { containedPopover } from '../lib/contained-popover';
   import type { Snippet } from 'svelte';
   import { settings } from '../lib/settings.svelte';
@@ -174,11 +175,11 @@
         <div class="heading"><button class="grip" title="Drag to another panel edge to move" aria-label={`Drag ${title[pane]}`}
           onpointerdown={e => grab(e, pane)} onpointermove={slide} onpointerup={release}
           onpointercancel={release} onlostpointercapture={release}><span aria-hidden="true">⠿</span></button><div class="tile-title">{#if pane === 'images' && imagesTitle}{@render imagesTitle()}{:else}<span title={title[pane]}>{title[pane]}</span>{/if}</div></div>
-        <div class="header-actions">{#if headerActions}{@render headerActions(pane)}{/if}<button class="dock-menu maximise" aria-label={`${maximised === pane ? 'Restore' : 'Maximise'} ${title[pane]}`} aria-pressed={maximised === pane} title={maximised === pane ? 'Restore panel' : 'Maximise panel'} onclick={() => maximise(pane)}>{maximised === pane ? 'Restore' : '⛶'}</button>
+        <div class="header-actions">{#if headerActions}{@render headerActions(pane)}{/if}<IconButton size="small" icon={maximised === pane ? 'restore' : 'maximize'} label={`${maximised === pane ? 'Restore' : 'Maximise'} ${title[pane]}`} aria-pressed={maximised === pane} title={`${maximised === pane ? 'Restore' : 'Maximise'} ${title[pane]} · ${maximised === pane ? 'Restore panel' : 'Maximise panel'}`} onclick={() => maximise(pane)} />
         {#if pane === 'images'}
-          <button class="dock-menu" aria-label="Move SEM images" title="Move panel" aria-expanded={imagesMenu} aria-controls="dock-images" onclick={() => imagesMenu = !imagesMenu}>⋯</button>
+          <IconButton size="small" icon="more" label="Move SEM images" title="Move panel" aria-expanded={imagesMenu} aria-controls="dock-images" onclick={() => imagesMenu = !imagesMenu} />
         {:else}
-          <button id={`dock-trigger-${pane}`} class="dock-menu" aria-label={`Move ${title[pane]}`} title="Move panel" popovertarget={`dock-${pane}`}>⋯</button>
+          <IconButton size="small" icon="more" id={`dock-trigger-${pane}`} label={`Move ${title[pane]}`} title="Move panel" popovertarget={`dock-${pane}`} />
           <div id={`dock-${pane}`} class="move-menu" popover="auto"
             use:containedPopover={{anchor: () => surface?.querySelector<HTMLElement>(`#dock-trigger-${pane}`) ?? undefined, w: 310, h: 180}}>
             {@render destinations(pane)}

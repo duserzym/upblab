@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StatusChip from '../ui/StatusChip.svelte';
   import OperatorName from './OperatorName.svelte';
   import { untrack, onMount, onDestroy } from 'svelte';
   import { identity } from '../../lib/identity.svelte';
@@ -381,23 +382,21 @@
             {#if selected !== null}
             <div class="row heading inspector-head">
               <div class="stack title"><h3 title={fraction?.name}>{label}{fraction ? ` · ${fraction.name}` : ''}</h3>
-                <span class="small capsule-progress">grain {capsuleReady?.grain ? '✓' : 'pending'} · spike {capsuleReady?.spike ? '✓' : 'pending'}</span>
+                <span class="row capsule-progress"><StatusChip text={`grain ${capsuleReady?.grain ? '✓' : 'pending'}`} tone={capsuleReady?.grain ? 'success' : 'neutral'} /> <StatusChip text={`spike ${capsuleReady?.spike ? '✓' : 'pending'}`} tone={capsuleReady?.spike ? 'success' : 'neutral'} /></span>
                 <p class="muted small">{fraction ? [preparation && capsulePreparations[preparation], fraction.sample.name, statusWords(fraction.status)].filter(Boolean).join(' · ') : 'Empty capsule'}</p>
               </div>
               <div class="row">
-                <button class="btn small" type="button" disabled={selected <= 1} onclick={() => choose(selected! - 1, selectedStep)} aria-label="Previous capsule">Previous</button>
-                <button class="btn small" type="button" disabled={selected >= batch.capsule_set.positions} onclick={() => choose(selected! + 1, selectedStep)}>Next capsule</button>
-                <button class="btn small" type="button" onclick={() => { selected = null; picking = false; replacing = undefined; }}>Close capsule</button>
+                <IconButton icon="chevron-left" label="Previous capsule" disabled={selected <= 1} onclick={() => choose(selected! - 1, selectedStep)} />
+                <IconButton icon="chevron-right" label="Next capsule" disabled={selected >= batch.capsule_set.positions} onclick={() => choose(selected! + 1, selectedStep)} />
+                <IconButton icon="close" label="Close capsule" onclick={() => { selected = null; picking = false; replacing = undefined; }} />
               </div>
             </div>
 
             <p class="inspector-status small" role="status">{refineNote || imported}</p>
             {#if !fraction && editable}
-              <div class="row intake" role="group" aria-label="Prepare empty capsule">
-                <button class="btn small" type="button" aria-pressed={picking && !manualPreparation} onclick={() => { manualPreparation = null; openPicker(); }}>GrainAtlas</button>
-                <button class="btn small" type="button" aria-pressed={manualPreparation === 'tims-only'} onclick={() => { picking = false; manualPreparation = 'tims-only'; }}>TIMS only</button>
-                <button class="btn small" type="button" aria-pressed={manualPreparation === 'lab-blank'} onclick={() => { picking = false; manualPreparation = 'lab-blank'; }}>Lab blank</button>
-              </div>
+              <SegmentedControl label="Prepare empty capsule" size="small" wrap
+                options={[{value:'atlas',label:'GrainAtlas'},{value:'tims-only',label:'TIMS only'},{value:'lab-blank',label:'Lab blank'}]}
+                value={manualPreparation ?? (picking ? 'atlas' : '')} onchange={value => { if (value === 'atlas') { manualPreparation = null; openPicker(); } else { picking = false; manualPreparation = value as 'tims-only' | 'lab-blank'; } }} />
             {/if}
             {#if !fraction && manualPreparation && editable}
               {#key `${selected}:${manualPreparation}`}
@@ -499,7 +498,7 @@
   .row { flex-wrap: wrap; }
   .heading { justify-content: space-between; }
   .title { gap: 3px; }
-  .step-list .btn[aria-pressed=true], .intake .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
+  .step-list .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
   .inactive { display: none !important; }
   .batch { flex: 1; min-height: 0; gap: 6px; }
   .batch > .panel, .bench > .panel { margin: 0; }
@@ -556,8 +555,7 @@
   .inspector-head p { grid-column: 1 / -1; line-height: 17px; }
   .inspector-head h3, .inspector-head p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .inspector-head > .row { flex-wrap: nowrap; gap: 4px; }
-  .inspector-head .btn { height: 28px; padding: 2px 6px; font-size: .75rem; white-space: nowrap; }
-  .capsule-progress { display: block; height: 18px; font-size: .68rem; white-space: nowrap; }
+  .capsule-progress { display: flex; flex-wrap: nowrap; gap: 4px; white-space: nowrap; }
   .inspector { gap: 4px; }
   .inspector-status { height: 20px; min-height: 20px; overflow: auto; }
   .grain-selection { height: 100%; min-height: 0; }
@@ -573,6 +571,5 @@
     .bench { grid-template-columns: 160px calc((100% - 176px) * .5) calc((100% - 176px) * .5); }
     .board > .heading { height: 48px; overflow: hidden; flex-wrap: wrap; }
     .board .legend { display: none; }
-
   }
 </style>

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import SegmentedControl from '../ui/SegmentedControl.svelte';
+  import IconButton from '../ui/IconButton.svelte';
   import { containedPopover } from '../../lib/contained-popover';
   import { editInAtlas, openInStudio } from '../../lib/apps.svelte';
   import uPlot from 'uplot';
@@ -642,7 +644,6 @@
   });
 </script>
 {#snippet secondaryNavigation()}
-  <button class="chip" aria-pressed={tool === 'select'} title="Drag a rectangle to select spots" onclick={() => tool = 'select'}>Box select</button>
   <label class="zoom-axis">Zoom
     <select aria-label="Concordia zoom axes" title="Axes affected by the zoom buttons and scroll wheel" bind:value={zoomAxis}>
       <option value="both">Both axes</option><option value="x">X only</option><option value="y">Y only</option>
@@ -671,13 +672,11 @@
 </div>
 {#if onbox}
   <div class="navigation row wrap" role="group" aria-label="Concordia navigation">
-    {#each tools.filter(t => t.id !== 'select') as t (t.id)}
-      <button class="chip" aria-pressed={tool === t.id} title={t.title} onclick={() => tool = t.id}>{t.label}</button>
-    {/each}
+    <SegmentedControl label="Plot tool" size="small" wrap options={tools.map(t => ({value:t.id,label:t.label,title:t.title}))} value={tool} onchange={value => tool = value as DragTool} />
     <div class="navigation-secondary">{@render secondaryNavigation()}</div>
-    <button class="chip zoom" aria-label="Zoom in" title="Zoom in about the center" onclick={() => zoom(0.67)}>+</button>
-    <button class="chip zoom" aria-label="Zoom out" title="Zoom out about the center" onclick={() => zoom(1.5)}>−</button>
-    <button class="chip" title="Fit all visible spots" onclick={() => viewport = null}>Fit all</button>
+    <IconButton size="small" icon="zoom-in" label="Zoom in" title="Zoom in about the center" onclick={() => zoom(0.67)} />
+    <IconButton size="small" icon="zoom-out" label="Zoom out" title="Zoom out about the center" onclick={() => zoom(1.5)} />
+    <IconButton size="small" icon="fit" label="Fit all" title="Fit all visible spots" onclick={() => viewport = null} />
   </div>
 {/if}
 {#if legend}<div class="legend small" aria-label="Sample legend">{#each data.legend as sample (sample.key)}
@@ -702,8 +701,6 @@
   .navigation {gap:4px;flex:none;}
   .navigation-secondary {display:contents;}
   @container (max-width:760px) {.navigation-secondary {display:none;}}
-  .navigation .chip {font-size:0.74rem;padding:3px 7px;}
-  .zoom {min-width:27px;}
   .zoom-axis select {font-size:0.72rem;padding:2px 4px;}
   .canvas { position:absolute; inset:0; }
   .legend { display:flex; flex-wrap:wrap; gap:4px 12px; padding:4px; overflow-wrap:anywhere; }
@@ -711,5 +708,4 @@
   .legend .dimmed {opacity:0.45;}
   i { width:10px;height:10px;flex:none;border-radius:50%; }
   .tooltip { position:absolute;pointer-events:none;background:var(--plot-bg);border:1px solid var(--hairline);padding:5px;max-width:190px;overflow-wrap:anywhere; }
-  @container (max-width:400px) {.navigation .chip {padding:3px 5px;font-size:0.7rem;}}
 </style>

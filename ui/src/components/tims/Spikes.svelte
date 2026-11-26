@@ -1,4 +1,6 @@
 <script lang="ts">
+  import MetaChip from '../ui/MetaChip.svelte';
+  import StatusChip from '../ui/StatusChip.svelte';
   import { untrack, onMount, onDestroy } from 'svelte';
   import { identity } from '../../lib/identity.svelte';
   import { timsRights } from '../../lib/tims-rights.svelte';
@@ -107,7 +109,7 @@
       {@const item = listedVersion(v)}
       <tr class:selected={versionId === v.id} aria-selected={versionId === v.id} tabindex="0" aria-label={`View ${v.version} · ${subfractionLabel(sub.sub_id, sub.name)}`} onclick={() => void choose(v.id, sub.lab_id)} onkeydown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); void choose(v.id, sub.lab_id); } }}>
         <td class="version-name">{v.version}</td>
-        <td><span class="badge" class:current={item.status === 'current'} class:muted={item.status === 'superseded'} class:warning={item.status === 'withdrawn'}>{versionStatusLabel(item.status)}</span></td>
+        <td><StatusChip text={versionStatusLabel(item.status)} tone={item.status === 'current' ? 'success' : item.status === 'withdrawn' ? 'warning' : 'neutral'} /></td>
         <td><span class="citation" title={v.source_display || v.source}>{shortCitation(v.source_display || v.source) || 'Not given'}</span></td>
         <td class="small muted" title={!v.calibrated && !cache.get(v.id)?.calibrated ? 'Calibration year not supplied in the version list' : undefined}>{cache.get(v.id)?.calibrated || v.calibrated || '—'}</td>
       </tr>
@@ -125,7 +127,7 @@
           {@const count = currentCount(solution)}
           {@const aliases = [...new Set(solution.aliases.filter(a => a !== solution.name))]}
           <button class="panel solution" aria-pressed={solutionId === solution.id} aria-label={solution.name} onclick={() => selectSolution(solution)}>
-            <span class="row title-line"><strong>{solution.name}</strong><span class="badge muted">{solution.origin === 'registry' ? 'EARTHTIME' : 'Lab'}</span>{#if !solution.active}<span class="badge muted">Inactive</span>{/if}</span>
+            <span class="row title-line"><strong>{solution.name}</strong><MetaChip text={solution.origin === 'registry' ? 'EARTHTIME' : 'Lab'} />{#if !solution.active}<StatusChip text="Inactive" />{/if}</span>
             {#if aliases.length}<span class="small muted">also {aliases.join(', ')}</span>{/if}
             {#if solution.isotopes.length}<span class="small muted" aria-label={solution.isotopes.join(' · ')}>{solution.isotopes.map(isotopeLabel).join(' · ')}</span>{/if}
             <span class="small muted">{count} current {count === 1 ? 'version' : 'versions'}</span>
@@ -140,7 +142,7 @@
           <h3>{selected.name}</h3>
           {#if selected.registry_id && selected.registry_id !== selected.name}<p class="small muted">{selected.registry_id}</p>{/if}
           {#if selected.description}<p class="small">{selected.description}</p>{/if}
-          <div class="row"><span class="badge muted">{selected.origin === 'registry' ? 'EARTHTIME' : 'Lab'}</span>{#if !selected.active}<span class="badge muted">Inactive</span>{/if}<span class="small muted" aria-label={selected.isotopes.length ? `${selected.isotopes.join('–')} tracer` : undefined}>{selected.isotopes.length ? `${selected.isotopes.map(isotopeLabel).join('–')} tracer` : `Spike type ${selected.spike_type}`}</span></div>
+          <div class="row"><MetaChip text={selected.origin === 'registry' ? 'EARTHTIME' : 'Lab'} />{#if !selected.active}<StatusChip text="Inactive" />{/if}<span class="small muted" aria-label={selected.isotopes.length ? `${selected.isotopes.join('–')} tracer` : undefined}>{selected.isotopes.length ? `${selected.isotopes.map(isotopeLabel).join('–')} tracer` : `Spike type ${selected.spike_type}`}</span></div>
         </header>
         {#each selected.subfractions as sub (sub.id)}
           {@const current = sub.versions.filter(v => listedVersion(v).status === 'current')}
@@ -176,13 +178,12 @@
   .catalogue,.detail{min-width:0}.detail{max-width:52rem}.solution-list{display:grid;gap:var(--space-2)}
   .solution{display:flex;flex-direction:column;align-items:flex-start;gap:var(--space-1);margin:0;padding:var(--space-3);width:100%;min-width:0;text-align:left;white-space:normal;border:1px solid var(--hairline);border-radius:var(--radius-sm);background:transparent;cursor:pointer;color:var(--text)}
   .solution:hover{background:var(--row-hover)}.solution[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent)}
-  .title-line{gap:var(--space-2);align-items:center}.title-line .badge{font-size:0.68rem}.detail-heading{gap:var(--space-2)}.detail-heading h3{font-size:1.2rem}
+  .title-line{gap:var(--space-2);align-items:center}.detail-heading{gap:var(--space-2)}.detail-heading h3{font-size:1.2rem}
   .calibration{gap:var(--space-2)}.calibration header p{margin-top:var(--space-1)}
   .versions{table-layout:fixed}.version-column{width:19%}.status-column{width:23%}.year-column{width:19%}
   .versions th,.versions td{padding:var(--space-2);position:static;background:none;overflow-wrap:anywhere}.versions th{font-size:0.72rem;text-transform:none;letter-spacing:normal}
   .versions tr{cursor:pointer}.versions tr.selected{background:var(--accent-soft)}
   .versions tr:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}.version-name{font-weight:600;color:var(--accent)}.selected .version-name{color:var(--text)}.citation{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:0.85rem}
-  .badge.current{color:var(--accent);background:var(--accent-soft)}.warning{color:var(--warning)}.versions .badge{white-space:normal;padding-inline:var(--space-2)}
   summary{cursor:pointer;color:var(--text-muted);padding-block:var(--space-2)}
   .edit{border-top:1px solid var(--hairline)}.edit .panel{padding:var(--space-3) 0;min-width:0}label{display:grid;gap:var(--space-1)}textarea,select{min-width:0;width:100%}
   @container (max-width:900px){.master-detail{grid-template-columns:minmax(0,1fr);gap:var(--space-4)}.solution-list{grid-template-columns:repeat(auto-fit,minmax(min(12rem,100%),1fr))}}

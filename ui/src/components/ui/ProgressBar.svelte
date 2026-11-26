@@ -1,11 +1,11 @@
 <!-- Usage: <ProgressBar value={ready} total={count} noun="capsules" />; null value means unknown. -->
 <script lang="ts">
   import { progressState } from '../../lib/ui-controls';
-  let { value, total, noun }: { value?: number | null; total: number; noun: string } = $props();
+  let { value, total, noun, hideCaption = false }: { value?: number | null; total: number; noun: string; hideCaption?: boolean } = $props();
   const progress = $derived(progressState(value, total, noun));
 </script>
 <div class="progress">
-  <span class="caption">{progress.caption}</span>
+  {#if !hideCaption}<span class="caption">{progress.caption}</span>{/if}
   <div class="track" role="progressbar" aria-label={noun} aria-valuemin="0" aria-valuemax={progress.max} aria-valuenow={progress.now} aria-valuetext={progress.caption}>
     <span class="fill" style:width={`${progress.percent}%`}></span>
   </div>

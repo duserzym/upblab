@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconButton from '../ui/IconButton.svelte';
   import Plot from './Plot.svelte';
   import { axisLabel, normalized, REE, quantityValue, resolveQuantity, type AvailableQuantity } from '../../lib/geochem';
   import { CI_LEGEND, type Point } from '../../lib/concordia';
@@ -23,11 +24,11 @@
   }));
 </script>
 <article class="card" class:editing={!!pickerAxis} aria-current={pickerAxis ? 'true' : undefined} data-testid="geochem-panel" data-panel-id={panel.id} data-panel-type={panel.type} data-maximized={maximized}>
-  <header><h3 title={title}>{title}</h3><button class="icon" aria-label={maximized?'Restore panel':'Maximize panel'} onclick={onmaximize}><svg viewBox="0 0 20 20" aria-hidden="true"><path d={maximized?'M7 3v4H3m14 6h-4v4M7 7 3 3m10 10 4 4':'M3 8V3h5m4 0h5v5M3 12v5h5m4 0h5v-5'} /></svg></button><button class="icon" aria-label="Remove panel" onclick={onremove}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" /></svg></button></header>
+  <header><h3 title={title}>{title}</h3><IconButton size="small" icon={maximized ? 'restore' : 'maximize'} label={maximized?'Restore panel':'Maximize panel'} onclick={onmaximize} /><IconButton size="small" icon="close" label="Remove panel" onclick={onremove} /></header>
   <div class="axes">
     {#each ['x','y'] as a}
       {@const axis = a as 'x'|'y'}
-      <div class="axis"><button class="axis-button chip" aria-label={`Choose ${a.toUpperCase()} axis`} title={axisLabel(a==='x'?x:y)} aria-expanded={pickerAxis===axis} aria-controls="geochem-quantity-picker" onclick={e=>onchoose(axis,e.currentTarget)}>{a.toUpperCase()} <span>{panel.type==='ree'?(a==='x'?'Element':'Stored ppm / CI'):(a==='x'?axisLabel(x):axisLabel(y))}</span></button><button class="chip log" aria-label={`Log ${a.toUpperCase()} axis`} aria-pressed={panel.type==='ree'?a==='y':a==='x'?panel.logX:panel.logY} disabled={panel.type==='ree'} onclick={()=>onchange({...panel,[a==='x'?'logX':'logY']:a==='x'?!panel.logX:!panel.logY})}>log</button></div>
+      <div class="axis"><button class="axis-button btn" aria-label={`Choose ${a.toUpperCase()} axis`} title={axisLabel(a==='x'?x:y)} aria-expanded={pickerAxis===axis} aria-controls="geochem-quantity-picker" onclick={e=>onchoose(axis,e.currentTarget)}>{a.toUpperCase()} <span>{panel.type==='ree'?(a==='x'?'Element':'Stored ppm / CI'):(a==='x'?axisLabel(x):axisLabel(y))}</span></button><button class="btn log" aria-label={`Log ${a.toUpperCase()} axis`} aria-pressed={panel.type==='ree'?a==='y':a==='x'?panel.logX:panel.logY} disabled={panel.type==='ree'} onclick={()=>onchange({...panel,[a==='x'?'logX':'logY']:a==='x'?!panel.logX:!panel.logY})}>log</button></div>
     {/each}
   </div>
   {#if missing.length}<div class="empty muted" role="status">{#each missing as q}<p>{q.label} is not stored for this run</p>{/each}</div>
@@ -35,11 +36,11 @@
   {#if panel.type==='ree'}<p class="small muted citation">{CI_LEGEND}</p>{/if}
 </article>
 <style>
+  .log { transition: none; } .log:active:not(:disabled) { transform: none; background-image: linear-gradient(var(--press), var(--press)); }
+  .log { border-radius: var(--radius-sm); } .log[aria-pressed=true] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
   .card {display:flex;flex-direction:column;min-width:0;min-height:0;gap:6px;padding:8px;background:var(--plot-bg);border-radius:var(--radius-sm);overflow:hidden;}
   .editing {outline:2px solid var(--accent);outline-offset:-2px;}
   header {display:flex;align-items:center;gap:4px;min-width:0;} h3 {font-size:0.78rem;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
-  .icon {display:grid;place-items:center;flex:none;width:24px;height:24px;padding:3px;border:0;border-radius:var(--radius-sm);background:transparent;cursor:pointer;}.icon:hover {background:var(--accent-soft);}
-  svg {width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;}
-  .axes {display:flex;flex-direction:column;gap:4px;min-width:0;} .axis {display:flex;min-width:0;gap:4px;}.axis-button {min-width:0;flex:1;justify-content:flex-start;border:0;background:var(--glass);padding:2px 6px;font-size:0.7rem;}.axis-button span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.log {padding:1px 5px;font-size:0.65rem;}.log:disabled {opacity:0.65;}
+  .axes {display:flex;flex-direction:column;gap:4px;min-width:0;} .axis {display:flex;min-width:0;gap:4px;}.axis-button {min-width:0;flex:1;justify-content:flex-start;border:0;border-radius:var(--radius-sm);background:var(--glass);padding:2px 6px;font-size:0.7rem;}.axis-button span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.log {padding:1px 5px;font-size:0.65rem;}.log:disabled {opacity:0.65;}
   .empty {display:flex;flex:1;align-items:center;justify-content:center;text-align:center;padding:12px;font-size:0.82rem;}.empty p {margin:0;}.citation {margin:0;font-size:0.65rem;}
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SegmentedControl from '../ui/SegmentedControl.svelte';
   import { untrack, onDestroy } from 'svelte';
   import { tims, statusWords, parameterSummary, type BatchDetail, type FractionOut, type FractionStatus, type StepOut, type Parameters, type SourceOut, type SpikeInput, type SpikeAddition } from '../../lib/tims-api';
   import { choices, effectiveParameters, parameterDefinitions, parameterKey, validateParameters } from '../../lib/tims-model';
@@ -155,17 +156,9 @@
 
 <div class="stack fraction-editor">
   <div class="fraction-scroll stack" use:stableScroll={`${batch.id}:capsule`}>
-  <div class="picker-steps" role="group" aria-label="Capsule navigation">
-    <button class="btn small" type="button" aria-pressed={!activeStep} onclick={() => onstep('')}>{preparation ? 'Capsule record' : 'Sources'}</button>
-    {#if batch.steps.length}
-      <select aria-label="Capsule step" value={sessionStep?.id ?? step?.id ?? ''} onchange={event => onstep(event.currentTarget.value)}>
-        <option value="">Choose chemistry step</option>
-        {#each chemistrySteps as s (s.id)}
-          <option value={s.id}>{repeats.has(s.method_code) ? `${s.ordinal}. ` : ''}{s.method_name}{recordSteps.has(s.id) ? ' · recorded' : ''}</option>
-        {/each}
-      </select>
-    {/if}
-  </div>
+  <SegmentedControl label="Capsule navigation" size="small" wrap
+    value={sessionStep?.id ?? step?.id ?? ''} onchange={onstep}
+    options={[{value:'',label:preparation ? 'Capsule record' : 'Sources'}, ...chemistrySteps.map(s => ({value:s.id,label:`${repeats.has(s.method_code) ? `${s.ordinal}. ` : ''}${s.method_name}${recordSteps.has(s.id) ? ' · recorded' : ''}`}))]} />
   {#if !step}
     <section class="stack" aria-label="Capsule sources">
       {#if preparation && !sourceGroups.length}
@@ -241,11 +234,10 @@
       </div>
       {#if spiking}
         {#if entrySteps.length > 1 || repeatDraft}
-          <div class="row" role="group" aria-label="Spike entries for this capsule">
-            {#each entrySteps as entry, index (entry.id)}
-              <button class="btn small" type="button" disabled={busy} aria-pressed={!repeatDraft && entry.id === activeStep}
-                onclick={() => { if (entry.id === activeStep) resetSpikeForm(false); else onstep(entry.id); }}>Entry {index + 1}</button>
-            {/each}
+          <div class="row">
+            <SegmentedControl label="Spike entries for this capsule" size="small" wrap disabled={busy}
+              options={entrySteps.map((entry,index) => ({value:entry.id,label:`Entry ${index+1}`}))}
+              value={repeatDraft ? '' : activeStep} onchange={id => { if (id === activeStep) resetSpikeForm(false); else onstep(id); }} />
             {#if repeatDraft}<strong class="small">New spike entry</strong>{/if}
           </div>
         {/if}
@@ -324,10 +316,6 @@
   h4, p { margin: 0; }
   .row { flex-wrap: wrap; }
   .heading { justify-content: space-between; }
-  .picker-steps { display: flex; gap: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--hairline); }
-  .picker-steps select { flex: 1; }
-  .picker-steps .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
-  .picker-steps .btn { white-space: normal; }
   .source { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
   .labels { min-width: 0; gap: var(--space-1); overflow-wrap: anywhere; }
   ul { padding-left: 1.2em; margin: 0; font-size: .78rem; }

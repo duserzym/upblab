@@ -70,7 +70,7 @@ test('grid has 15 cells, shared atlas crops, labels and per-capsule records', as
   await expect(cellImage.locator('circle')).not.toHaveClass(/\bdot\b/); await expect(page.getByRole('button', { name: 'K15 empty', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click(); const drawer = page.getByRole('region', { name: 'Capsule details' }); await expect(drawer).toContainText('Invented mount S'); await expect(drawer).toContainText('Invented grain one');
   await expect(drawer.locator('clipPath polygon')).toHaveCount(1); await expect(drawer.locator('image[href]')).not.toHaveCount(0);
-  expect(await cellImage.locator('clipPath').getAttribute('id')).not.toBe(await drawer.locator('clipPath').getAttribute('id')); await drawer.getByLabel('Capsule step', { exact: true }).selectOption('ca-step'); await expect(drawer).toContainText('overridden');
+  expect(await cellImage.locator('clipPath').getAttribute('id')).not.toBe(await drawer.locator('clipPath').getAttribute('id')); await drawer.getByRole('radiogroup', { name: 'Capsule navigation', exact: true }).locator('[role=radio][value="ca-step"]').click(); await expect(drawer).toContainText('overridden');
   expect(await readCount(page, '/v1/mounts/mount-demo/atlas')).toBe(1);
   await page.getByRole('radio', { name: 'Step × capsule matrix' }).click(); await expect(page.getByLabel('Capsule record matrix')).toContainText('180 °C');
   expect(await page.evaluate(() => (window as unknown as { __fake: { calls: [string, { path?: string }][] } }).__fake.calls.filter(([c, a]) => c === 'api_get' && a?.path === '/v1/mounts/mount-demo/elements').length)).toBe(1);
@@ -90,7 +90,7 @@ test('loading a grain creates the empty capsule and its selected LA spots with o
   });
   await openBatch(page);
   await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
-  await page.getByRole('button', { name: 'GrainAtlas', exact: true }).click();
+  await page.getByRole('radio', { name: 'GrainAtlas', exact: true }).click();
   const picker = page.getByRole('region', { name: 'GrainAtlas picker' });
   await chooseMount(picker, 'Invented mount S');
   await picker.getByRole('button', { name: /Invented selectable grain/ }).click();
@@ -114,7 +114,7 @@ test('assigns an existing sample directly to TIMS without a mount or laser spot'
   await start(page, { fixtures: { [path]: [sample] }, apiReplies: { 'POST /v1/fractions': { status: 201, body: added } } });
   await openBatch(page);
   await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
-  await page.getByRole('button', { name: 'TIMS only', exact: true }).click();
+  await page.getByRole('radio', { name: 'TIMS only', exact: true }).click();
   const form = page.getByRole('region', { name: 'TIMS only setup' });
   await form.getByRole('searchbox', { name: 'Find a sample' }).fill('Invented');
   await form.getByRole('button', { name: 'Search', exact: true }).click();
@@ -142,7 +142,7 @@ test('opens the Spiking pane for a source-free lab blank and saves its measured 
     apiReplies: { 'POST /v1/fractions': { status: 201, body: added }, [`PUT ${put}`]: { status: 200, body: addition } } });
   await openBatch(page);
   await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
-  await page.getByRole('button', { name: 'Lab blank', exact: true }).click();
+  await page.getByRole('radio', { name: 'Lab blank', exact: true }).click();
   const form = page.getByRole('region', { name: 'Lab blank setup' });
   await form.getByRole('button', { name: 'Search', exact: true }).click();
   const picker = form.getByRole('combobox', { name: 'Lab blank sample' });
@@ -151,8 +151,8 @@ test('opens the Spiking pane for a source-free lab blank and saves its measured 
   await form.getByRole('button', { name: 'Set K3 as a lab blank' }).click();
   await expect(page.getByRole('button', { name: 'K3 o1 · Lab blank', exact: true })).toBeVisible();
   const capsule = page.getByRole('region', { name: 'Capsule details' });
-  await expect(capsule.getByLabel('Capsule step')).toHaveCount(1);
-  await expect(capsule.getByLabel('Capsule step')).toHaveValue('spike-step');
+  await expect(capsule.getByRole('radiogroup', { name: 'Capsule navigation', exact: true })).toHaveCount(1);
+  await expect(capsule.getByRole('radiogroup', { name: 'Capsule navigation', exact: true }).locator('[role=radio][value="spike-step"]')).toHaveAttribute('aria-checked', 'true');
   await expect(capsule.getByRole('heading', { name: 'Spiking', exact: true })).toBeVisible();
   await capsule.getByRole('textbox', { name: 'Bottle after this capsule (g)' }).fill('24.9920');
   await capsule.getByRole('textbox', { name: 'Spike comment' }).fill('Process blank');
@@ -462,7 +462,7 @@ test('capsules retain inherited and saved copies and start empty when their sche
   await openBatch(page);
   await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
   const drawer = page.getByRole('region', { name: 'Capsule details' });
-  await drawer.getByLabel('Capsule step', { exact: true }).selectOption(columnStep.id);
+  await drawer.getByRole('radiogroup', { name: 'Capsule navigation', exact: true }).locator(`[role=radio][value="${columnStep.id}"]`).click();
   await drawer.getByText('Column protocol · edited', { exact: true }).click();
   await expect(drawer.getByRole('heading', { name: 'Invented inherited protocol', exact: true })).toBeVisible();
   await expect(drawer.getByRole('button', { name: 'Print column protocol' })).toBeVisible();
@@ -521,7 +521,7 @@ test('a new batch inherits its lab protocol, prints it, and seeds batch and caps
   await page.getByRole('radio', { name: 'Capsules', exact: true }).click();
   await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
   const capsule = page.getByRole('region', { name: 'Capsule details' });
-  await capsule.getByLabel('Capsule step', { exact: true }).selectOption(columnStep.id);
+  await capsule.getByRole('radiogroup', { name: 'Capsule navigation', exact: true }).locator(`[role=radio][value="${columnStep.id}"]`).click();
   await capsule.getByText('Column protocol · lab protocol rev 3', { exact: true }).click();
   await capsule.getByRole('button', { name: 'Add protocol copy', exact: true }).click();
   await expect(capsule.getByLabel('Protocol text')).toHaveValue(inventedProtocol.text);
@@ -542,7 +542,7 @@ test('saved capsule text overrides batch and lab protocols', async ({ page }) =>
   } } });
   await openBatch(page); await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
   const capsule = page.getByRole('region', { name: 'Capsule details' });
-  await capsule.getByLabel('Capsule step', { exact: true }).selectOption(columnStep.id);
+  await capsule.getByRole('radiogroup', { name: 'Capsule navigation', exact: true }).locator(`[role=radio][value="${columnStep.id}"]`).click();
   await capsule.getByText('Column protocol · edited', { exact: true }).click();
   await expect(capsule.getByRole('heading', { name: 'Invented saved capsule', exact: true })).toBeVisible();
   await expect(capsule.getByRole('button', { name: 'Print column protocol' })).toBeEnabled();
@@ -758,7 +758,7 @@ async function chooseMount(picker: Locator, name: string) {
 async function openSpotPicker(page: Page) {
   await openBatch(page);
   await page.getByRole('button', { name: 'K3 empty', exact: true }).click();
-  await page.getByRole('button', { name: 'GrainAtlas', exact: true }).click();
+  await page.getByRole('radio', { name: 'GrainAtlas', exact: true }).click();
   return page.getByRole('region', { name: 'GrainAtlas picker' });
 }
 for (const [width, height] of [[1280, 800], [1440, 900]]) {

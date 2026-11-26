@@ -1,4 +1,5 @@
 <script lang="ts">
+  import IconButton from '../ui/IconButton.svelte';
   import { containedPopover } from '../../lib/contained-popover';
   import { untrack } from 'svelte';
   import GeochemPanel from './GeochemPanel.svelte';
@@ -63,10 +64,10 @@
 <div class="board-toolbar row">
   <span class="section-label">Geochemistry</span>
   <label>Mineral <select aria-label="Preset mineral" value={mineral} onchange={e=>switchMineral(e.currentTarget.value as Mineral)}>{#each MINERALS as m}<option>{m}</option>{/each}</select></label>
-  <button class="chip" popovertarget="review-geochem-presets" aria-label="Presets" bind:this={presetAnchor}>Presets</button>
+  <IconButton size="small" icon="rows" popovertarget="review-geochem-presets" label="Presets" bind:element={presetAnchor} />
   <div class="preset-menu" use:containedPopover={{anchor: () => presetAnchor, w: 360, h: 220}} popover="auto" id="review-geochem-presets" bind:this={presetPopup}>
     <h3>Replace board with a mineral preset</h3>
-    {#each MINERALS as m}<button class="chip" aria-label={`Apply ${m} preset`} aria-pressed={mineral===m} onclick={()=>{mineral=m;update(applyPreset(m));maximized=null;picker=null;presetPopup?.hidePopover();}}>{m}</button>{/each}
+    {#each MINERALS as m}<button class="btn preset-action" aria-label={`Apply ${m} preset`} aria-pressed={mineral===m} onclick={()=>{mineral=m;update(applyPreset(m));maximized=null;picker=null;presetPopup?.hidePopover();}}>{m}</button>{/each}
     <p class="small muted">Choose a preset to replace the current panels. You can change each axis afterwards.</p>
   </div>
   <span class="small muted">{panels.length}/{MAX_PANELS} panels · read-only</span>
@@ -85,9 +86,10 @@
 </div>
 </div>
 <style>
+  .preset-action { border-radius: var(--radius-sm); margin: 3px; font-size: 12px; padding: 3px 7px; } .preset-action[aria-pressed=true] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
   .geochemistry {display:flex;flex-direction:column;flex:1;gap:8px;min-height:0;min-width:0;}
   .board-toolbar {flex-wrap:wrap;gap:8px;flex:none;min-width:0;} .section-label {font-size:0.68rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);} label {font-size:0.75rem;display:flex;align-items:center;gap:4px;}select {font-size:0.75rem;padding:3px 6px;max-width:120px;}
-  .preset-menu {position:fixed;margin:0;max-width:min(360px,calc(100vw - 24px));padding:12px;background:var(--plot-bg);color:var(--text);border:1px solid var(--hairline);border-radius:var(--radius-sm);box-shadow:var(--glass-shadow);}.preset-menu h3 {font-size:0.8rem;margin-bottom:8px;}.preset-menu .chip {margin:3px;}.preset-menu p {font-size:0.7rem;margin-top:8px;}
+  .preset-menu {position:fixed;margin:0;max-width:min(360px,calc(100vw - 24px));padding:12px;background:var(--plot-bg);color:var(--text);border:1px solid var(--hairline);border-radius:var(--radius-sm);box-shadow:var(--glass-shadow);}.preset-menu h3 {font-size:0.8rem;margin-bottom:8px;}.preset-menu p {font-size:0.7rem;margin-top:8px;}
   .board {flex:1;min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;container-type:size;}
   .grid {display:grid;grid-template-columns:repeat(var(--columns),minmax(0,1fr));grid-auto-rows:max(275px,calc((100cqh - 8px) / 2));gap:8px;min-width:0;}
   .grid.maximized {grid-template-columns:minmax(0,1fr);grid-auto-rows:max(300px,100cqh);}

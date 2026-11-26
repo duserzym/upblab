@@ -81,3 +81,38 @@ for (const theme of ['light', 'dark'] as const) test(`batch controls support key
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(await page.evaluate(() => (window as unknown as { __fake: { writes: unknown[] } }).__fake.writes)).toEqual([]);
 });
+
+for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
+  test(`capsule controls retain keyboard selection and action names at ${width} × ${height}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openHeader(page, 'light');
+    const sections = page.getByRole('navigation', { name: 'TIMS sections', exact: true });
+    await expect(sections.getByRole('listitem')).toHaveCount(5);
+    await expect(sections.getByRole('button', { name: 'Batches', exact: true })).toHaveAttribute('aria-current', 'page');
+    await page.getByTestId('tims-capsule').first().click();
+    const inspector = page.getByRole('region', { name: 'Capsule details', exact: true });
+    const group = inspector.getByRole('radiogroup', { name: 'Capsule navigation', exact: true });
+    const sources = group.getByRole('radio', { name: 'Sources', exact: true });
+    // A short segment keeps its content width even in a wrapping, vertical panel.
+    expect((await sources.boundingBox())!.width).toBeLessThan(100);
+    expect(await group.evaluate(el => parseFloat(getComputedStyle(el).borderTopLeftRadius))).toBeGreaterThan(0);
+    await sources.focus();
+    await sources.press('ArrowRight');
+    await expect(group.getByRole('radio').nth(1)).toBeFocused();
+    await expect(group.getByRole('radio').nth(1)).toHaveAttribute('aria-checked', 'true');
+    await group.getByRole('radio').nth(1).press('Home');
+    await expect(sources).toBeFocused();
+    await expect(sources).toHaveAttribute('aria-checked', 'true');
+    await expect(inspector.getByRole('button', { name: 'Previous capsule', exact: true })).toBeDisabled();
+    for (const name of ['Previous capsule', 'Next capsule', 'Close capsule']) {
+      const action = inspector.getByRole('button', { name, exact: true });
+      await expect(action).toHaveAttribute('title', name);
+      await expect(action).toHaveText('');
+    }
+    await expect(inspector).toContainText('grain ✓');
+    await expect(inspector).toContainText('spike pending');
+    await expectTimsBenchFills(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => (window as unknown as { __fake: { writes: unknown[] } }).__fake.writes)).toEqual([]);
+  });
+}

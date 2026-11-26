@@ -181,10 +181,10 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (cons
       }
     };
     await stable(() => page.getByTestId('tims-capsule').nth(2).click());
-    await stable(() => inspector(page).getByRole('button', { name: 'TIMS only', exact: true }).click());
+    await stable(() => inspector(page).getByRole('radio', { name: 'TIMS only', exact: true }).click());
     await walkDisclosures();
-    await stable(() => inspector(page).getByRole('button', { name: 'Lab blank', exact: true }).click());
-    await stable(() => inspector(page).getByRole('button', { name: 'GrainAtlas', exact: true }).click());
+    await stable(() => inspector(page).getByRole('radio', { name: 'Lab blank', exact: true }).click());
+    await stable(() => inspector(page).getByRole('radio', { name: 'GrainAtlas', exact: true }).click());
     const picker = page.getByRole('region', { name: 'GrainAtlas picker', exact: true });
     await stable(() => picker.getByRole('combobox', { name: 'Mount', exact: true }).fill('Invented mount S'));
     await stable(() => picker.getByRole('option', { name: /Invented mount S/ }).click());
@@ -209,7 +209,7 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (cons
       expect(box.y + box.height).toBeLessThanOrEqual(bench.y + bench.height);
     }
     // Opening the picker from the inspector also returns from a chemistry view.
-    await stable(() => inspector(page).getByRole('combobox', { name: 'Capsule step', exact: true }).selectOption(''));
+    await stable(() => inspector(page).getByRole('radiogroup', { name: 'Capsule navigation', exact: true }).getByRole('radio', { name: 'Sources', exact: true }).click());
     await stable(() => page.getByRole('radiogroup', { name: 'Batch views', exact: true }).getByRole('radio', { name: 'Batch steps', exact: true }).click());
     await stable(() => inspector(page).getByRole('button', { name: 'Browse GrainAtlas', exact: true }).click());
     await expect(page.getByRole('radiogroup', { name: 'Batch views' }).getByRole('radio', { name: 'Capsules', exact: true })).toHaveAttribute('aria-checked', 'true');

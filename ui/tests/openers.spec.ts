@@ -205,7 +205,7 @@ test('Home missing-grainatlas guidance stays within the card, without an Images 
 
 test('geochemistry point menus offer the same in-context actions', async ({ page }) => {
   await openReview(page, { fixtures, studioFound: true });
-  await tab(page, 'Geochemistry').click();
+  await page.getByRole('radiogroup', { name: 'Review plots', exact: true }).getByRole('radio', { name: 'Geochemistry', exact: true }).click();
   // Points outside a panel's axes are clipped by the chart; right-click one that is drawn.
   const drawn = () => page.locator('.point-target').evaluateAll(nodes => nodes.findIndex(n => {
     const r = n.getBoundingClientRect(), c = n.closest('.chart')!.getBoundingClientRect();
@@ -294,7 +294,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     await page.setViewportSize({ width, height });
     await openReview(page, { fixtures, store: { reviewSplit: true } });
     await select(page);
-    await expect(page.getByRole('button', { name: 'Balanced', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('radio', { name: 'Balanced', exact: true })).toHaveAttribute('aria-checked', 'true');
     const images = page.locator('[data-review-panel="images"]');
     const metadata = page.locator('[data-review-panel="details"]');
     const edit = images.getByRole('button', { name: 'Edit in grainatlas', exact: true });

@@ -72,14 +72,14 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await emit(page, 'atlas-4', 'shell');
       await expect(page.getByRole('treeitem', { name: /Zircon_3/ })).toHaveAttribute('aria-selected', 'true');
       expect((await calls(page)).filter(([c]) => c === 'module_command')).toHaveLength(before);
-      await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+      await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
       await expect.poll(() => problems(page, 'Geochemistry')).toEqual([]);
       await page.getByTestId('geochem-panel').first().getByRole('button', {name:'Choose Y axis', exact:true}).click();
       await page.getByRole('group', {name:'Choose Y quantity'}).getByRole('button', {name:'REE pattern',exact:true}).click();
       await expect(page.getByText('CI chondrite, McDonough and Sun (1995)')).toBeVisible();
       await expect.poll(() => problems(page, 'REE')).toEqual([]);
       await page.locator('[data-spot-key="acq-1"]').click();
-      await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+      await page.getByRole('radio', { name: 'Depth profile', exact: true }).click();
       await expect(page.getByLabel('Depth profile axis')).toBeVisible();
       await expect.poll(() => problems(page, 'Depth profile')).toEqual([]);
       await page.getByRole('button', {name:'Standard Demo reference',exact:true}).click({ modifiers: ['Alt'] });
@@ -120,7 +120,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(surface).toBeVisible();
       await expect(surface).toHaveAttribute('data-instance', 'original');
       for (const tab of ['Geochemistry', 'Depth profile']) {
-        await page.getByRole('tab', { name: tab, exact: true }).click();
+        await page.getByRole('radiogroup', { name: 'Review plots', exact: true }).getByRole('radio', { name: tab, exact: true }).click();
         await expect.poll(() => problems(page, `Split ${tab}`)).toEqual([]);
       }
       await page.setViewportSize({ width: 1280, height: 800 });
@@ -136,7 +136,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
     test.beforeEach(async ({ page }) => {
       await page.setViewportSize({ width, height });
       await openReview(page);
-      await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+      await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
     });
     test('defaults follow the board width, with two rows and stored-only thermometry', async ({ page }) => {
       const board = page.getByTestId('geochem-board');
@@ -184,7 +184,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await expect(first.getByRole('button', { name: 'Choose X axis', exact: true })).toContainText('Hf (ppm)');
       await page.reload();
       await expect(page.locator('[data-spot-key]').first()).toBeVisible();
-      await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+      await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
       first = page.getByTestId('geochem-panel').first();
       await expect(first.getByRole('button', { name: 'Choose Y axis', exact: true })).toContainText('U/Yb (from stored ppm)');
       await expect(first.getByRole('button', { name: 'Choose X axis', exact: true })).toContainText('Hf (ppm)');
@@ -244,7 +244,7 @@ for (const [width, height] of [[1440, 900], [1280, 800]]) {
       await page.getByRole('button', { name: 'Move Spot metadata', exact: true }).click();
       await page.getByRole('button', { name: 'Dock right of Age & plots', exact: true }).click();
       await expect.poll(async () => (await metadata.boundingBox())!.x).toBeGreaterThan((await plots.boundingBox())!.x);
-      await page.getByRole('button', { name: 'Balanced', exact: true }).click();
+      await page.getByRole('radio', { name: 'Balanced', exact: true }).click();
       await expect.poll(async () => (await metadata.boundingBox())!.x).toBe(original.x);
       await expect.poll(async () => (await metadata.boundingBox())!.y).toBeGreaterThan(original.y);
       await expect(page.getByTestId('review-details').getByRole('heading', { name: 'Zircon_1', exact: true })).toBeVisible();
@@ -394,29 +394,36 @@ test('group toggles, ranges and Escape preserve display filters by scope and gro
 test('Review has no sideways overflow at the minimum window or in compact split mode', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 640 });
   await openReview(page);
+  const views = page.getByRole('radiogroup', { name: 'Review plots', exact: true });
+  // These three short choices fit as a content-sized group at the minimum window.
+  expect((await views.boundingBox())!.width).toBeLessThan((await page.locator('.plots').boundingBox())!.width);
   for (const tab of ['Concordia', 'Geochemistry', 'Depth profile']) {
-    await page.getByRole('tab', { name: tab, exact: true }).click();
+    await page.getByRole('radiogroup', { name: 'Review plots', exact: true }).getByRole('radio', { name: tab, exact: true }).click();
     await expect.poll(() => problems(page, `Minimum ${tab}`)).toEqual([]);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
   await expect(page.getByRole('region', { name: 'SEM images' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+  await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
   const board = page.getByTestId('geochem-board');
   const width = (await board.boundingBox())!.width;
   await expect(board).toHaveAttribute('data-columns', String(width >= 880 ? 3 : width >= 460 ? 2 : 1));
   await expect.poll(() => problems(page, 'Compact board')).toEqual([]);
+  await views.getByRole('radio', { name: 'Concordia', exact: true }).click();
+  await page.getByRole('button', { name: 'More plot controls', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Fit cluster', exact: true })).toBeVisible();
+  await expect.poll(() => problems(page, 'Compact Concordia controls')).toEqual([]);
 });
 
 test('hidden Review releases plots and restores its chosen view', async ({ page }) => {
   await openReview(page);
-  const diagram = page.getByRole('combobox', { name: 'Concordia diagram' });
-  await diagram.selectOption('tw');
+  const diagram = page.getByRole('radiogroup', { name: 'Concordia diagram', exact: true });
+  await diagram.getByRole('radio', { name: 'Tera-Wasserburg', exact: true }).click();
   await page.getByRole('tab', { name: 'Sessions', exact: true }).click();
   await expect(page.getByTestId('review-view').locator('.uplot')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Review', exact: true }).click();
-  await expect(diagram).toHaveValue('tw');
-  await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+  await expect(diagram.getByRole('radio', { name: 'Tera-Wasserburg', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
   const plots = page.getByTestId('review-view').locator('.uplot');
   await expect.poll(() => plots.count()).toBeGreaterThan(0);
   const count = await plots.count();
@@ -424,7 +431,7 @@ test('hidden Review releases plots and restores its chosen view', async ({ page 
   await page.getByRole('tab', { name: 'Reduce', exact: true }).click();
   await expect(plots).toHaveCount(0);
   await page.getByRole('tab', { name: 'Review', exact: true }).click();
-  await expect(page.getByRole('tab', { name: 'Geochemistry', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('radio', { name: 'Geochemistry', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(plots).toHaveCount(count);
   await expect(page.getByTestId('geochem-panel').first().getByRole('button', { name: 'Choose Y axis', exact: true })).toHaveText(axis!);
 });
@@ -491,7 +498,7 @@ for (const [width, height] of [[1512, 982], [1024, 640]]) {
     await field.click();
     const layoutToggle = page.getByRole('button', { name: 'Layout', exact: true });
     if (await layoutToggle.isVisible()) await layoutToggle.click();
-    await page.getByRole('button', { name: 'Balanced', exact: true }).click();
+    await page.getByRole('radio', { name: 'Balanced', exact: true }).click();
     await expect(drawer).toHaveCount(0);
     await field.click();
     await page.evaluate(() => window.dispatchEvent(new Event('blur')));
@@ -540,7 +547,7 @@ for (const [width, split, dataWidth, side] of [[1440, true, 65, true], [1440, tr
     await openReview(page, { store: { reviewDataWidth: dataWidth } });
     if (split) await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
     await page.locator('[data-spot-key="acq-1"]').click();
-    await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+    await page.getByRole('radio', { name: 'Depth profile', exact: true }).click();
     const plots = page.locator('section[aria-label="Age & plots"]');
     const button = page.getByRole('button', { name: /^Channels/ });
     const drawer = page.getByRole('group', { name: 'Depth profile channels' });
@@ -578,8 +585,8 @@ for (const [width, split, dataWidth, side] of [[1440, true, 65, true], [1440, tr
     await group.click();
     await expect(group).toHaveAttribute('aria-checked', 'false');
     await drawer.getByRole('button', { name: 'Restore defaults', exact: true }).click();
-    await page.getByRole('tab', { name: 'Concordia', exact: true }).click();
-    await page.getByRole('tab', { name: 'Depth profile', exact: true }).click();
+    await page.getByRole('radio', { name: 'Concordia', exact: true }).click();
+    await page.getByRole('radio', { name: 'Depth profile', exact: true }).click();
     await expect(drawer).toBeVisible();
     await button.click();
     await expect(drawer).toHaveCount(0);
@@ -594,7 +601,7 @@ test('Review anchored menus stay inside every owning tile beside native SEM imag
   await openReview(page);
   await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
   const plots = page.getByRole('region', { name: 'Age & plots', exact: true });
-  await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+  await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
   await page.getByRole('button', { name: 'Presets', exact: true }).click();
   await contained(page.locator('#review-geochem-presets'), plots);
   await page.keyboard.press('Escape');
@@ -614,7 +621,7 @@ test('Quantity drawer spans the board, pushes plots down, and returns focus', as
   await page.setViewportSize({ width: 1440, height: 900 });
   await openReview(page);
   await page.getByRole('checkbox', { name: 'SEM images', exact: true }).check();
-  await page.getByRole('tab', { name: 'Geochemistry', exact: true }).click();
+  await page.getByRole('radio', { name: 'Geochemistry', exact: true }).click();
   const panel = page.getByTestId('geochem-panel').first();
   const button = panel.getByRole('button', { name: 'Choose Y axis', exact: true });
   const before = (await panel.boundingBox())!;

@@ -66,13 +66,13 @@ for (const desktop of [true, false]) for (const theme of ['light', 'dark']) {
       }
       await innerScroll(page.getByTestId('links-scroll'));
       await fixedHome(page);
-      await page.getByRole('button', { name: 'Records · Samples and Projects', exact: true }).click();
+      await page.getByRole('radio', { name: 'Records · Samples and Projects', exact: true }).click();
       await expect(page.getByTestId('home-columns')).toBeHidden();
       for (const name of ['Samples', 'Projects']) await inside(page, page.getByRole('region', { name, exact: true }));
       await innerScroll(page.getByTestId('samples-list'));
       await innerScroll(page.getByTestId('projects-list'));
       await fixedHome(page);
-      await page.getByRole('button', { name: 'Overview', exact: true }).click();
+      await page.getByRole('radio', { name: 'Overview', exact: true }).click();
       for (const name of ['Upload LA-ICP-MS session…', 'Upload image set…']) {
         // Web session upload opens a file chooser; the mounted input remains usable.
         if (!desktop && name.includes('LA-ICP-MS')) {
@@ -112,7 +112,7 @@ for (const desktop of [true, false]) {
     await expect(page.getByTestId('session-card')).toHaveCount(homeSessions.length);
     await page.getByRole('button', { name: 'Show without atlas →', exact: true }).click();
     await expect(page.getByTestId('mount-card')).toHaveCount(homeMounts.length - homeAtlasMounts.length);
-    await page.getByRole('button', { name: 'Records · Samples and Projects', exact: true }).click();
+    await page.getByRole('radio', { name: 'Records · Samples and Projects', exact: true }).click();
     await expect.poll(async () => (await storedLayout(page, desktop)).homeSections).toMatchObject({ view: 'records', mounts: { atlasFilter: 'without' } });
     await expect.poll(async () => Object.values((await storedLayout(page, desktop)).homePins as Record<string, unknown[]>)[0]?.length).toBe(2);
     await page.reload();
@@ -203,7 +203,7 @@ for (const desktop of [true, false]) {
       await page.getByLabel('Open a link', { exact: true }).fill('invalid://invented-narrow');
       await page.getByRole('region', { name: 'Links', exact: true }).getByRole('button', { name: 'Open', exact: true }).click();
       expect(await problems(page, 'Scrolling Home')).toEqual([]);
-      await page.getByRole('button', { name: 'Records · Samples and Projects', exact: true }).click();
+      await page.getByRole('radio', { name: 'Records · Samples and Projects', exact: true }).click();
       for (const name of ['Samples', 'Projects']) {
         const column = page.getByRole('region', { name, exact: true });
         expect((await column.boundingBox())!.height).toBeGreaterThanOrEqual(420);

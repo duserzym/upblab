@@ -185,7 +185,7 @@ test.describe('Concordia performance (opt-in)', () => {
       const canvas = plot.locator('canvas').first();
       // CSS locators: label/role queries scan every spot button in the page and
       // would add Playwright's own main-thread work to the measured frames.
-      const select = page.locator('select[aria-label="Concordia diagram"]');
+      const select = page.locator('[role=radiogroup][aria-label="Concordia diagram"]');
       const tree = page.locator('[role="tree"][aria-label="Result spots"]');
       await expect(canvas).toBeVisible();
       await expect(tree.locator('[data-spot-key]')).toHaveCount(n);
@@ -195,7 +195,7 @@ test.describe('Concordia performance (opt-in)', () => {
         const expand = tree.getByRole('button', { name: `Expand Invented sample ${sample}`, exact: true });
         if (await expand.count()) await expand.click();
       }
-      await select.selectOption(diagram);
+      await select.locator(`[role=radio][value="${diagram}"]`).click();
       // Allow the initial 100 ms ResizeObserver debounce and font layout to settle.
       await page.waitForTimeout(250);
       await frames(page);
@@ -207,7 +207,7 @@ test.describe('Concordia performance (opt-in)', () => {
       const table: string[] = [`${browserName} | n=${n} | ${diagram}`, 'scenario       frames  med ms  p95 ms  max ms  >33  wall ms  action med/max ms  longtasks/ms'];
       try {
         for (const scenario of scenarios) {
-          await page.locator('[aria-label="Concordia navigation"] button', { hasText: /^Fit all$/ }).click();
+          await page.getByRole('group', { name: 'Concordia navigation', exact: true }).getByRole('button', { name: 'Fit all', exact: true }).click();
           await page.mouse.move(5, 5);
           await frames(page);
           const box = (await canvas.boundingBox())!;
@@ -222,7 +222,7 @@ test.describe('Concordia performance (opt-in)', () => {
             await frames(page);
           }
           if (scenario === 'pan' || scenario === 'zoom') await page.mouse.move(center.x, center.y);
-          if (scenario === 'pan') await expect(page.locator('[aria-label="Concordia navigation"] button', { hasText: /^Pan$/ })).toHaveAttribute('aria-pressed', 'true');
+          if (scenario === 'pan') await expect(page.locator('[aria-label="Concordia navigation"] [role=radio]', { hasText: /^Pan$/ })).toHaveAttribute('aria-checked', 'true');
           const before = await metrics(cdp);
           await startRecording(page, browserName === 'chromium');
           const latencies: number[] = [];
@@ -247,7 +247,7 @@ test.describe('Concordia performance (opt-in)', () => {
           } else if (scenario === 'diagram-switch') {
             for (let i = 0; i < 6; i++) {
               const next = i % 2 === 0 ? (diagram === 'tw' ? 'wetherill' : 'tw') : diagram;
-              latencies.push(await actionLatency(page, select, 'change', 2, () => select.selectOption(next)));
+              latencies.push(await actionLatency(page, select, 'click', 2, () => select.locator(`[role=radio][value="${next}"]`).click()));
             }
           } else {
             for (let i = 0; i < 6; i++) latencies.push(await actionLatency(page, chip, 'click', 2, () => chip.click()));
@@ -257,7 +257,7 @@ test.describe('Concordia performance (opt-in)', () => {
           if (scenario === 'select') {
             expect(await page.evaluate(() => document.activeElement?.getAttribute('data-spot-key'))).toBe(selectionKeys[40]);
           }
-          if (scenario === 'diagram-switch') await expect(select).toHaveValue(diagram);
+          if (scenario === 'diagram-switch') await expect(select.locator(`[role=radio][value="${diagram}"]`)).toHaveAttribute('aria-checked', 'true');
           if (scenario === 'sample-toggle') await expect(chip).toHaveAttribute('aria-pressed', 'true');
           const result: Measurement = {
             ...distribution(recording.intervals), wallTimeMs: rounded(recording.wallTimeMs),

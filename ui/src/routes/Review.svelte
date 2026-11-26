@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SegmentedControl from '../components/ui/SegmentedControl.svelte';
   import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
   import GrainAtlasLocalNotice from '../components/GrainAtlasLocalNotice.svelte';
   import { untrack, setContext, type Snippet } from 'svelte';
@@ -294,15 +295,16 @@
 </script>
 <svelte:window onkeydown={layoutEscape} onfocus={() => { if (active && review.state === 'ready') void review.loadFractions(); }} />
 {#snippet layoutButtons()}
-  {#each presets.filter(name => split || name !== 'Image focus') as name}
-    <button class="chip" aria-pressed={equalLayout(dockLayout, presetLayout(name, split))} title={name === 'Balanced' ? 'Reset layout to the default panel positions and sizes' : name} onclick={() => { dock?.applyPreset(name); layoutsOpen = false; }}>{name}</button>
-  {/each}
+  <SegmentedControl label="Layout" size="small" wrap
+    options={presets.filter(name => split || name !== 'Image focus').map(name => ({value:name,label:name,title:name === 'Balanced' ? 'Reset layout to the default panel positions and sizes' : name}))}
+    value={presets.find(name => equalLayout(dockLayout, presetLayout(name, split))) ?? ''}
+    onchange={name => { dock?.applyPreset(name as typeof presets[number]); layoutsOpen = false; }} />
 {/snippet}
 <section id="review-data-pane" class="view review" class:hidden={!active} aria-label="Review results" data-testid="review-view">
   <div class="toolbar glass">
     <ScopePicker {active}>
       {#snippet actions()}
-        <div class="layout-presets" role="group" aria-label="Layout">{@render layoutButtons()}</div>
+        <div class="layout-presets">{@render layoutButtons()}</div>
         <button class="chip layout-toggle" aria-expanded={layoutsOpen} aria-controls="review-layout-presets" onclick={() => layoutsOpen = !layoutsOpen}>Layout</button>
         <label class="split-toggle"><input type="checkbox" checked={settings.reviewSplit} onchange={e=>void settings.update({reviewSplit:e.currentTarget.checked})} /> SEM images</label>
       {/snippet}
@@ -394,7 +396,7 @@
     {/snippet}
     {#snippet plots()}
       <div class="plots stack">
-        <div class="view-switch" role="tablist" aria-label="Review plots">{#each ['Concordia','Geochemistry','Depth profile'] as tab}<button role="tab" class="chip" aria-selected={plot===tab} onclick={()=>plot=tab}><svg viewBox="0 0 20 20" aria-hidden="true"><path d={tab==='Concordia'?'M3 17V3m0 14h14M5 15c2-7 5-9 11-11':tab==='Geochemistry'?'M2 2h6v6H2zm10 0h6v6h-6zM2 12h6v6H2zm10 0h6v6h-6z':'M3 3v14h14M5 12l3-6 3 8 5-5'} /></svg><span>{tab}</span></button>{/each}</div>
+        <SegmentedControl label="Review plots" size="small" wrap options={['Concordia','Geochemistry','Depth profile'].map(value => ({value,label:value}))} bind:value={plot} />
         {#if plot==='Concordia'}{#if samplesShown.length===0}<p class="muted small">No samples shown</p>{/if}{#key runContext}<ConcordiaPlot bind:mode={concordiaMode} rows={plotRows} selected={review.selectedKey} onselect={selectSpot}
           hidden={hiddenSpots} onhide={hideSpots} onrestore={() => hiddenSpots = new Set()} />{/key}
         {:else if plot==='Geochemistry'}<GeochemistryPlot {material} catalogueRows={scopeRows} rows={plotRows} shownCount={shown.length} selected={review.selectedKey} onselect={selectSpot} />
@@ -450,12 +452,11 @@
   .tree .error {overflow-wrap:anywhere;}
   .group-option {font-size:0.68rem;align-items:flex-start;}
   .plots {overflow:auto;background:var(--glass);}.details {overflow-y:auto;overflow-x:hidden;overflow-wrap:anywhere;}
-  .notice {margin:0;padding:4px 12px;}.view-switch {display:flex;align-items:center;gap:4px;flex:none;min-width:0;flex-wrap:wrap;}.view-switch button {border:0;background:transparent;gap:5px;font-size:0.78rem;padding:5px 8px;}.view-switch svg {width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.4;flex:none;}.view-switch button[aria-selected='true'] {background:var(--accent-soft);color:var(--accent);}
+  .notice {margin:0;padding:4px 12px;}
   :global(.review .wrap) {flex-wrap:wrap;}
   :global(.review .plots label) {display:inline-flex;align-items:center;gap:4px;font-size:0.8rem;min-width:0;max-width:100%;}
   :global(.review .plots select) {max-width:175px;min-width:0;}
   :global(.review .plots p) {margin:0;}
-  @container (max-width:500px) {.view-switch {gap:1px;}.view-switch button {font-size:0.69rem;padding:5px 3px;gap:2px;}.view-switch svg {display:none;}}
   @media (max-width:1100px) {
     .layout-presets {display:none;}
     .layout-toggle {display:inline-flex;}

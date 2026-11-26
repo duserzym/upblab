@@ -76,7 +76,7 @@
           {@const spotNames = fraction ? sourceSpotNames(fraction.sources, geometry).join(', ') : ''}
           {@const preparation = fraction ? readCapsulePreparation(fraction.notes).preparation : null}
           {@const detail = fraction ? [preparation && capsulePreparations[preparation], looseDetail, fraction.sample.name, spotNames, state, ...(outcomes.get(fraction.id) ?? []).map(r => r.outcome === 'fully_dissolved' && methods.get(r.step_id) === 'SP-TIMS-CA' ? 'dissolved during CA' : statusWords(r.outcome)), ...(fraction.sources.some(s => !s.retired_at && s.is_fragment) ? ['fragment'] : [])].filter(Boolean).join(' · ') : 'Prepare this capsule'}
-          <button class="btn capsule" class:filled={!!fraction} type="button" data-testid="tims-capsule"
+          <button class="capsule" class:filled={!!fraction} type="button" data-testid="tims-capsule"
             use:looseLabelFit={`${layout.puck.wellSize}:${looseLabel}`}
             aria-label={`${label} ${fraction?.name ?? 'empty'}${looseDetail ? ' · ' + looseDetail : ''}${preparation ? ' · ' + capsulePreparations[preparation] : ''}${spotNames ? ' · ' + spotNames : ''}`} aria-pressed={selected === position}
             title={detail} style={boxStyle(slotLayout.well)} onclick={() => onselect(position)}>

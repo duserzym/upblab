@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SegmentedControl from '../components/ui/SegmentedControl.svelte';
   import SavedDataPanel from '../components/SavedDataPanel.svelte';
   import UpdatesPanel from '../components/UpdatesPanel.svelte';
   import { normaliseServerUrl } from '../lib/links';
@@ -123,10 +124,7 @@
     {#if isDesktop}
       <form class="glass panel stack" onsubmit={saveConnection}>
         <h3>UPbDB</h3>
-        <div class="row" role="radiogroup" aria-label="Where UPbDB runs">
-          <button type="button" class="chip" role="radio" aria-checked={mode === 'local'} onclick={() => (mode = 'local')}>This computer</button>
-          <button type="button" class="chip" role="radio" aria-checked={mode === 'server'} onclick={() => (mode = 'server')}>Lab server</button>
-        </div>
+        <SegmentedControl label="Where UPbDB runs" options={[{value:'local',label:'This computer'},{value:'server',label:'Lab server'}]} value={mode} onchange={value => mode = value as Mode} />
 
         {#if mode === 'server'}
           <label class="field">
@@ -244,16 +242,7 @@
 
     <div class="glass panel stack">
       <h3>Appearance and layout</h3>
-      <div class="row" role="radiogroup" aria-label="Theme">
-        {#each themes as t (t.value)}
-          <button
-            class="chip"
-            role="radio"
-            aria-checked={settings.theme === t.value}
-            onclick={() => settings.update({ theme: t.value, themeChosen: true })}>{t.label}</button
-          >
-        {/each}
-      </div>
+      <SegmentedControl label="Theme" options={themes} value={settings.theme} onchange={value => settings.update({ theme: value as ThemePref, themeChosen: true })} />
       <p class="faint small">System follows the operating system by default. Your choice applies to every tab at once.</p>
       {#if isDesktop}
         <div class="row">

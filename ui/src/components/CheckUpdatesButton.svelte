@@ -144,7 +144,7 @@
 </div>
 
 <style>
-  button.tab { position: relative; flex: none; }
+  button.tab { position: relative; flex: none; width: 30px; height: 30px; padding: 0; }
   .version { flex: none; cursor: default; }
   .error-details { user-select: text; -webkit-user-select: text; }
   .dot { position: absolute; width: 6px; height: 6px; top: 2px; right: 2px; background: var(--accent); }

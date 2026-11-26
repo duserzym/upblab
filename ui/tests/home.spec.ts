@@ -244,20 +244,20 @@ for (const desktop of [true, false]) {
       }
       const heights = await page.getByTestId('mount-card').evaluateAll(cards => cards.map(card => card.getBoundingClientRect().height));
       expect(Math.max(...heights) - Math.min(...heights)).toBeLessThan(1);
-      const filter = mounts.getByRole('group', { name: 'Filter mounts by atlas' });
-      await expect(filter.getByRole('button', { name: 'All', exact: true })).toHaveAttribute('aria-pressed', 'true');
-      await filter.getByRole('button', { name: 'With atlas', exact: true }).click();
-      await expect(filter.getByRole('button', { name: 'With atlas', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      const filter = mounts.getByRole('radiogroup', { name: 'Filter mounts by atlas' });
+      await expect(filter.getByRole('radio', { name: 'All', exact: true })).toHaveAttribute('aria-checked', 'true');
+      await filter.getByRole('radio', { name: 'With atlas', exact: true }).click();
+      await expect(filter.getByRole('radio', { name: 'With atlas', exact: true })).toHaveAttribute('aria-checked', 'true');
       await expect(page.getByTestId('mount-card')).toHaveCount(homeAtlasMounts.length);
       await expect(page.getByTestId('atlas-symbol')).toHaveCount(homeAtlasMounts.length);
       await expect(page.getByRole('img', { name: 'No published atlas', exact: true })).toHaveCount(0);
       await expect(mounts.locator('.toolbar')).toContainText(`${homeAtlasMounts.length} matching`);
       expect(await problems(page, 'Home with atlas filter')).toEqual([]);
-      await filter.getByRole('button', { name: 'Without atlas', exact: true }).click();
+      await filter.getByRole('radio', { name: 'Without atlas', exact: true }).click();
       await expect(page.getByTestId('mount-card')).toHaveCount(homeMounts.length - homeAtlasMounts.length);
       await expect(page.getByRole('img', { name: 'Has a published atlas, version 1', exact: true })).toHaveCount(0);
       expect(await problems(page, 'Home without atlas filter')).toEqual([]);
-      await filter.getByRole('button', { name: 'All', exact: true }).click();
+      await filter.getByRole('radio', { name: 'All', exact: true }).click();
       await expect(page.getByTestId('mount-card')).toHaveCount(40);
       expect(await problems(page, 'Home full inventory before searching')).toEqual([]);
       await page.getByLabel('Search mounts').fill('Zircon_mount_37');
@@ -293,8 +293,8 @@ test('list summaries show complete rows without per-row details and thumbnails l
   await expect(card).toContainText('Atlas: Published images 37');
   await expect(card.getByRole('img', { name: 'Atlas overview for Zircon_mount_37', exact: true })).toBeVisible();
   expect(details).toEqual([]); expect(manifests).toEqual([]);
-  await mounts.getByRole('button', { name: 'Without atlas', exact: true }).click(); await expect(card).toHaveCount(0);
-  await mounts.getByRole('button', { name: 'With atlas', exact: true }).click(); await expect(card).toHaveCount(1);
+  await mounts.getByRole('radio', { name: 'Without atlas', exact: true }).click(); await expect(card).toHaveCount(0);
+  await mounts.getByRole('radio', { name: 'With atlas', exact: true }).click(); await expect(card).toHaveCount(1);
 });
 
 // SCREENSHOTS=1: the Home board with the demo inventory, for docs/screenshots.

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import SegmentedControl from '../components/ui/SegmentedControl.svelte';
+  import IconButton from '../components/ui/IconButton.svelte';
   import FilterBar from '../components/FilterBar.svelte';
   import RecordLists from '../components/RecordLists.svelte';
   import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
@@ -202,12 +204,9 @@
       {#if !isDesktop}<input bind:this={laserInput} aria-label="Laser log file" type="file" accept=".lase" hidden onchange={laserChosen} />{/if}
     </div>
     <nav class="row records-nav" aria-label="Home view">
-      <button class="chip" aria-pressed={!recordsOpen} onclick={() => chooseView('overview')}>Overview</button>
-      <button class="chip" aria-pressed={recordsOpen} onclick={() => chooseView('records')}>Records · Samples and Projects</button>
+      <SegmentedControl label="Home view" size="small" options={[{value:'overview',label:'Overview'},{value:'records',label:'Records',ariaLabel:'Records · Samples and Projects'}]} value={recordsOpen ? 'records' : 'overview'} onchange={value => chooseView(value as 'overview' | 'records')} />
     </nav>
-    <button class="btn small refresh-inventory" aria-label="Refresh sessions and mounts" title="Refresh sessions and mounts" disabled={overview.refreshing || !identity.signedIn} onclick={refresh}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1"/></svg>
-    </button>
+    <IconButton icon="refresh" label="Refresh sessions and mounts" disabled={overview.refreshing || !identity.signedIn} onclick={refresh} />
     </div>
     <div class="upload-panels">
     <!-- Both cards stay mounted (their web file inputs must exist for the tile's click); a card shows while it is in use. -->
@@ -235,7 +234,6 @@
       <input bind:this={filesInput} aria-label="Open files" type="file" multiple hidden onchange={() => chosen(filesInput)} />
     {/if}
 
-
     {#if atlasSync.strandedDrafts.length}
       <p class="small stranded" role="status" data-testid="stranded-drafts">
         UPb Lab still holds unsynced grainatlas edits from its former Images tab for {atlasSync.strandedDrafts.map(d => d.name).join(', ')}.
@@ -260,8 +258,8 @@
           </details>
         {/snippet}
         {#snippet options()}
-          <button class="chip" aria-pressed={pendingOnly} onclick={() => pendingOnly = !pendingOnly}>Not reduced</button>
-          <button class="btn small group-button" aria-label="Group by mineral" title="Group by mineral" aria-pressed={groupSessions} onclick={() => groupSessions = !groupSessions}>Group by mineral</button>
+          <button class="btn small filter-toggle" aria-pressed={pendingOnly} onclick={() => pendingOnly = !pendingOnly}>Not reduced</button>
+          <button class="btn small filter-toggle group-button" aria-label="Group by mineral" title="Group by mineral" aria-pressed={groupSessions} onclick={() => groupSessions = !groupSessions}>Group by mineral</button>
         {/snippet}
       </Toolbar>
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (Focusable inventory supports keyboard scrolling.) -->
@@ -309,11 +307,9 @@
       <section class="glass panel board-section working-column" aria-label="Mounts">
         <Toolbar section="Mounts" compact bind:query={mountQuery} bind:sort={mountSort} count={mounts.length} total={overview.totalMounts} summary={`${withAtlasCount} with atlas`} filtered={atlasFilter !== 'all'} progress={mountProgress} cap={mountCap} busy={overview.refreshing}>
           {#snippet options()}
-            <div class="row atlas-filter" role="group" aria-label="Filter mounts by atlas">
-              {#each [['all', 'All'], ['with', 'With atlas'], ['without', 'Without atlas']] as const as [value, label] (value)}
-                <button class="chip" aria-pressed={atlasFilter === value} onclick={() => void settings.updateHomeSection('mounts', { atlasFilter: value })}>{label}</button>
-              {/each}
-            </div>
+            <SegmentedControl label="Filter mounts by atlas" size="small" wrap
+              options={[{value:'all',label:'All'},{value:'with',label:'With atlas'},{value:'without',label:'Without atlas'}]}
+              value={atlasFilter} onchange={value => void settings.updateHomeSection('mounts', { atlasFilter: value as 'all' | 'with' | 'without' })} />
           {/snippet}
         </Toolbar>
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (Focusable inventory supports keyboard scrolling.) -->
@@ -400,6 +396,8 @@
 </section>
 
 <style>
+  .filter-toggle { transition: none; } .filter-toggle:active:not(:disabled) { transform: none; background-image: linear-gradient(var(--press), var(--press)); }
+  .filter-toggle { border-radius: var(--radius-sm); font-size: 0.74rem; padding: 0.2rem var(--space-1); white-space: nowrap; }
   .local-session-card { min-width: 0; overflow-wrap: anywhere; gap: var(--space-2); padding: var(--space-3); }
   .local-session-card .btn { align-self: flex-start; padding: 0.1rem var(--space-2); font-size: 0.74rem; }
   .local-session-card .mono { min-width: 0; }
@@ -428,9 +426,7 @@
   .action-tile strong { font-size: 0.8rem; }
   .action-tile small { display: none; }
   .records-nav { gap: var(--space-2); margin-left: auto; }
-  .refresh-inventory { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: var(--space-1); flex: none; }
-  .refresh-inventory svg { width: 20px; height: 20px; }
-  .records-nav .chip[aria-pressed='true'], .group-button[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+  .filter-toggle[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
   .upload-panels:empty, .home-notices:empty { display: none; }
   .upload-panels { position: absolute; z-index: 3; bottom: var(--space-3); left: var(--space-4); right: var(--space-4); max-height: min(50%, 24rem); overflow: auto; background: var(--glass-strong); border-radius: var(--radius); box-shadow: var(--glass-shadow); }
   .upload-panels:not(:has(> :not([hidden]))) { display: none; }
@@ -456,7 +452,6 @@
   .links-column th:nth-child(2) { width: 15%; }
   .links-column th:nth-child(4) { width: 24%; }
   .records-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); flex: 1; flex-shrink: 1; min-height: 0; min-width: 0; }
-  .atlas-filter { gap: var(--space-1); flex-wrap: wrap; }
   .spot-key { position: relative; margin-left: auto; font-size: 0.72rem; }
   .spot-key summary { cursor: pointer; white-space: nowrap; }
   .spot-key > div { position: absolute; z-index: 2; right: 0; top: 100%; width: 15rem; padding: var(--space-3); gap: var(--space-1); background: var(--glass-strong); }

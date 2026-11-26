@@ -1,0 +1,1 @@
+- TIMS, Review, Home, shell uploads, Settings and the top bar use consistent control shapes, with segmented switches, fact and status chips, and labelled icon buttons.

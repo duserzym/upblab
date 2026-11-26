@@ -1,4 +1,6 @@
 <script lang="ts">
+  import StatusChip from './ui/StatusChip.svelte';
+  import ProgressBar from './ui/ProgressBar.svelte';
   import { oversight, READ_ONLY_REASON } from '../lib/oversight.svelte';
   import { fromFileList } from '../lib/drop';
   import { isDesktop, pickPaths, pickSessionPaths } from '../lib/platform';
@@ -46,9 +48,10 @@
     {#if sessions}<input bind:this={filesInput} aria-label="Session files" type="file" multiple hidden onchange={() => chosen(filesInput)} />{/if}
   {/if}
   {#if card.open}
+    <ProgressBar value={card.steps.filter(step => step.done).length} total={card.steps.length} noun={`${sessions ? 'Session' : 'Image'} upload progress`} hideCaption />
     <ol class="small" aria-label="{sessions ? 'Session' : 'Image'} upload progress" aria-live="polite">
       {#each card.steps as step}
-        <li><span class="dot" style:background={step.done ? 'var(--ok)' : 'var(--text-faint)'} aria-hidden="true"></span><span>{step.text}{step.done ? ' ✓' : ''}</span></li>
+        <li><StatusChip text={`${step.text}${step.done ? ' ✓' : ''}`} tone={step.done ? 'success' : 'neutral'} /></li>
       {/each}
     </ol>
     {#if sessions && card.session}
@@ -68,6 +71,5 @@
   p { margin: 0; }
   ol { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--space-1); }
   li { display: flex; align-items: baseline; gap: var(--space-2); }
-  .dot { flex: none; }
   select { max-width: 100%; min-width: 0; }
 </style>
