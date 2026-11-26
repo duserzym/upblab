@@ -99,7 +99,7 @@ export async function expectTimsBenchFills(page: Page) {
   expect(layout.benchHeight, 'bench has available height').toBeGreaterThan(0);
   const { width } = page.viewportSize()!;
   if (width >= 1280) {
-    expect(layout.chrome, 'single-lab chrome above bench').toBeLessThanOrEqual(150);
+    expect(layout.chrome, 'single-lab chrome above bench').toBeLessThanOrEqual(138);
     const minimum = width >= 1440 ? 170 : 140;
     for (const disc of await page.locator('.board .positions').all())
       expect((await disc.boundingBox())!.width, 'puck disc diameter').toBeGreaterThanOrEqual(minimum);
@@ -121,4 +121,16 @@ export async function expectTimsBenchFills(page: Page) {
     });
   });
   expect(textFits, 'fixed label boxes fit actual capsule and readiness text').toBe(true);
+}
+
+/** The time axis may scroll internally; the document and workspace never scroll sideways. */
+export async function expectTimsListFits(page: Page) {
+  await settled(page);
+  const overflow = await page.evaluate(() => [document.documentElement, document.body, document.querySelector('.tims > .workspace')!]
+    .map(node => ({ name: node.tagName, excess: node.scrollWidth - node.clientWidth })));
+  for (const node of overflow) expect(node.excess, `${node.name} horizontal overflow`).toBeLessThanOrEqual(1);
+  const calendar = page.getByRole('region', { name: 'Batch calendar' });
+  if (await calendar.isVisible() && page.viewportSize()!.width >= 1280) {
+    const box = await calendar.boundingBox(); expect(box!.y + box!.height, 'calendar fits window height').toBeLessThanOrEqual(page.viewportSize()!.height);
+  }
 }

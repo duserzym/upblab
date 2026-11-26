@@ -20,9 +20,9 @@ async function start(page: Page, options: Partial<FakeOptions> = {}) {
   await page.addInitScript(installFakeTauri, { signedIn: true, ...options, store: { mode: 'server', serverUrl: 'http://localhost:8000', lastTab: 'tims', ...options.store }, fixtures: { ...fixtures, [`/v1/tims/column-protocols?limit=2&lab=${lab}`]: [], ...options.fixtures } });
   await page.goto('./');
   await page.getByRole('region', { name: 'Batch list', exact: true }).getByRole('button', { name: 'Krogh · 2026-11-06', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Krogh (K) · 2026-11-06', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Krogh (K)', exact: true })).toBeVisible();
 }
-async function step(page: Page, number: number) { await rail(page).getByRole('button', { name: new RegExp(`^${number}\\.`) }).click(); }
+async function step(page: Page, number: number) { await rail(page).getByRole('list').getByRole('button').nth(number - 1).click(); }
 async function selectVersion(card: Locator) {
   await card.getByRole('button', { name: 'Choose spike version' }).click();
   const picker = card.getByRole('region', { name: 'Spike version picker' });
@@ -34,13 +34,13 @@ async function selectVersion(card: Locator) {
 const missingSpike = { ...batch, spikes: [] };
 test('guided navigation, next incomplete, persistence and browsing without writes', async ({ page }) => {
   await start(page);
-  await expect(rail(page).getByRole('button', { name: /^1\./ })).toHaveAttribute('aria-current', 'step');
-  await rail(page).getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(rail(page).getByRole('button', { name: /^Batch & capsule set,/ })).toHaveAttribute('aria-current', 'step');
+  await step(page, 2);
   await expect(inspector(page)).toContainText('K1');
   await rail(page).getByRole('button', { name: 'Next incomplete' }).click();
   await expect(inspector(page).getByRole('heading', { level: 3 })).toContainText('K3');
   await step(page, 3);
-  await expect(rail(page)).toContainText(`Spike ${batchReadiness(batch).totals.spike} of ${batchReadiness(batch).totals.capsules}`);
+  await expect(rail(page).getByRole('button', { name: /^Spike,/ })).toHaveAccessibleName(`Spike, ${batchReadiness(batch).totals.spike} of ${batchReadiness(batch).totals.capsules}`);
   await rail(page).getByRole('button', { name: 'Next incomplete' }).click();
   const expected = batchReadiness(batch).capsules.find(c => !c.spike)!;
   await expect(inspector(page).getByRole('heading', { level: 3 })).toContainText(`K${expected.capsule_number}`);
@@ -53,7 +53,7 @@ test('guided navigation, next incomplete, persistence and browsing without write
   // The shell may also restore the batch itself.
   await expect(page.getByRole('region', { name: 'Batch list', exact: true }).or(rail(page))).toBeVisible();
   if (await page.getByRole('region', { name: 'Batch list', exact: true }).isVisible()) await page.getByRole('region', { name: 'Batch list', exact: true }).getByRole('button', { name: 'Krogh · 2026-11-06', exact: true }).click();
-  await expect(rail(page).getByRole('button', { name: /^4\./ })).toHaveAttribute('aria-current', 'step');
+  await expect(rail(page).getByRole('button', { name: /^Chemistry,/ })).toHaveAttribute('aria-current', 'step');
   expect(await writes(page)).toEqual([]);
 });
 test('required spike records weighing metadata, pinned version, calculation and warnings', async ({ page }) => {
@@ -157,7 +157,7 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (cons
       [`/v1/fractions/${batch.spikes[0].fraction_id}/spikes/history?limit=50`]: [],
     }, apiReplies: { 'POST /v1/fractions': { status: 201, body: added } } });
     const railBox = await rail(page).boundingBox();
-    expect(railBox).not.toBeNull(); expect(railBox!.height).toBeLessThanOrEqual(40);
+    expect(railBox).not.toBeNull(); expect(railBox!.height).toBeLessThanOrEqual(54);
     await expectTimsBenchFills(page);
     const before = await timsRegionBoxes(page);
     const wellsBefore = await timsWellBoxes(page);
@@ -200,7 +200,7 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (cons
     }
     for (const number of [1, 2, 3, 4, 5]) await stable(() => step(page, number));
     for (const name of ['Capsules', 'Batch steps', 'Step × capsule matrix', 'Capsules']) {
-      await stable(() => page.getByRole('group', { name: 'Batch views', exact: true }).getByRole('button', { name, exact: true }).click());
+      await stable(() => page.getByRole('radiogroup', { name: 'Batch views', exact: true }).getByRole('radio', { name, exact: true }).click());
       const content = name === 'Batch steps' ? 'Step timeline' : name === 'Step × capsule matrix' ? 'Capsule record matrix' : 'Batch completion review';
       const panel = page.getByLabel(content, { exact: true });
       await expect(panel).toBeVisible();
@@ -210,11 +210,11 @@ for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) for (cons
     }
     // Opening the picker from the inspector also returns from a chemistry view.
     await stable(() => inspector(page).getByRole('combobox', { name: 'Capsule step', exact: true }).selectOption(''));
-    await stable(() => page.getByRole('group', { name: 'Batch views', exact: true }).getByRole('button', { name: 'Batch steps', exact: true }).click());
+    await stable(() => page.getByRole('radiogroup', { name: 'Batch views', exact: true }).getByRole('radio', { name: 'Batch steps', exact: true }).click());
     await stable(() => inspector(page).getByRole('button', { name: 'Browse GrainAtlas', exact: true }).click());
-    await expect(page.getByRole('group', { name: 'Batch views' }).getByRole('button', { name: 'Capsules', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('radiogroup', { name: 'Batch views' }).getByRole('radio', { name: 'Capsules', exact: true })).toHaveAttribute('aria-checked', 'true');
     await expect(picker).toBeVisible();
-    await expect(rail(page).getByRole('button', { name: /^2\./ })).toHaveAttribute('aria-current', 'step');
+    await expect(rail(page).getByRole('button', { name: /^Grains,/ })).toHaveAttribute('aria-current', 'step');
     expect(await problems(page, 'TIMS guided bench')).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.locator('.tims > .workspace').evaluate(node => node.scrollHeight <= node.clientHeight + 1)).toBe(true);

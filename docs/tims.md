@@ -6,9 +6,52 @@ The route stays mounted across top-level tab switches.
 Opening the same batch from Review returns to Batches even after visiting another
 TIMS section. Opening a batch also selects its lab when that lab is loaded.
 
-Batches lists one page at a time. Capsule set, inclusive start dates and fraction
-status are remembered per account and server, outside the URL. New batch forms
-use active capsule sets and mineral-specific active recipes. On a five-position
+Batches has Rows, Calendar and Lanes views. The choice is remembered per viewer
+and server with the guided-workflow preference mechanism, including an in-memory
+fallback when browser storage is blocked. Capsule set, inclusive start dates and
+fraction status apply automatically after 300 ms and are remembered per account
+and server, outside the URL. There is no Apply filters button.
+
+Rows requests 200 batches at a time with `order=-started_on`; Load more batches
+follows the opaque cursor. Each row opens the batch and shows its capsule set and
+code, friendly start date (ISO date in the tooltip), samples, stored spike progress,
+state, analyst and recipe. Samples truncate with all names in the tooltip. A row
+keeps the accessible name “Krogh · 2026-11-06”; its accessible description includes
+the state. Column header buttons sort by start date or capsule set and expose
+`aria-sort`. Opposite date order, set sorting and older-server date sorting operate
+on loaded rows, with a note while another page remains. States are Complete when
+`completed_at` is stored, Ready to complete when all nonzero capsules are ready,
+Empty for zero capsules, In progress otherwise, and Open without counts.
+
+Calendar shows a Monday–Sunday month grid with Today and month navigation.
+It requests the intersection of the month and selected start-date filters, publishes
+each cursor page immediately and stops after ten pages with a “Showing first n”
+notice. Two chips fit in each day; “+n more” opens a keyboard-accessible dialog.
+Escape closes it and restores focus. Calendar months are cached for the session
+(up to 24 queries), partitioned by viewer and filters. Account, server, oversight,
+lab and batch-save changes clear that cache.
+
+Lanes shows the loaded active capsule-set catalog, including free sets. Load more
+set choices extends that catalog. Each batch spans its stored start and completion
+dates, or today while open. Inclusive overlapping ranges stack in separate tracks.
+Weeks and Months change the drawing scale; Earlier and Later extend the initial
+window (eight weeks before today through four weeks after) by four weeks. The
+label column stays fixed as the time axis scrolls inside its container. Requests
+use `active_after` and `started_before`, plus the shared filters, publish each page
+and stop after ten pages. These date positions and states are display logic only.
+
+All views use `identity.get` through the current server target. In This computer
+mode that target is the local UPbDB service, including a read-only mirror. The
+normal ETag cache, cached desktop replies and offline-copy banner remain in use.
+Older servers and mirrors can omit every summary field: catalog names are reused,
+samples and spike progress show a dash, and completion/start dates still draw
+calendar chips and lanes. Missing counts mean Open unless completion is stored.
+When rows lack the new summary fields, date sorting falls back to loaded rows.
+For lanes, such a reply triggers a second scan with `started_after` 120 days before
+the window (or the stricter user filter); older open batches may be absent, and
+the view says so. No list view requests batch details or account names per row.
+
+New batch forms use active capsule sets and mineral-specific active recipes. On a five-position
 puck, numbering starts at the front left and proceeds clockwise to the front
 right. The top view shows the centre stem hole and the notch facing front
 between the first and last positions on each puck. See the
@@ -197,10 +240,9 @@ refusals, normalisations and proposed batches. Import requires a second explicit
 confirmation and retains its key across retries. Any refused selected line
 disables import. A 409 refused plan replaces the preview with the server's plan.
 
-The current server pages batches by ascending id, so newest-first sorting applies
-to loaded batches only. Global date ordering needs a server cursor ordered by
-start date. Batch replies store snapshot steps but no snapshot name; a current
-recipe name is labelled as such. History currently returns attribution and action
+New servers provide a stable descending start-date cursor and optional batch-list
+summaries. Old servers keep their id cursor. Batch replies store snapshot steps;
+a recipe name falls back to the current catalog when the server omits it. History currently returns attribution and action
 without before/after payloads. The tab displays changed values if supplied and
 otherwise says that the server did not supply them; it makes no per-row requests.
 
@@ -272,24 +314,54 @@ spot and grain arguments; the installed app still needs a smoke test.
 ## Guided capsule setup and required spike weighing
 
 The in-flow setup rail follows Batch & capsule set, Grains, Spike, Chemistry,
-then Review & complete. Back and Next change the guided step. Next incomplete
+then Review & complete. Select a step directly or use Back. Next incomplete
 wraps through capsules missing the current item. Capsules and chemistry steps
 remain directly selectable. The current guided step is saved per viewer, server
 and batch, with guarded local storage and an in-memory fallback. Browsing never
 writes chemistry records.
 
-The compact batch header contains **Back to batches** (shown as ← Batches),
-the capsule-set title and date, analyst and recipe, the three view buttons,
-Refresh batch, Edit batch and History. History opens over the bench without
-changing its size. A fixed lab name joins the analyst line;
-a multi-lab selector and Load more labs remain above the header when needed.
+The batch header starts with the text-link breadcrumb **‹ Batches**, whose
+accessible name remains **Back to batches**. The capsule-set title stands beside
+an English calendar date such as **6 Nov 2026**, with the stored ISO date in its
+title. Neutral metadata chips show the analyst, recipe name and, for a fixed
+single lab, the lab name. When only the current recipe name is available, its
+provenance appears in **About the recipe name**, an info tooltip reachable by
+hover, focus, click or Enter; Escape closes it. **No recipe** has no info button.
+
+The **Capsules | Steps | Matrix** segmented control is a **Batch views**
+radiogroup. Its radio names and titles are **Capsules**, **Batch steps** and
+**Step × capsule matrix**. Left/Right wrap through the views, Home/End select
+the ends, and Tab reaches the selected radio. Icon buttons keep the names
+**Refresh batch**, **Edit batch** (or **Cancel edit**) and **History**. History
+opens over the bench without changing its size or its request behaviour.
+
+The 54 px workflow stepper has short labels **Setup**, **Grains**, **Spike**,
+**Chemistry** and **Review**. Each button names the full guided step and its
+second line. Setup says **Done** with a capsule set, date and operator, otherwise
+**Check**. Grains counts against all positions; Spike and Review use the
+existing readiness totals. Chemistry counts each live mapped capsule with at
+least one record on a non-spike step, once, against live capsules. It says
+**Not started** without non-spike steps, **In progress** without fraction step
+records, otherwise **n of m recorded**. Counts reflect records already returned
+by the server; no analytical values or extra requests are introduced.
+Completed counts get a check mark; the selected guided step takes precedence,
+uses a filled accent circle and has `aria-current="step"`. Its hint is in the
+full title and accessible description. **Back** and **Next incomplete** sit at
+the right. The plain **Next** button is removed; select the next step instead.
+
+A multi-lab selector and Load more labs remain above the header when needed.
 The batch list and other TIMS sections retain their lab row. The status element
 has no height while empty; errors and completion messages remain visible.
 Notes, pending saves, read-only reasons and the edit form may add height.
-The guided rail follows the header, with the capsule-check hint in the progress
-tooltip. In the single-lab fixture, header and rail use about 138 px above the
-bench at both 1440 × 900 and 1280 × 800 px. The bench fills the remaining module
-height, about 694 px and 594 px respectively. There is no bottom chemistry rail.
+For the single-lab fixture, the header has a 16 px breadcrumb, 32 px title row,
+4 px internal gap and 12 px vertical padding. With the 54 px stepper and two
+6 px gaps, the expected chrome above the bench is 130 px at 1440 × 900 and
+1280 × 800 px, within the 138 px budget. Rows use integer heights to preserve
+WebKit's puck sizing. Below 1100 px the title and controls wrap onto separate
+rows. Browser measurements in both engines remain for the supervisor.
+The bench fills the remaining module height. There is no bottom chemistry rail.
+Shared control props and keyboard behaviour are documented in
+[UX conventions](ux-conventions.md#control-shapes-2026-11-25).
 
 All three bench columns stay mounted, including the empty inspector and closed
 picker. The third column is labelled **Batch workspace** and shows **Grain
@@ -391,12 +463,14 @@ endpoints show a compatibility message. New detail fields are optional.
 
 `ui/tests/tims-guided.spec.ts` covers guidance, next incomplete, weighing,
 calculations, conflict comparison, required-spike errors, completion and reopen.
+`ui/tests/ui-controls.spec.ts` covers header radio keyboard navigation, workflow
+names and current state, recipe info and named action icons in both themes.
 The shared `ui/tests/tims-layout.ts` helper measures the three permanent column
 regions before and after clicks, accepting at most 2 px displacement in each
 dimension and 1 px for wells, including Capsules → Batch steps → matrix →
 Capsules switches. It checks the bench bottom within 4 px of the module bottom
 at 1440 × 900, 1280 × 800 and 1024 × 640, in both themes. At the two larger
-sizes it checks at most 150 px of single-lab chrome, minimum discs of 170 px and
+sizes it checks at most 138 px of single-lab chrome, minimum discs of 170 px and
 140 px respectively, fixed font-size floors and real text widths. Rendered
 well/label/caption collision checks accompany the pure layout proofs. A mocked 3000-row history list took 0.1 ms for two 50-row page requests;
 browsing history made zero requests before and after this change. This measures

@@ -9,7 +9,7 @@ for (const [width, height] of [[1280, 800], [1440, 900]]) {
     test(`TIMS plucks, chemistry and openers fit ${width} × ${height} ${theme}`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await routeTimsAtlas(page);
-      await openReview(page, { store: { theme, themeChosen: true }, fixtures: { ...timsReviewFixtures, '/v1/labs': [{ id: 'synthetic-lab', name: 'Synthetic lab', my_role: 'member' }], '/v1/tims/capsule-sets?limit=500&lab=synthetic-lab': [timsBatch.capsule_set], '/v1/tims/recipes?limit=500&lab=synthetic-lab': [], '/v1/tims/batches?limit=500&lab=synthetic-lab': [timsBatch], '/v1/method-codes?q=SP-TIMS': [], ...atlasFixtures } });
+      await openReview(page, { store: { theme, themeChosen: true }, fixtures: { ...timsReviewFixtures, '/v1/labs': [{ id: 'synthetic-lab', name: 'Synthetic lab', my_role: 'member' }], '/v1/tims/capsule-sets?limit=500&lab=synthetic-lab': [timsBatch.capsule_set], '/v1/tims/recipes?limit=500&lab=synthetic-lab': [], '/v1/tims/batches?limit=200&lab=synthetic-lab&order=-started_on': [timsBatch], '/v1/method-codes?q=SP-TIMS': [], ...atlasFixtures } });
       const section = page.getByRole('region', { name: 'TIMS fractions' });
       await expect(section).toBeVisible();
       const crop = section.getByTestId('tims-grain-image').first();
@@ -44,21 +44,21 @@ for (const [width, height] of [[1280, 800], [1440, 900]]) {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       expect(await section.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
       await section.getByRole('button', { name: 'Open batch', exact: true }).first().click();
-      await expect(page.getByRole('heading', { name: 'Krogh (K) · 2026-11-06', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Krogh (K)', exact: true })).toBeVisible();
       await expect(page.getByRole('tab', { name: 'TIMS', exact: true })).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByTestId('tims-capsule')).toHaveCount(15);
       await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Recipes', exact: true }).click();
       await page.getByRole('tab', { name: 'Review', exact: true }).click();
       await section.getByRole('button', { name: 'Open batch', exact: true }).first().click();
       await expect(page.getByRole('tab', { name: 'TIMS', exact: true })).toHaveAttribute('aria-selected', 'true');
-      await expect(page.getByRole('heading', { name: 'Krogh (K) · 2026-11-06', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Krogh (K)', exact: true })).toBeVisible();
       await expect(page.getByRole('region', { name: 'Recipes', exact: true })).toHaveCount(0);
     });
   }
 }
 test('TIMS fractions failure leaves Review usable and displays the server sentence', async ({ page }) => {
   await routeTimsAtlas(page);
-  await openReview(page, { fixtures: { ...timsReviewFixtures, '/v1/labs': [{ id: 'synthetic-lab', name: 'Synthetic lab', my_role: 'member' }], '/v1/tims/capsule-sets?limit=500&lab=synthetic-lab': [timsBatch.capsule_set], '/v1/tims/recipes?limit=500&lab=synthetic-lab': [], '/v1/tims/batches?limit=500&lab=synthetic-lab': [timsBatch], '/v1/method-codes?q=SP-TIMS': [], ...atlasFixtures } });
+  await openReview(page, { fixtures: { ...timsReviewFixtures, '/v1/labs': [{ id: 'synthetic-lab', name: 'Synthetic lab', my_role: 'member' }], '/v1/tims/capsule-sets?limit=500&lab=synthetic-lab': [timsBatch.capsule_set], '/v1/tims/recipes?limit=500&lab=synthetic-lab': [], '/v1/tims/batches?limit=200&lab=synthetic-lab&order=-started_on': [timsBatch], '/v1/method-codes?q=SP-TIMS': [], ...atlasFixtures } });
   await page.evaluate(() => {
     const fake = (window as unknown as { __fake: { apiReplies: Record<string, unknown> } }).__fake;
     fake.apiReplies['/v1/fractions?limit=500&mount=mount-demo'] = { status: 503, body: { code: 'unavailable', detail: 'Synthetic chemistry maintenance.' } };

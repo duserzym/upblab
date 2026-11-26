@@ -7,6 +7,7 @@ import { outbox, onlineOnlyReason } from './outbox.svelte';
 import { oversight, READ_ONLY_REASON, WriteError } from './oversight.svelte';
 import { capsuleLabel, firstPage, formatParameter, mineralWords, mountFractions, onlineForm, statusWords, tims } from './tims-api';
 import { OnlineAction } from './tims-requests';
+import { batchQuery, emptyBatchFilters } from './tims-model';
 import { timsFraction } from '../../tests/fixtures/review';
 beforeEach(() => { vi.clearAllMocks(); oversight.reset(); vi.mocked(onlineOnlyReason).mockReturnValue(''); vi.mocked(identity.get).mockResolvedValue({ status: 200, body: [] }); vi.mocked(identity.write).mockResolvedValue({ status: 200, body: { id: 'synthetic' } }); });
 it('returns the first page immediately, retains filters and treats the cursor as opaque data', async () => {
@@ -222,4 +223,26 @@ it('history is lazy, paged and tolerates older servers without the endpoint', as
   expect(identity.get).toHaveBeenCalledTimes(1);
   expect((await page?.more())?.items[0].id).toBe('history-50'); expect(identity.get).toHaveBeenCalledTimes(2);
   console.info(`TIMS history: browsing 0 requests before/after; opening + Load more: 2 bounded requests from 3000 invented rows in ${(performance.now() - start).toFixed(1)} ms (mock network).`);
+});
+
+it('measures the old and new batch list page sizes with 500 invented rows and no detail reads', async () => {
+  const rows = Array.from({ length: 500 }, (_, i) => ({ id: `invented-batch-${i}`, started_on: '2026-11-25' }));
+  vi.mocked(identity.get).mockImplementation(async path => {
+    const params = new URL(path, 'https://invented.example').searchParams;
+    const offset = Number(params.get('after') ?? 0), limit = Number(params.get('limit'));
+    return { status: 200, body: rows.slice(offset, offset + limit), nextCursor: offset + limit < rows.length ? String(offset + limit) : undefined } as never;
+  });
+  const before = performance.now();
+  const previous = await tims.batches({ lab: 'invented' });
+  expect(previous.items).toHaveLength(500); expect(identity.get).toHaveBeenCalledTimes(1);
+  const beforeMs = performance.now() - before;
+  vi.mocked(identity.get).mockClear();
+  const after = performance.now();
+  let page = await tims.batches(batchQuery('invented', emptyBatchFilters()));
+  expect(page.items).toHaveLength(200); expect(identity.get).toHaveBeenCalledTimes(1);
+  let count = page.items.length;
+  while (page.nextCursor) { page = (await page.more())!; count += page.items.length; }
+  expect(count).toBe(500); expect(identity.get).toHaveBeenCalledTimes(3);
+  expect(vi.mocked(identity.get).mock.calls.every(([path]) => path.startsWith('/v1/tims/batches?limit=200&'))).toBe(true);
+  console.info(`Batch list mock network, 500 rows: before 1 request / ${beforeMs.toFixed(2)} ms; after 3 requests / ${(performance.now() - after).toFixed(2)} ms; first page 1 request in both; 0 detail reads.`);
 });

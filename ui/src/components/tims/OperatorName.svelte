@@ -5,7 +5,8 @@
   import { operatorName } from '../../lib/tims-display';
   import type { BatchOut } from '../../lib/tims-api';
   import type { Account } from '../../lib/platform';
-  let { batch }: { batch: Pick<BatchOut, 'operator_name' | 'operator_id'> } = $props();
+  import MetaChip from '../ui/MetaChip.svelte';
+  let { batch, chip = false }: { batch: Pick<BatchOut, 'operator_name' | 'operator_id'>; chip?: boolean } = $props();
   let accounts = $state.raw<Account[]>([]);
   $effect(() => {
     const id = batch.operator_id; void batch.operator_name; void identity.revision; void identity.target?.server;
@@ -18,4 +19,5 @@
     return () => { current = false; };
   });
 </script>
-<span title={batch.operator_id ?? undefined}>{operatorName(batch, identity.account, accounts)}</span>
+{#if chip}<MetaChip text={operatorName(batch, identity.account, accounts)} icon="person" />
+{:else}<span title={batch.operator_id ?? undefined}>{operatorName(batch, identity.account, accounts)}</span>{/if}

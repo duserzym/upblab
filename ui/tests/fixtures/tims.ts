@@ -46,6 +46,7 @@ export const fixtures: Record<string, unknown> = {
   '/v1/tims/recipes?limit=500&lab=synthetic-lab': [recipe],
   '/v1/tims/recipes?limit=500&lab=synthetic-lab&mineral=zircon': [recipe],
   '/v1/tims/batches?limit=500&lab=synthetic-lab': [batch],
+  '/v1/tims/batches?limit=200&lab=synthetic-lab&order=-started_on': [batch],
   [`/v1/tims/batches/${batch.id}`]: batch,
   '/v1/method-codes?q=SP-TIMS': methods,
   '/v1/tims/spikes': solutions,

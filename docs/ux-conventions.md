@@ -47,3 +47,35 @@ Ordinary buttons keep their short hover fade. Pressing a tab, chip, Home
 action tile, card title or Review tree button darkens it while pressed
 (`--press`, a background layer, no movement); `.btn` keeps its 1 px press.
 All motion uses `--motion`, which is 0 ms under reduced motion.
+
+## Control shapes (2026-11-25)
+
+Use one shape per kind of control: view switch = segmented control, workflow =
+stepper, facts = chips, rare actions = icon buttons, primary navigation =
+text-link breadcrumb. Pills (`btn` rounded buttons) are no longer the default
+for everything. The shared components live in `ui/src/components/ui/`.
+
+| Component | Purpose and props |
+| --- | --- |
+| `SegmentedControl` | Switch views inside one bordered group with dividers. `options: {value, label, title?, ariaLabel?}[]`, bindable `value: string`, `label: string`, optional `onchange(value)` and `size: 'small' \| 'normal'` (normal by default). The selected radio uses `--accent-soft` and `--accent`. |
+| `Stepper` | Navigate a workflow. `steps: {label, fullName, detail, state: 'done' \| 'current' \| 'pending', hint?}[]`, `onselect(index)`, `label`, optional `trailing` snippet for actions. Short labels and counts appear below 22 px circles; full names and details form accessible names. Current hints are exposed in titles and accessible descriptions. Its row is 54 px high. |
+| `MetaChip` | Display a quiet neutral fact. `text: string`, optional `icon` (an `IconName` or snippet), `info: string` and `infoLabel: string`. Long text truncates with its complete value in `title`. An info button describes provenance without adding it to the fact. |
+| `IconButton` | A rare action with a named icon. `icon: IconName`, `label: string`, optional `title`, `disabled`, and standard button attributes and handlers, including `aria-expanded`. The label is its accessible name; the title defaults to that label. |
+| `StatusChip` | A short state fact. `text: string`, optional `tone: 'neutral' \| 'warning' \| 'success'` (neutral by default). Warning and success tints mix the existing `--warning` and `--ok` tokens; the text also names the state. |
+| `ProgressBar` | A 5 px progress bar and an “n of m noun” caption. `value?: number \| null`, `total: number`, `noun: string`. Missing values show “— of m noun”, omit `aria-valuenow` and leave the bar empty. Zero totals have no fill. Values outside the range are clamped. |
+| `Icon` | Decorative inline SVG. `kind: 'refresh' \| 'edit' \| 'history' \| 'person' \| 'flask' \| 'building' \| 'info' \| 'check' \| 'chevron-left' \| 'calendar' \| 'rows' \| 'lanes'`. Uses a 24 × 24 viewBox, currentColor stroke, 1.6 px stroke width and round caps and joins; the default display is 18 × 18 px. |
+
+All colours come from the design tokens, so Light, Dark and System share the
+same controls. No new theme tokens are required. View and workflow changes
+are instant. Icon buttons use the `--motion` hover feedback and the `--press`
+background while pressed, without movement; focus rings use `--accent`.
+
+The segmented control is a labelled `radiogroup`: Tab reaches the selected
+radio, Left/Right wrap and select, and Home/End select the first/last radio.
+Native buttons in the stepper's ordered list work with Tab, Enter and Space;
+only the current step has `aria-current="step"`. The metadata info tooltip
+opens on hover or focus and on click/Enter, uses `aria-describedby`, and closes
+on Escape. Icon buttons always have an accessible name, even with no text
+visible, and disabled buttons retain their native disabled behaviour. Progress
+bars expose min, max, current value when known, and the full caption as
+`aria-valuetext`.

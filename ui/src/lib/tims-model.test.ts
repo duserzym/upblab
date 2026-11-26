@@ -16,7 +16,8 @@ it('merges effective parameters with explicit overrides including zero and empty
   expect(effectiveParameters(batch, { parameters: { duration_h: 0, note: '' } })).toEqual([{ key: 'temperature_c', value: 190, overridden: false }, { key: 'duration_h', value: 0, overridden: true }, { key: 'note', value: '', overridden: true }]); expect(batch.duration_h).toBe(12);
 });
 it('maps only selected filters to query params and partitions preferences by account/server', () => {
-  expect(batchQuery('lab', { ...emptyBatchFilters(), started_after: '2026-11-01', status: 'picked' })).toEqual({ lab: 'lab', started_after: '2026-11-01', status: 'picked' });
+  expect(batchQuery('lab', { ...emptyBatchFilters(), started_after: '2026-11-01', status: 'picked' })).toEqual({ lab: 'lab', started_after: '2026-11-01', status: 'picked', order: '-started_on', limit: '200' });
+  expect(batchQuery('lab', emptyBatchFilters(), { order: 'started_on', active_after: '2026-10-01' })).toEqual({ lab: 'lab', order: 'started_on', active_after: '2026-10-01', limit: '200' });
   expect(preferenceKey('https://one.example', 'a')).not.toBe(preferenceKey('https://one.example', 'b'));
 });
 it('summarises only new picks, preserves refused lines and ignores reused batches', () => {

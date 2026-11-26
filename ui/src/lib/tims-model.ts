@@ -36,7 +36,7 @@ export function effectiveParameters(batch: Parameters, record?: Pick<FractionSte
 }
 export interface BatchFilters { capsule_set: string; started_after: string; started_before: string; status: string }
 export const emptyBatchFilters = (): BatchFilters => ({ capsule_set: '', started_after: '', started_before: '', status: '' });
-export const batchQuery = (lab: string, filters: BatchFilters) => Object.fromEntries(Object.entries({ lab, ...filters }).filter(([, v]) => !!v));
+export const batchQuery = (lab: string, filters: BatchFilters, window: { order?: string; active_after?: string; started_after?: string; started_before?: string } = {}) => Object.fromEntries(Object.entries({ lab, ...filters, ...window, order: window.order ?? '-started_on', limit: '200' }).filter(([, v]) => !!v));
 export const preferenceKey = (server: string, account: string) => `upbstudio.tims:${JSON.stringify([server, account])}`;
 export function reorder<T>(rows: T[], index: number, direction: number): T[] {
   const next = [...rows], target = index + direction;

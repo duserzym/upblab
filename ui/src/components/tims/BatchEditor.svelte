@@ -8,7 +8,7 @@
   import { overlayBatch, batchAffected } from '../../lib/tims-overlay';
   import { batchGeometry, OnlineAction, ReplyScope, mountElements } from '../../lib/tims-requests';
   import { type MountGeometry } from '../../lib/tims-geometry';
-  import { reorder, snapshotName, effectiveParameters, type MethodCode, withDefaults } from '../../lib/tims-model';
+  import { reorder, effectiveParameters, type MethodCode, withDefaults } from '../../lib/tims-model';
   import { oversight, READ_ONLY_REASON } from '../../lib/oversight.svelte';
   import { spikingSessionId, spikingSessionLink } from '../../lib/tims-spiking';
   import { capsulePreparations, readCapsulePreparation, type CapsulePreparation } from '../../lib/tims-capsule-intake';
@@ -24,17 +24,28 @@
   import ParameterFields from './ParameterFields.svelte';
   import History from './History.svelte';
   import { batchReadiness, nextIncomplete, timsError } from '../../lib/tims-readiness';
-  import { guidedSteps, loadGuidedStep, saveGuidedStep, type GuidedStep } from '../../lib/tims-guidance';
+  import { loadGuidedStep, saveGuidedStep, type GuidedStep } from '../../lib/tims-guidance';
   import { WriteError } from '../../lib/oversight.svelte';
   import { stableScroll } from '../../lib/tims-scroll';
+  import SegmentedControl from '../ui/SegmentedControl.svelte';
+  import Stepper from '../ui/Stepper.svelte';
+  import MetaChip from '../ui/MetaChip.svelte';
+  import IconButton from '../ui/IconButton.svelte';
+  import Icon from '../ui/Icon.svelte';
+  import { formatCalendarDate } from '../../lib/calendar-date';
+  import { batchHeaderSteps, recipeHeaderMeta } from '../../lib/tims-header';
   let { id, methods, recipes, labName, onback, onlab }: { id: string; methods: MethodCode[]; recipes: RecipeOut[]; labName: string; onback: () => void; onlab: (lab: string) => void } = $props();
   let base = $state.raw<BatchDetail | null>(null), geometry = $state.raw<Record<string, MountGeometry>>({}), error = $state(''), geometryError = $state(''), busy = $state(false);
   let delivered = $state.raw<OutboxEntry[]>([]);
-  const views = ['Capsules', 'Batch steps', 'Step × capsule matrix'] as const;
+  const views = [
+    { value: 'Capsules', label: 'Capsules' },
+    { value: 'Batch steps', label: 'Steps', ariaLabel: 'Batch steps', title: 'Batch steps' },
+    { value: 'Step × capsule matrix', label: 'Matrix', ariaLabel: 'Step × capsule matrix', title: 'Step × capsule matrix' },
+  ];
   let guided = $state<GuidedStep>(0), completionBusy = $state(false);
   let refused = $state.raw<CapsuleReadiness[]>([]);
   const viewer = () => ({ server: identity.target?.server ?? '', account: identity.account?.id ?? identity.account?.username ?? '' });
-  let view = $state<typeof views[number]>('Capsules');
+  let view = $state('Capsules');
   let selectedStep = $state(''), batchStep = $state(''), selected = $state<number | null>(null);
   let picking = $state(false), pickerOpened = $state(false), imported = $state(''), editing = $state(false), started = $state(''), operator = $state(''), operatorAccount = $state(false), notes = $state('');
   let replacing = $state.raw<SourceOut>();
@@ -53,6 +64,8 @@
   const batch = $derived(base ? overlayBatch(base, [...delivered, ...outbox.entries]).batch : null);
   const editable = $derived(!!batch && !batch.completed_at && timsRights.canEdit(batch.lab_id, `batch:${batch.id}`));
   const readiness = $derived(batch ? batchReadiness(batch) : null);
+  const headerSteps = $derived(batch && readiness ? batchHeaderSteps(batch, readiness, guided) : []);
+  const recipeMeta = $derived(batch ? recipeHeaderMeta(batch, recipes) : { text: 'No recipe' });
   const capsuleReady = $derived(readiness?.capsules.find(c => c.capsule_number === selected));
   const fraction = $derived(selected === null ? undefined : batch?.fractions.find(f => f.id === batch?.capsule_map[String(selected)]));
   const preparation = $derived(fraction ? readCapsulePreparation(fraction.notes).preparation : null);
@@ -291,18 +304,24 @@
 <section class="stack batch" aria-label="Chemistry batch">
   <p class="batch-status small" class:error={!!error} role="status">{error || (batch?.completed_at ? `Completed ${batch.completed_at} · ${batch.completed_by_name ?? 'Analyst not supplied'}` : '')}</p>
   {#if !batch}
-    <button type="button" class="btn small" aria-label="Back to batches" onclick={onback}>← Batches</button>
+    <button type="button" class="breadcrumb" aria-label="Back to batches" onclick={onback}><Icon kind="chevron-left" />Batches</button>
     <p>{busy ? 'Loading batch…' : 'Batch unavailable.'}</p>
   {:else}
     <header class="panel stack" use:stableScroll>
+      <button type="button" class="breadcrumb" aria-label="Back to batches" onclick={onback}><Icon kind="chevron-left" />Batches</button>
       <div class="row heading">
-        <button type="button" class="btn small" aria-label="Back to batches" onclick={onback}>← Batches</button>
-        <div class="stack title"><h2>{batch.capsule_set.name} ({batch.capsule_set.code}) · {batch.started_on}</h2>
-          <p class="small muted"><OperatorName {batch} /> · {snapshotName(batch, recipes)}{labName ? ` · ${labName}` : ''}</p>
+        <div class="batch-facts">
+          <h2 title={`${batch.capsule_set.name} (${batch.capsule_set.code})`}>{batch.capsule_set.name} ({batch.capsule_set.code})</h2>
+          <time class="small muted" datetime={batch.started_on} title={batch.started_on}>{formatCalendarDate(batch.started_on)}</time>
+          <div class="metadata"><OperatorName {batch} chip />
+            <MetaChip text={recipeMeta.text} icon="flask" info={recipeMeta.info} infoLabel="About the recipe name" />
+            {#if labName}<MetaChip text={labName} icon="building" />{/if}
+          </div>
         </div>
         <div class="row batch-actions">
-          <button type="button" class="btn small" onclick={() => void load(true, true)} disabled={busy}>Refresh batch</button>
-          <button type="button" class="btn small" disabled={!editable} onclick={() => {
+          <SegmentedControl options={views} bind:value={view} label="Batch views" size="small" />
+          <IconButton icon="refresh" label="Refresh batch" onclick={() => void load(true, true)} disabled={busy} />
+          <IconButton icon="edit" label={editing ? 'Cancel edit' : 'Edit batch'} disabled={!editable} onclick={() => {
             if (!batch) return;
             formGeneration++;
             started = batch.started_on;
@@ -310,14 +329,9 @@
             operatorAccount = batch.operator_id === identity.account?.id;
             notes = batch.notes;
             editing = !editing;
-          }}>{editing ? 'Cancel edit' : 'Edit batch'}</button>
-          <History kind="batch" {id} />
+          }} />
+          <History kind="batch" {id} iconOnly />
         </div>
-      </div>
-      <div class="row views" role="group" aria-label="Batch views">
-        {#each views as tab}
-          <button class="btn" type="button" aria-pressed={view === tab} onclick={() => view = tab}>{tab}</button>
-        {/each}
       </div>
 
       {#if batch.notes && !editing}<p class="small">{batch.notes}</p>{/if}
@@ -337,13 +351,14 @@
       {/if}
     </header>
 
-    <nav class="panel stack guided-rail" aria-label="Batch setup steps">
-      <div class="guide-buttons">{#each guidedSteps as name, index}<button type="button" class="btn small" aria-current={guided === index ? 'step' : undefined} onclick={() => guide(index as GuidedStep)}>{index + 1}. {name}</button>{/each}</div>
-      <div class="row guide-actions"><span class="small progress" title={guided === 0 ? 'Check the capsule set, batch date, operator and recipe above.' : guided === 1 ? 'Assign each capsule, then continue to Spike.' : guided === 2 ? 'Save a spike version and weighed mass for every capsule.' : 'Use Batch steps and the matrix for chemistry records.'}>{guided === 2 ? `Spike ${readiness?.capsules.filter(c => c.spike).length} of ${readiness?.capsules.length}` : guided === 1 ? `Grains ${readiness?.capsules.filter(c => c.grain).length} of ${batch.capsule_set.positions}` : `${readiness?.capsules.filter(c => !c.missing.length).length} of ${readiness?.capsules.length} capsules complete`}</span>
-      <button type="button" class="btn small" disabled={guided === 0} onclick={() => guide((guided - 1) as GuidedStep)}>Back</button>
-      <button type="button" class="btn small" disabled={guided === 4} onclick={() => guide((guided + 1) as GuidedStep)}>Next</button>
-      <button type="button" class="btn small" onclick={incomplete}>Next incomplete</button></div>
-    </nav>
+    <Stepper steps={headerSteps} label="Batch setup steps" onselect={index => guide(index as GuidedStep)}>
+      {#snippet trailing()}
+        <div class="guide-actions">
+          <button type="button" disabled={guided === 0} onclick={() => guide((guided - 1) as GuidedStep)}>Back</button>
+          <button type="button" onclick={incomplete}>Next incomplete</button>
+        </div>
+      {/snippet}
+    </Stepper>
 
     <div class="bench">
         <section class="panel stack board" aria-label="Capsule grid" use:stableScroll>
@@ -484,13 +499,11 @@
   .row { flex-wrap: wrap; }
   .heading { justify-content: space-between; }
   .title { gap: 3px; }
-  .views { gap: 4px; height: 30px; overflow: auto; flex-wrap: nowrap; }
-  .views .btn { height: 30px; padding: 2px 8px; font-size: .8rem; }
-  .views .btn[aria-pressed=true], .step-list .btn[aria-pressed=true], .intake .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
+  .step-list .btn[aria-pressed=true], .intake .btn[aria-pressed=true] { border-color: var(--accent); background: var(--accent-soft); }
   .inactive { display: none !important; }
   .batch { flex: 1; min-height: 0; gap: 6px; }
   .batch > .panel, .bench > .panel { margin: 0; }
-  .batch > header, .views { flex-shrink: 0; }
+  .batch > header { flex-shrink: 0; }
   .bench { display: grid; grid-template-columns: clamp(300px, calc(100% - (100% - 196px) * .48 - 16px - 345px), 400px) calc((100% - 196px) * .48) minmax(345px, 1fr); grid-template-columns: round(down, clamp(300px, calc(100% - (100% - 196px) * .48 - 16px - 345px), 400px), 1px) calc((100% - 196px) * .48) minmax(345px, 1fr); grid-template-rows: minmax(0, 1fr); gap: 8px; align-items: stretch; min-height: 0; flex: 1; overflow: hidden; }
   .board { background: linear-gradient(150deg, var(--glass-strong), var(--glass)); overflow: auto; }
   .board, .inspector, .picker-panel { padding: 8px; min-height: 0; min-width: 0; gap: 8px; }
@@ -516,23 +529,27 @@
   label { display: grid; gap: 4px; }
   .check { display: flex; }
   textarea, select, input:not([type=checkbox]) { width: 100%; min-width: 0; }
-  .batch > header { flex: none; padding: 6px 8px; gap: 6px; overflow-anchor: none; }
-  .batch > header > .heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; height: 38px; }
-  .batch > header .title h2 { font-size: 1rem; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .batch > header .title p { line-height: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Integer row heights keep the bench and puck sizing stable in WebKit. */
+  .batch > header { flex: none; padding: 6px 8px; gap: 4px; overflow-anchor: none; }
+  .breadcrumb { display: inline-flex; align-items: center; align-self: flex-start; height: 16px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 12px; line-height: 16px; cursor: pointer; }
+  .breadcrumb:hover { text-decoration: underline; }
+  .breadcrumb:active { background-image: linear-gradient(var(--press), var(--press)); }
+  .breadcrumb :global(svg) { width: 14px; height: 14px; }
+  .batch > header > .heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; height: 32px; }
+  .batch-facts { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .batch-facts h2 { flex: 0 1 auto; font-size: 15px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .batch-facts time { flex: none; font-size: 12px; white-space: nowrap; }
+  .metadata { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
   .batch-status { flex: none; max-height: 60px; overflow: auto; }
   .batch-status:empty { display: none; }
   .batch > header > .heading > .row { flex-wrap: nowrap; gap: 4px; }
-  .batch > header > .heading > .btn, .batch-actions :global(.btn) { height: 28px; padding: 2px 6px; font-size: .75rem; white-space: nowrap; }
   .batch-actions { position: relative; }
   .batch-actions :global(section[aria-label=History]) { position: absolute; top: calc(100% + 4px); right: 0; width: 320px; z-index: 5; margin: 0; background: var(--bg); border: 1px solid var(--hairline); border-radius: var(--radius-sm); }
-  .guided-rail { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; height: 40px; flex: none; padding: 4px; gap: 8px; }
-  .guide-buttons { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, .7fr) minmax(0, .6fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: 4px; }
-  .guide-buttons .btn { width: 100%; max-width: 100%; min-width: 0; height: 28px; padding: 2px; font-size: .72rem; white-space: normal; line-height: 1.1; }
-  .guide-buttons [aria-current=step] { background: var(--accent-soft); border-color: var(--accent); }
-  .guide-actions .btn { height: 28px; padding: 2px 6px; font-size: .75rem; white-space: nowrap; }
-  .guide-actions { flex-wrap: nowrap; gap: 4px; }
-  .progress { width: clamp(100px, 10vw, 140px); font-size: .72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .guide-actions { display: flex; align-items: center; gap: 4px; }
+  .guide-actions button { height: 28px; padding: 2px 6px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--glass-strong); font-size: 12px; white-space: nowrap; cursor: pointer; transition: background var(--motion); }
+  .guide-actions button:hover:not(:disabled) { border-color: var(--accent); }
+  .guide-actions button:active:not(:disabled) { background-image: linear-gradient(var(--press), var(--press)); }
+  .guide-actions button:disabled { opacity: .5; cursor: default; }
   .inspector-head { height: 88px; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: start; gap: 4px; }
   .inspector-head .title { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; width: 100%; min-width: 0; }
   .inspector-head h3 { line-height: 20px; }
@@ -547,6 +564,11 @@
   .picker-content { height: 100%; min-height: 0; }
   .picker-placeholder, .review-summary { height: 100%; overflow: auto; scrollbar-gutter: stable; padding: 2px; }
   .review-capsule { min-height: 34px; flex: none; white-space: normal; }
+  @media (max-width: 1100px) {
+    .batch > header > .heading { grid-template-columns: minmax(0, 1fr); height: auto; }
+    .batch-facts { height: 32px; }
+    .batch-actions { justify-content: flex-end; }
+  }
   @media (max-width: 1279px) {
     .bench { grid-template-columns: 160px calc((100% - 176px) * .5) calc((100% - 176px) * .5); }
     .board > .heading { height: 48px; overflow: hidden; flex-wrap: wrap; }

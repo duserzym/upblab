@@ -18,3 +18,10 @@ export function loadReadability(viewer: Viewer, store?: LocalStore) {
 export function saveReadability(viewer: Viewer, value: string, store?: LocalStore) {
   if (Number.isFinite(Number(value)) && Number(value) > 0) set(key(viewer, 'readability'), value, store);
 }
+
+export type ListView = 'rows' | 'calendar' | 'lanes';
+export function loadListView(viewer: Viewer, store?: LocalStore): ListView {
+  const value = get(key(viewer, 'list-view'), store);
+  return value === 'calendar' || value === 'lanes' ? value : 'rows';
+}
+export function saveListView(viewer: Viewer, value: ListView, store?: LocalStore) { set(key(viewer, 'list-view'), value, store); }

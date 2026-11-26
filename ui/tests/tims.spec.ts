@@ -36,10 +36,10 @@ async function start(page: Page, options: Partial<FakeOptions> = {}) {
 }
 async function openBatch(page: Page) {
   await page.getByRole('region', { name: 'Batch list', exact: true }).getByRole('button', { name: 'Krogh · 2026-11-06', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Krogh (K) · 2026-11-06', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Krogh (K)', exact: true })).toBeVisible();
 }
 async function openStep(page: Page, name: string) {
-  await page.getByRole('button', { name: 'Batch steps', exact: true }).click();
+  await page.getByRole('radio', { name: 'Batch steps', exact: true }).click();
   await page.getByRole('group', { name: 'Choose a batch step' }).getByRole('button', { name: new RegExp(name + '$') }).click();
   return page.getByRole('article', { name, exact: true });
 }
@@ -55,10 +55,10 @@ async function gate(page: Page, key: string, release = false) {
 }
 const readCount = (page: Page, path: string) => page.evaluate(path => (window as unknown as { __fake: { calls: [string, { path?: string }][] } }).__fake.calls.filter(([command, args]) => command === 'api_get' && args?.path === path).length, path);
 test('filters preserve the lab, use cursor paging, and stay out of the URL', async ({ page }) => {
-  const path = `/v1/tims/batches?limit=500&lab=${lab}&capsule_set=set-k&started_after=2026-11-01&started_before=2026-11-30&status=picked`;
-  await start(page, { apiReplies: { [path]: { status: 200, body: [batch], nextCursor: 'invented-next' }, [`/v1/tims/batches?limit=500&after=invented-next&lab=${lab}&capsule_set=set-k&started_after=2026-11-01&started_before=2026-11-30&status=picked`]: { status: 200, body: [{ ...batch, id: 'batch-older', started_on: '2026-11-05' }] } } });
-  await page.getByLabel('Capsule set', { exact: true }).selectOption('set-k'); await page.getByLabel('Started after', { exact: true }).fill('2026-11-01'); await page.getByLabel('Started before', { exact: true }).fill('2026-11-30'); await page.getByLabel('Fraction status', { exact: true }).selectOption('picked'); await page.getByRole('button', { name: 'Apply filters' }).click();
-  await page.getByRole('button', { name: 'Load more batches' }).click(); await expect(page.getByRole('region', { name: 'Batch list', exact: true }).getByRole('button')).toHaveCount(2);
+  const path = `/v1/tims/batches?limit=200&lab=${lab}&capsule_set=set-k&started_after=2026-11-01&started_before=2026-11-30&status=picked&order=-started_on`;
+  await start(page, { apiReplies: { [path]: { status: 200, body: [batch], nextCursor: 'invented-next' }, [`/v1/tims/batches?limit=200&after=invented-next&lab=${lab}&capsule_set=set-k&started_after=2026-11-01&started_before=2026-11-30&status=picked&order=-started_on`]: { status: 200, body: [{ ...batch, id: 'batch-older', started_on: '2026-11-05' }] } } });
+  await page.getByLabel('Capsule set', { exact: true }).selectOption('set-k'); await page.getByLabel('Started after', { exact: true }).fill('2026-11-01'); await page.getByLabel('Started before', { exact: true }).fill('2026-11-30'); await page.getByLabel('Fraction status', { exact: true }).selectOption('picked');
+  await page.getByRole('button', { name: 'Load more batches' }).click(); await expect(page.getByRole('region', { name: 'Batch list', exact: true }).getByTestId('tims-batch-row')).toHaveCount(2);
   expect(page.url()).not.toContain('started_after');
   await page.reload(); await expect(page.getByLabel('Started after')).toHaveValue('2026-11-01');
 });
@@ -72,7 +72,7 @@ test('grid has 15 cells, shared atlas crops, labels and per-capsule records', as
   await expect(drawer.locator('clipPath polygon')).toHaveCount(1); await expect(drawer.locator('image[href]')).not.toHaveCount(0);
   expect(await cellImage.locator('clipPath').getAttribute('id')).not.toBe(await drawer.locator('clipPath').getAttribute('id')); await drawer.getByLabel('Capsule step', { exact: true }).selectOption('ca-step'); await expect(drawer).toContainText('overridden');
   expect(await readCount(page, '/v1/mounts/mount-demo/atlas')).toBe(1);
-  await page.getByRole('button', { name: 'Step × capsule matrix' }).click(); await expect(page.getByLabel('Capsule record matrix')).toContainText('180 °C');
+  await page.getByRole('radio', { name: 'Step × capsule matrix' }).click(); await expect(page.getByLabel('Capsule record matrix')).toContainText('180 °C');
   expect(await page.evaluate(() => (window as unknown as { __fake: { calls: [string, { path?: string }][] } }).__fake.calls.filter(([c, a]) => c === 'api_get' && a?.path === '/v1/mounts/mount-demo/elements').length)).toBe(1);
   await page.getByRole('button', { name: 'History', exact: true }).click(); await expect(page.getByRole('region', { name: 'History' })).toContainText('notes: old → new');
 });
@@ -201,7 +201,7 @@ test('missing source and operator labels use shared cached names', async ({ page
     '/v1/accounts?limit=500': [{ id: 'invented-other-operator', username: 'other-analyst', display_name: 'Invented other analyst' }],
     '/v1/mounts/mount-demo': { label: 'Shared invented mount' },
     '/v1/mounts/mount-demo/elements': { ...fixtures['/v1/mounts/mount-demo/elements'] as object, grains: [{ id: 'atlas-grain-1', server_id: 'grain-1', number: 3, polygon_um: [[0, 0], [100, 0], [80, 50]] }] },
-    [`/v1/tims/batches?limit=500&lab=${lab}`]: [unnamed], [`/v1/tims/batches/${batch.id}`]: unnamed,
+    [`/v1/tims/batches?limit=200&lab=${lab}&order=-started_on`]: [unnamed], [`/v1/tims/batches/${batch.id}`]: unnamed,
   } });
   await openBatch(page); await expect(page.getByRole('region', { name: 'Chemistry batch' })).toContainText('Invented other analyst');
   await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
@@ -269,7 +269,7 @@ test('an open batch retains the multi-lab selector and returns to the selected l
     '/v1/labs': [{ id: lab, name: 'Invented lab', my_role: 'member' }, { id: other, name: 'Another invented lab', my_role: 'member' }],
     [`/v1/tims/capsule-sets?limit=500&lab=${other}`]: [],
     [`/v1/tims/recipes?limit=500&lab=${other}`]: [],
-    [`/v1/tims/batches?limit=500&lab=${other}`]: [],
+    [`/v1/tims/batches?limit=200&lab=${other}&order=-started_on`]: [],
   } });
   await openBatch(page);
   await expect(page.getByRole('combobox', { name: 'Lab', exact: true })).toBeVisible();
@@ -518,7 +518,7 @@ test('a new batch inherits its lab protocol, prints it, and seeds batch and caps
   await expect(step.getByLabel('Protocol text')).toHaveValue(inventedProtocol.text);
   await step.getByRole('button', { name: 'Use inherited protocol', exact: true }).click();
   await step.getByRole('button', { name: 'Cancel edit', exact: true }).click();
-  await page.getByRole('button', { name: 'Capsules', exact: true }).click();
+  await page.getByRole('radio', { name: 'Capsules', exact: true }).click();
   await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click();
   const capsule = page.getByRole('region', { name: 'Capsule details' });
   await capsule.getByLabel('Capsule step', { exact: true }).selectOption(columnStep.id);
@@ -638,7 +638,7 @@ test('view-as is read-only, and top-level tab switches preserve a selected capsu
   await start(page); await openBatch(page); await page.getByRole('button', { name: /^K1 z1(?: · |$)/ }).click(); await page.getByRole('tab', { name: 'Home', exact: true }).click(); await page.getByRole('tab', { name: 'TIMS', exact: true }).click(); await expect(page.getByRole('region', { name: 'Capsule details' })).toBeVisible();
   await page.getByRole('navigation', { name: 'TIMS sections' }).getByRole('button', { name: 'Recipes', exact: true }).click();
   await page.evaluate(() => (window as unknown as { __emit(event: string, payload: unknown): Promise<void> }).__emit('lab-bridge://open', { source: 'sessions', url: 'upbdb://tims/batch/batch-synthetic' }));
-  await expect(page.getByRole('heading', { name: 'Krogh (K) · 2026-11-06', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Krogh (K)', exact: true })).toBeVisible();
   await page.locator('header.bar').getByLabel('View as', { exact: true }).selectOption('invented-viewer');
   await expect(page.locator('header.bar').getByTestId('view-as-banner')).toBeVisible();
   await expect(page.locator('.oversight-bar')).toHaveCount(0);
@@ -659,7 +659,7 @@ test('delivering an unrelated queued recipe does not refresh a mounted chemistry
 });
 test('a late batch creation in another lab does not navigate the current workspace', async ({ page }) => {
   const other = 'another-invented-lab';
-  await start(page, { fixtures: { '/v1/labs': [{ id: lab, name: 'Invented lab', my_role: 'member' }, { id: other, name: 'Another invented lab', my_role: 'member' }], [`/v1/tims/capsule-sets?limit=500&lab=${other}`]: [], [`/v1/tims/recipes?limit=500&lab=${other}`]: [], [`/v1/tims/batches?limit=500&lab=${other}`]: [] }, apiReplies: { 'POST /v1/tims/batches': { status: 200, body: { ...batch, id: 'earlier-created-batch' } } } });
+  await start(page, { fixtures: { '/v1/labs': [{ id: lab, name: 'Invented lab', my_role: 'member' }, { id: other, name: 'Another invented lab', my_role: 'member' }], [`/v1/tims/capsule-sets?limit=500&lab=${other}`]: [], [`/v1/tims/recipes?limit=500&lab=${other}`]: [], [`/v1/tims/batches?limit=200&lab=${other}&order=-started_on`]: [] }, apiReplies: { 'POST /v1/tims/batches': { status: 200, body: { ...batch, id: 'earlier-created-batch' } } } });
   await gate(page, 'POST /v1/tims/batches'); await page.getByRole('button', { name: 'New batch', exact: true }).click();
   await page.getByRole('form', { name: 'New batch' }).getByLabel('Active capsule set').selectOption(batch.capsule_set_id);
   await page.getByRole('button', { name: 'Create batch', exact: true }).click(); await expect.poll(() => writes(page)).toHaveLength(1);

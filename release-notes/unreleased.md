@@ -1,0 +1,2 @@
+- TIMS batches have a compact breadcrumb, friendly date, metadata chips, segmented views, named action icons and a five-step workflow with readiness counts. Shared controls support light and dark themes and keyboard navigation.
+- TIMS batch lists now offer remembered Rows, Calendar and Lanes views, automatic shared filters, stored progress and states, date/set sorting, paged summaries and older-server/mirror fallbacks.
