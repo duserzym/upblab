@@ -71,7 +71,7 @@
   .session-card { position: relative; min-width: 0; padding: var(--space-2) var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); box-shadow: none; }
   .session-card:hover, .session-card:focus-within { border-color: var(--accent); }
   .heading { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-  .main { border: 0; background: none; padding: 0; text-align: left; color: var(--accent); font-weight: 600; min-width: 0; cursor: pointer; flex: 1; }
+  .main { border: 0; background: none; padding: 0; text-align: left; color: var(--text); font-weight: 600; min-width: 0; cursor: pointer; flex: 1; }
   .key { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .main::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
   .chip { font-size: 0.72rem; padding: 0 var(--space-1); white-space: nowrap; }
@@ -97,8 +97,9 @@
   .run { display: flex; align-items: center; gap: var(--space-1); min-width: 0; flex: 1 1 0; font-size: 0.74rem; }
   .dot { width: 0.45rem; height: 0.45rem; }
   .controls { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
-  .btn { padding: 0.1rem var(--space-2); font-size: 0.74rem; }
+  .btn { padding: 0.1rem var(--space-2); font-size: 0.74rem; border-radius: var(--radius-sm); }
   .dense { border: 0; border-bottom: 1px solid var(--hairline); border-radius: 0; background: transparent; padding: var(--space-2) 0; gap: var(--space-1); }
   .dense:hover { background: var(--row-hover); }
+  .dense .main { font-family: var(--font-sans); font-size: 13px; }
   .dense .footer { min-height: 26px; }
 </style>

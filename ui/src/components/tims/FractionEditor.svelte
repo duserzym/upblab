@@ -307,7 +307,7 @@
 
 <style>
   .fraction-editor { gap: 0; }
-  .loose-image { width: 104px; height: 104px; flex-shrink: 0; display: grid; place-items: center; padding: var(--space-2); box-sizing: border-box; text-align: center; border: 1px solid var(--hairline); border-radius: var(--radius); background: var(--row-hover); }
+  .loose-image { width: 104px; height: 104px; flex-shrink: 0; display: grid; place-items: center; padding: var(--space-2); box-sizing: border-box; text-align: center; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--row-hover); }
   .fraction-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overflow-anchor: none; padding: 2px; gap: var(--space-2); }
   .fraction-scroll > :global(*) { flex-shrink: 0; }
   .status-line { height: 42px; overflow: auto; }
@@ -318,6 +318,7 @@
   .heading { justify-content: space-between; }
   .source { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: var(--space-2); align-items: center; }
   .labels { min-width: 0; gap: var(--space-1); overflow-wrap: anywhere; }
+  .labels strong { font-size: 13px; font-weight: 600; }
   ul { padding-left: 1.2em; margin: 0; font-size: .78rem; }
   label { display: grid; gap: 4px; }
   .check { display: flex; align-items: baseline; }

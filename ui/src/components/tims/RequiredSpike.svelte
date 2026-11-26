@@ -140,7 +140,7 @@
   </details>{/if}
 </section>
 <style>
-  .required-spike { border: 2px solid var(--accent); padding: var(--space-2); min-width: 0; }
+  .required-spike { border: 1px solid var(--hairline); border-left: 2px solid var(--accent); border-radius: var(--radius-sm); padding: var(--space-2); min-width: 0; background: var(--glass); }
   .badge { display: inline-block; width: 66px; height: 22px; text-align: center; background: var(--accent-soft); color: var(--accent); border-radius: var(--radius-sm); font-size: .75rem; }
   h4, p { margin: 0; } .row { flex-wrap: wrap; } label { display: grid; gap: 4px; } .check { display: flex; align-items: baseline; }
   input:not([type=checkbox]), select, textarea { width: 100%; min-width: 0; } .calculation { min-height: 130px; padding: var(--space-2); overflow-wrap: anywhere; }

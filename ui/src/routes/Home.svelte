@@ -196,11 +196,11 @@
     {#if active}<div class="filter-slot"><FilterBar {active} /></div>{/if}
     <div class="row home-actions">
     <div class="action-tiles" data-testid="open-panel">
-      <button class="glass panel action-tile" aria-label="Open folder…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void openDialog(true)}><Icon kind="folder" /><span><strong>Open folder</strong><small>Open a package or export folder</small></span></button>
-      <button class="glass panel action-tile" aria-label="Open files…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void openDialog(false)}><Icon kind="files" /><span><strong>Open files</strong><small>Open images or session CSVs</small></span></button>
-      <button class="glass panel action-tile" aria-label="Upload LA-ICP-MS session…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-controls="home-upload-sessions" onclick={() => startUpload('sessions')}><Icon kind="session" /><span><strong>Upload LA-ICP-MS session</strong><small>Import a session, then Review</small></span></button>
-      <button class="glass panel action-tile" aria-label="Upload image set…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-controls="home-upload-images" onclick={() => startUpload('images')}><Icon kind="images" /><span><strong>Upload image set</strong><small>Publish mount images, then Review</small></span></button>
-      <button class="glass panel action-tile" aria-label="Laser log" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : 'Tie a .lase file to its sessions'} onclick={() => void chooseLaser()}><Icon kind="laser" /><span><strong>Laser log</strong><small>Tie a .lase file to its sessions</small></span></button>
+      <button class="btn action-tile" aria-label="Open folder…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void openDialog(true)}><Icon kind="folder" /><span><strong>Open folder</strong><small>Open a package or export folder</small></span></button>
+      <button class="btn action-tile" aria-label="Open files…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} onclick={() => void openDialog(false)}><Icon kind="files" /><span><strong>Open files</strong><small>Open images or session CSVs</small></span></button>
+      <button class="btn primary action-tile" aria-label="Upload LA-ICP-MS session…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-controls="home-upload-sessions" onclick={() => startUpload('sessions')}><Icon kind="session" /><span><strong>Upload LA-ICP-MS session</strong><small>Import a session, then Review</small></span></button>
+      <button class="btn action-tile" aria-label="Upload image set…" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : undefined} aria-controls="home-upload-images" onclick={() => startUpload('images')}><Icon kind="images" /><span><strong>Upload image set</strong><small>Publish mount images, then Review</small></span></button>
+      <button class="btn action-tile" aria-label="Laser log" disabled={!!oversight.viewAs} title={oversight.viewAs ? READ_ONLY_REASON : 'Tie a .lase file to its sessions'} onclick={() => void chooseLaser()}><Icon kind="laser" /><span><strong>Laser log</strong><small>Tie a .lase file to its sessions</small></span></button>
       {#if !isDesktop}<input bind:this={laserInput} aria-label="Laser log file" type="file" accept=".lase" hidden onchange={laserChosen} />{/if}
     </div>
     <nav class="row records-nav" aria-label="Home view">
@@ -269,7 +269,7 @@
         {:else if overview.state === 'signed-out'}
           <div class="row">
             <p class="muted small grow">Sign in to see your sessions, their reductions and the images of your mounts.</p>
-            <button class="btn primary" onclick={() => (identity.dialog = true)}>Sign in</button>
+            <button class="btn" onclick={() => (identity.dialog = true)}>Sign in</button>
           </div>
         {:else if overview.state === 'unreachable'}
           <div class="row"><span class="dot" style="background: var(--danger)"></span><span class="small">UPbDB is not answering at <code>{identity.target?.server}</code>.</span></div>
@@ -363,7 +363,7 @@
           bind:value={linkInput}
           aria-label="Open a link"
         />
-        <button class="btn primary" type="submit">Open</button>
+        <button class="btn" type="submit">Open</button>
       </form>
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (Focusable inventory supports keyboard scrolling.) -->
       <div class="column-scroll" data-testid="links-scroll" role="group" aria-label="Recent links" tabindex="0">
@@ -421,8 +421,9 @@
   .filter-slot > :global(.panel) { margin: 0; }
   .home-actions { gap: var(--space-2); }
   .action-tiles { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  .action-tile { display: inline-flex; gap: var(--space-2); align-items: center; text-align: left; padding: var(--space-1) var(--space-3); margin: 0; min-width: 0; border-radius: 999px; cursor: pointer; color: var(--text); }
-  .action-tile:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .action-tile { display: inline-flex; gap: var(--space-2); align-items: center; text-align: left; padding: var(--space-1) var(--space-3); margin: 0; min-width: 0; border-radius: var(--radius-sm); cursor: pointer; }
+  .action-tile:hover { border-color: var(--accent); }
+  .action-tile:active:not(:disabled) { transform: none; }
   .action-tile strong { font-size: 0.8rem; }
   .action-tile small { display: none; }
   .records-nav { gap: var(--space-2); margin-left: auto; }
@@ -435,7 +436,7 @@
   .home-notices { max-height: 5rem; overflow: auto; min-width: 0; overflow-wrap: anywhere; }
   .compact-columns { display: grid; grid-template-columns: 1.1fr 1.1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: var(--space-3); flex: 1; flex-shrink: 1; min-height: 0; min-width: 0; }
   .compact-columns.records-open { display: none; }
-  .working-column { display: flex; flex-direction: column; min-width: 0; min-height: 0; margin: 0; padding: var(--space-2) var(--space-3); gap: var(--space-2); overflow: hidden; box-shadow: none; }
+  .working-column { display: flex; flex-direction: column; min-width: 0; min-height: 0; margin: 0; padding: var(--space-2) var(--space-3); gap: var(--space-2); overflow: hidden; box-shadow: none; border-color: var(--hairline); border-radius: var(--radius-sm); }
   .working-column > :global(header), .links-column > h2 { flex: none; }
   .column-scroll { flex: 1 1 0; min-height: 0; min-width: 0; overflow: auto; overflow-wrap: anywhere; padding: 0 2px; overscroll-behavior: contain; }
   .dense-list { min-width: 0; }

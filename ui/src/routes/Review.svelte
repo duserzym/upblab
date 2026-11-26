@@ -360,7 +360,7 @@
         <button class="btn atlas-edit edit-action" aria-label="Edit in grainatlas" disabled={!!oversight.viewAs || !imageTarget.project} title={oversight.viewAs ? READ_ONLY_REASON : editTitle}
           onclick={() => void editInAtlas(imageTarget, 'review')}><span aria-hidden="true">✎</span> <span class="edit-long">Edit in grainatlas</span><span class="edit-short">Edit</span></button>
       {:else if pane === 'plots'}
-        <button class="btn atlas-edit edit-action" aria-label="Edit in UPbRPy Studio" disabled={!!oversight.viewAs || !studio.target} title={oversight.viewAs ? READ_ONLY_REASON : studio.reason}
+        <button class="btn primary atlas-edit edit-action" aria-label="Edit in UPbRPy Studio" disabled={!!oversight.viewAs || !studio.target} title={oversight.viewAs ? READ_ONLY_REASON : studio.reason}
           onclick={() => studio.target && void openInStudio(studio.target, 'review')}><span aria-hidden="true">✎</span> <span class="edit-long">Edit in UPbRPy Studio</span><span class="edit-short">Studio</span></button>
       {/if}
     {/snippet}
@@ -416,7 +416,7 @@
   .mount-title {display:inline;padding:0;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;}
   .mount-title:hover {text-decoration:underline;}
   .mount-title:focus-visible {outline:2px solid var(--accent);outline-offset:1px;}
-  .atlas-edit {font-size:0.72rem;padding:2px 8px;gap:4px;white-space:nowrap;}
+  .atlas-edit {font-size:0.72rem;padding:2px 8px;gap:4px;white-space:nowrap;border-radius:var(--radius-sm);}
   .edit-short {display:none;}
   .details-summary {display:flex;align-items:center;gap:5px;min-width:0;height:100%;padding:0 4px;background:var(--accent-soft);font-size:0.73rem;white-space:nowrap;}
   .summary-name {flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
@@ -424,7 +424,7 @@
   .region-rail:hover {text-decoration:underline;}
   .region-rail:focus-visible {outline:2px solid var(--accent);outline-offset:1px;}
   .summary-date,.details-summary .btn {flex:none;}
-  .details-summary .btn {font-size:0.7rem;padding:1px 4px;}
+  .details-summary .btn {font-size:0.7rem;padding:1px 4px;border-radius:var(--radius-sm);}
   @container (max-width:360px) {
     .details-summary .edit-long {display:none;}
     .details-summary .edit-short {display:inline;}
@@ -435,15 +435,16 @@
   .layout-toggle,.layout-drawer {display:none;}
   .layout-presets .chip {font-size:0.72rem;padding:3px 7px;}
   .toolbar[hidden] {display:none;}
-  .toolbar {display:flex;flex-direction:column;gap:8px;padding:8px 12px;border-radius:0;flex:none;min-width:0;border:0;box-shadow:none;}
+  .toolbar {display:flex;flex-direction:column;gap:8px;padding:8px 12px 7px;border-radius:0;flex:none;min-width:0;border:0;border-bottom:1px solid var(--hairline);box-shadow:none;}
   label {display:flex;align-items:center;gap:4px;font-size:0.75rem;min-width:0;}
   .selection-bar {display:flex;align-items:flex-start;gap:5px 12px;flex-wrap:wrap;max-height:86px;overflow:auto;min-width:0;padding:4px;}
   .sample-bar,.selection-actions {display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;}
-  .selection-bar .chip {padding:2px 7px;font-size:0.75rem;}
+  .selection-bar .chip {padding:2px 7px;font-size:0.75rem;border-radius:var(--radius-sm);}
   .sample-toggle {position:relative;min-width:0;max-width:100%;}
   .selection-bar .sample-chip {max-width:240px;width:100%;padding-right:42px;}.sample-chip span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.sample-chip i {width:9px;height:9px;border-radius:50%;flex:none;}.sample-chip small {color:var(--text-muted);}
   .selection-bar .sample-only {position:absolute;right:3px;top:50%;transform:translateY(-50%);padding:0 4px;font-size:0.65rem;opacity:0;pointer-events:none;}
   .spot-filters {flex-wrap:wrap;gap:4px;} .spot-filters input {min-width:0;flex:1 1 100px;width:100%;font-size:0.78rem;}
+  .spot-filters .chip {border-radius:var(--radius-sm);}
   .sample-toggle:hover .sample-only,.sample-toggle:focus-within .sample-only {opacity:1;pointer-events:auto;}
   .sample-chip:focus-visible,.sample-only:focus-visible,.section-label:focus-visible {outline:2px solid var(--accent);outline-offset:2px;}
   .section-label {font-size:0.67rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);}

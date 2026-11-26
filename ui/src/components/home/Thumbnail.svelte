@@ -34,7 +34,7 @@
 <style>
   .thumbnail {width:5.6rem;aspect-ratio:16 / 9;flex:none;overflow:hidden;border-radius:var(--radius-sm);
     background:var(--plot-bg);color:var(--text-faint);border:1px solid var(--hairline);}
-  .overview {display:grid;grid-auto-rows:minmax(0, 1fr);width:100%;height:100%;gap:1px;padding:1px;background:#e5e9ee;}
+  .overview {display:grid;grid-auto-rows:minmax(0, 1fr);width:100%;height:100%;gap:1px;padding:1px;background:var(--hairline);}
   img,svg {display:block;width:100%;height:100%;object-fit:contain;}
   img {filter:brightness(1.4) contrast(0.84);}
 </style>

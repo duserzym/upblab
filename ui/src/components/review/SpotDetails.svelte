@@ -73,17 +73,18 @@
 <style>
   .details {display:grid;gap:4px;min-width:0;}
   h2,h3,p {margin:0;} h2 {font-size:1rem;overflow-wrap:anywhere;min-width:0;}
-  h3 {font-size:0.65rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);margin:0 0 2px;}
+  h3 {font-size:11px;line-height:12px;font-weight:500;color:var(--text-muted);margin:0 0 2px;}
   .small,.grid-kv {font-size:0.78rem;line-height:1.3;}
   .identity {display:grid;gap:2px;min-width:0;} .identity p {overflow-wrap:anywhere;}
   .identity-actions {display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0;}
   .identity-actions h2 {flex:1 1 auto;}
-  .openers, .more {flex-wrap:wrap;gap:4px;} .btn {font-size:0.73rem;padding:3px 8px;white-space:normal;text-align:left;}
-  .value {font-size:1.1rem;font-weight:600;white-space:nowrap;}
+  .openers, .more {flex-wrap:wrap;gap:4px;} .btn {font-size:0.73rem;padding:3px 8px;white-space:normal;text-align:left;border-radius:var(--radius-sm);}
+  .value {font-size:1.1rem;font-weight:550;white-space:nowrap;color:var(--accent);}
   dd {min-width:0;} dt {min-width:0;overflow-wrap:normal;word-break:keep-all;} .num {white-space:nowrap;overflow-wrap:normal;}
   .run {overflow-wrap:anywhere;}
   ul {margin:0;padding-left:16px;} .warning {color:var(--warning);}
   .grid-kv {grid-template-columns:minmax(min-content,1fr) max-content;gap:1px 8px;margin:0;}
+  .grid-kv dd {box-shadow:inset 0 -1px var(--hairline);}
   /* The dock body is the query container for the grid itself. */
   @container (min-width: 560px) {
     .details {grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);grid-template-areas:"id id" "date values" "flags values" "more values" "run run";align-items:start;column-gap:8px;}

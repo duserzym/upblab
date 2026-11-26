@@ -52,7 +52,7 @@
   .mount-card:hover, .mount-card:focus-within { border-color: var(--accent); }
   .summary { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
   .details { min-width: 0; flex: 1; }
-  .main { display: block; width: 100%; border: 0; background: none; padding: 0; text-align: left; font-weight: 600; color: var(--accent); cursor: pointer; }
+  .main { display: block; width: 100%; border: 0; background: none; padding: 0; text-align: left; font-weight: 600; color: var(--text); cursor: pointer; }
   .key { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .main::after { content: ''; position: absolute; inset: 0; border-radius: var(--radius); }
   .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -60,13 +60,14 @@
   p { margin: 0; }
   .counts, .badge { font-size: 0.74rem; }
   .footer { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); }
-  .badge { color: var(--text-muted); display: inline-flex; align-items: center; gap: var(--space-1); }
+  .badge { color: var(--text-muted); display: inline-flex; align-items: center; gap: var(--space-1); border-color: var(--hairline); border-radius: var(--radius-sm); background: var(--glass); }
   .badge.published { color: var(--accent); }
   .badge svg { width: 1rem; height: 1rem; flex: none; }
   .controls { position: relative; z-index: 1; display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
-  .btn { padding: 0.1rem var(--space-2); font-size: 0.74rem; }
+  .btn { padding: 0.1rem var(--space-2); font-size: 0.74rem; border-radius: var(--radius-sm); }
   .dense { border: 0; border-bottom: 1px solid var(--hairline); border-radius: 0; background: transparent; padding: var(--space-2) 0; gap: var(--space-1); }
   .dense:hover { background: var(--row-hover); }
+  .dense .main { font-size: 13px; }
   .dense .summary :global(.thumbnail) { width: 3rem; }
   .dense .footer { min-height: 26px; }
 </style>

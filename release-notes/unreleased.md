@@ -1,1 +1,2 @@
 - TIMS, Review, Home, shell uploads, Settings and the top bar use consistent control shapes, with segmented switches, fact and status chips, and labelled icon buttons.
+- Home, Review and TIMS follow the approved design suite with quieter groups, clearer record rows and one primary action for the current task; presentation only.

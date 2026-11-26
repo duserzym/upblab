@@ -224,11 +224,11 @@
   .dock { position:relative; flex:1; min-height:0; min-width:0; overflow:hidden; }
   .tile { container-type:inline-size; position:absolute; display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-radius:var(--radius-sm); border:1px solid var(--hairline); background:var(--glass); }
   .tile[hidden], .tile header[hidden], .body[hidden], .dock[hidden] { display:none; }
-  .tile header { display:flex; align-items:center; justify-content:space-between; height:29px; padding:0 4px; flex:none; border-bottom:1px solid var(--hairline); background:var(--accent-soft); }
+  .tile header { display:flex; align-items:center; justify-content:space-between; height:29px; padding:0 4px; flex:none; border-bottom:1px solid var(--hairline); background:var(--glass-strong); }
   .heading,.header-actions {display:flex;align-items:center;min-width:0;gap:2px;}
   .heading {flex:1;}
   .header-actions {flex:none;}
-  .tile-title {font-size:0.73rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tile-title {font-size:0.73rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .rail-button {flex:1;min-width:0;padding:0;border:0;background:var(--accent-soft);color:var(--text);font-size:0.73rem;cursor:pointer;}
   .rail-x .rail-button {writing-mode:vertical-rl;transform:rotate(180deg);}
   .grip,.dock-menu { border:0; background:transparent; color:var(--text); padding:2px 5px; font-size:0.73rem; white-space:nowrap; border-radius:var(--radius-sm); }

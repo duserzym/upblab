@@ -347,7 +347,7 @@
           <label class="check"><input type="checkbox" bind:checked={operatorAccount} disabled={!editable} /> Use my account as operator</label>
           <label>Operator name <input bind:value={operator} disabled={!editable || operatorAccount} /></label>
           <label>Batch notes <textarea rows="3" bind:value={notes} disabled={!editable}></textarea></label>
-          <button class="btn" disabled={!editable}>Save batch here</button>
+          <button class="btn primary" disabled={!editable}>Save batch here</button>
         </form>
       {/if}
     </header>
@@ -356,7 +356,7 @@
       {#snippet trailing()}
         <div class="guide-actions">
           <button type="button" disabled={guided === 0} onclick={() => guide((guided - 1) as GuidedStep)}>Back</button>
-          <button type="button" onclick={incomplete}>Next incomplete</button>
+          <button type="button" class="next-incomplete" onclick={incomplete}>Next incomplete</button>
         </div>
       {/snippet}
     </Stepper>
@@ -504,8 +504,11 @@
   .batch > .panel, .bench > .panel { margin: 0; }
   .batch > header { flex-shrink: 0; }
   .bench { display: grid; grid-template-columns: clamp(300px, calc(100% - (100% - 196px) * .48 - 16px - 345px), 400px) calc((100% - 196px) * .48) minmax(345px, 1fr); grid-template-columns: round(down, clamp(300px, calc(100% - (100% - 196px) * .48 - 16px - 345px), 400px), 1px) calc((100% - 196px) * .48) minmax(345px, 1fr); grid-template-rows: minmax(0, 1fr); gap: 8px; align-items: stretch; min-height: 0; flex: 1; overflow: hidden; }
-  .board { background: linear-gradient(150deg, var(--glass-strong), var(--glass)); overflow: auto; }
+  .board { background: var(--glass); overflow: auto; }
   .board, .inspector, .picker-panel { padding: 8px; min-height: 0; min-width: 0; gap: 8px; }
+  /* Inset edges keep every measured puck and inspector content box unchanged. */
+  .bench > .panel { box-shadow: inset 0 0 0 1px var(--hairline); border-radius: var(--radius-sm); }
+  .batch :global(.btn) { border-radius: var(--radius-sm); }
   .bench > .board { gap: 4px; }
   .board > .heading { height: 20px; flex: none; flex-wrap: nowrap; }
   .board > .heading h3 { font-size: .8rem; white-space: nowrap; }
@@ -529,7 +532,7 @@
   .check { display: flex; }
   textarea, select, input:not([type=checkbox]) { width: 100%; min-width: 0; }
   /* Integer row heights keep the bench and puck sizing stable in WebKit. */
-  .batch > header { flex: none; padding: 6px 8px; gap: 4px; overflow-anchor: none; }
+  .batch > header { flex: none; padding: 6px 8px; gap: 4px; overflow-anchor: none; background: var(--glass); border-radius: var(--radius-sm); }
   .breadcrumb { display: inline-flex; align-items: center; align-self: flex-start; height: 16px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 12px; line-height: 16px; cursor: pointer; }
   .breadcrumb:hover { text-decoration: underline; }
   .breadcrumb:active { background-image: linear-gradient(var(--press), var(--press)); }
@@ -549,6 +552,12 @@
   .guide-actions button:hover:not(:disabled) { border-color: var(--accent); }
   .guide-actions button:active:not(:disabled) { background-image: linear-gradient(var(--press), var(--press)); }
   .guide-actions button:disabled { opacity: .5; cursor: default; }
+  /* Emphasise the current save; Next incomplete leads when no form is active.
+     Background capsule forms stay available but quiet beside a workspace task. */
+  .batch:not(:has(.inspector .btn.primary, .steps .btn.primary, .grain-selection:not(.inactive) .review-summary .btn.primary, .grain-selection:not(.inactive) .picker-content:not(.inactive) .btn.primary, header form)) .next-incomplete { background: var(--accent); color: var(--accent-contrast); border-color: var(--accent); }
+  .batch:has(header form) .bench :global(.btn.primary),
+  .bench:has(.steps :global(.btn.primary), .grain-selection:not(.inactive) .review-summary .btn.primary, .grain-selection:not(.inactive) .picker-content:not(.inactive) :global(.btn.primary)) .inspector :global(.btn.primary),
+  .steps:has(> form) :global(article .btn.primary) { background: var(--glass-strong); color: var(--text); border-color: var(--hairline); }
   .inspector-head { height: 88px; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: start; gap: 4px; }
   .inspector-head .title { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; width: 100%; min-width: 0; }
   .inspector-head h3 { line-height: 20px; }

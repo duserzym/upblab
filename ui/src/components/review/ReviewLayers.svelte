@@ -250,9 +250,9 @@
   .plucked-badge {font-size:0.63rem;color:var(--accent);background:var(--accent-soft);border-radius:var(--radius-sm);padding:1px 3px;max-width:100%;overflow-wrap:anywhere;flex-shrink:1;min-width:0;}
   .layer-tree {min-height:0;overflow:auto;}
   .children {margin-left:8px;border-left:1px solid var(--hairline);padding-left:2px;}
-  .layer-row {display:flex;align-items:center;min-width:0;gap:2px;position:relative;min-height:24px;}
+  .layer-row {display:flex;align-items:center;min-width:0;gap:2px;position:relative;min-height:24px;box-shadow:inset 0 -1px var(--hairline);}
   .layer-row:hover {background:var(--row-hover);}
-  .root {font-weight:650;margin:2px 0;}
+  .root {font-weight:600;margin:2px 0;color:var(--text-muted);}
   .icon,.name,.spot {border:0;color:var(--text);background:transparent;font:inherit;font-size:0.72rem;cursor:pointer;border-radius:var(--radius-sm);}
   .icon {flex:none;padding:2px;width:17px;min-height:21px;color:var(--text-muted);}
   .icon:hover,.name:hover {color:var(--accent);}

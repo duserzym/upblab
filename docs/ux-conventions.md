@@ -100,3 +100,30 @@ on Escape. Icon buttons always have an accessible name, even with no text
 visible, and disabled buttons retain their native disabled behaviour. Progress
 bars expose min, max, current value when known, and the full caption as
 `aria-valuetext`.
+
+### Design suite (2026-11-25)
+
+Home, Review and TIMS follow the approved [lab design suite](../../lab-builds/design-suite-2026-11-25/lab-design-suite.html)
+(`~/Github/lab-builds/design-suite-2026-11-25/lab-design-suite.html`, `#upb-lab`
+and `#language`): quiet bordered groups, compact record rows, fact and state
+chips, sentence-case metadata headings and one filled action for the current
+task. Home leads with session upload, Review with Edit in UPbRPy Studio, and
+the batch list with New batch. The batch editor emphasises the active save;
+Next incomplete leads when no form is active. Background capsule saves stay
+outlined while a workspace or batch form is active. Existing tokens supply
+both themes; the shared controls and all roles, accessible names, tooltips,
+test IDs and keyboard interactions are retained.
+
+Deviations keep real controls and states: Home retains all four scope filters,
+inventory totals, pins, local sessions and links in its adaptive three-column
+board. Session spot-mix bars are counts, not progress; run status stays plain
+text. Atlas symbols keep their accessible descriptions and unknown states;
+there is no invented sync progress, greeting or summary data. Review keeps its
+resizable dock, collapse rails, layout presets, plot tools and full stored
+metadata instead of the mock's proposed fixed inspector. Its secondary edit
+links remain available when a panel is collapsed or maximised. TIMS retains
+all filters, server-provided state words, unknown-summary fallbacks, views,
+weighing fields, source controls and chemistry records. The bench's column
+sizes, scroll areas, puck geometry and outside labels are retained. Save and
+completion actions remain in their existing panels rather than moving to
+shell chrome. No data, calculations, navigation or server reads change.

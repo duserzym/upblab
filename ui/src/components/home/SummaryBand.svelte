@@ -100,12 +100,12 @@
   {/if}
 </section>
 <style>
-  .summary-band { flex: none; padding: var(--space-2) var(--space-3); min-width: 0; box-shadow: none; }
+  .summary-band { flex: none; padding: var(--space-2) var(--space-3); min-width: 0; box-shadow: none; border-width: 0 0 1px; border-color: var(--hairline); border-radius: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; }
   .summary-cells { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr; min-width: 0; }
   .summary-cell { min-width: 0; padding: 0 var(--space-3); border-right: 1px solid var(--hairline); display: flex; flex-direction: column; gap: 2px; }
   .summary-cell:first-child { padding-left: 0; }
   .summary-cell:last-child { border: 0; }
-  .summary-cell strong { font-size: 1.1rem; }
+  .summary-cell strong { font-size: 1.1rem; font-weight: 550; font-variant-numeric: tabular-nums; }
   .summary-cell strong span { font-size: 0.78rem; font-weight: 400; }
   .small { font-size: 0.74rem; }
   .linkish { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-align: left; min-width: 0; }

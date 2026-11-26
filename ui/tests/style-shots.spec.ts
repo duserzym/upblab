@@ -3,18 +3,19 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { env } from 'node:process';
 import { installFakeTauri } from './fake-tauri';
-import { fixtures, lab, solutions } from './fixtures/tims';
+import { fixtures, batch, lab, solutions } from './fixtures/tims';
+import type { BatchOut } from '../src/lib/tims-api';
 import { demoHomeFixtures, demoSessions, demoMount } from './fixtures/home';
 import { session } from './fixtures/review';
 import { routeTimsAtlas } from './tims-atlas-helpers';
 
-// Intentionally use only selectors/helpers present at 72e91bc: the supervisor
+// Intentionally use only selectors/helpers present at 32e5600: the supervisor
 // also copies this file into that baseline to capture matching before pictures.
 const directory = env.STYLE_SHOTS_DIR;
 test.use({ viewport: { width: 1440, height: 900 } });
 test.skip(!directory, 'Opt in with STYLE_SHOTS_DIR=/path/to/pictures');
 
-async function start(page: Page, tab: 'tims' | 'review' | 'home', theme: 'light' | 'dark') {
+async function start(page: Page, tab: 'tims' | 'review' | 'home', theme: 'light' | 'dark', extraFixtures: Record<string, unknown> = {}) {
   // Like theme.spec.ts: a fresh System preference follows the emulated OS.
   await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
   await page.route('http://localhost:8000/**', route => route.fulfill({ json: {} }));
@@ -25,7 +26,7 @@ async function start(page: Page, tab: 'tims' | 'review' | 'home', theme: 'light'
       reviewScope: JSON.stringify({ kind: 'session', id: session.id, run: 'preferred' }) },
     fixtures: { ...demoHomeFixtures, ...fixtures,
       '/v1/sessions': demoSessions, '/v1/mounts': [demoMount],
-      [`/v1/tims/column-protocols?limit=2&lab=${lab}`]: [] } });
+      [`/v1/tims/column-protocols?limit=2&lab=${lab}`]: [], ...extraFixtures } });
   await page.goto('./');
   await page.waitForFunction(() => (window as unknown as {
     __fake: { listeners: Map<string, unknown> };
@@ -46,6 +47,29 @@ async function capture(page: Page, name: string) {
 }
 
 for (const theme of ['light', 'dark'] as const) {
+  test(`TIMS batch list ${theme}`, async ({ page, browserName }) => {
+    test.skip(browserName !== 'chromium', 'Style pictures use Chromium only');
+    // Small, invented list summaries only; existing captures retain their fixtures.
+    const batches: BatchOut[] = ['Krogh', 'Fable', 'Story', 'Myth'].map((name, index) => ({
+      ...batch, id: `style-batch-${index}`, capsule_set_id: `style-set-${index}`,
+      capsule_set_name: name, capsule_set_code: `X${index + 1}`,
+      started_on: `2026-11-0${6 - index}`,
+      completed_at: index === 1 ? '2026-11-06T12:00:00Z' : null,
+      counts: { positions: 15, capsules: 12, grain: 12, spike: [8, 12, 4, 12][index], ready: index === 1 || index === 3 ? 12 : 0 },
+      samples: [{ id: `style-sample-${index}`, name: `Invented sample ${index + 1}` }],
+      operator_name: 'Invented analyst', recipe_name: 'Invented zircon recipe',
+    }));
+    await start(page, 'tims', theme, {
+      [`/v1/tims/batches?limit=200&lab=${lab}&order=-started_on`]: batches,
+    });
+    await expect(page.getByRole('radio', { name: 'Rows', exact: true })).toHaveAttribute('aria-checked', 'true');
+    const list = page.getByRole('region', { name: 'Batch list', exact: true });
+    await expect(list.getByTestId('tims-batch-row')).toHaveCount(4);
+    await expect(list.getByText('8 of 12 spiked', { exact: true })).toBeVisible();
+    await expect(list.getByText('Complete', { exact: true })).toBeVisible();
+    await capture(page, `tims-batch-list-${theme}.png`);
+  });
+
   test(`TIMS capsule ${theme}`, async ({ page, browserName }) => {
     test.skip(browserName !== 'chromium', 'Style pictures use Chromium only');
     await start(page, 'tims', theme);
