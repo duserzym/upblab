@@ -23,11 +23,11 @@ export function shiftMonth(iso: string, offset: number) {
   date.setUTCMonth(date.getUTCMonth() + offset); return date.toISOString().slice(0, 10);
 }
 export function monthWindow(iso: string) { const start = `${iso.slice(0, 7)}-01`; return { start, end: addDays(shiftMonth(start, 1), -1) }; }
-export function monthGrid(iso: string): string[] {
+export function monthGrid(iso: string, fixedRows = false): string[] {
   const { start, end } = monthWindow(iso);
   const weekday = (new Date(`${start}T00:00:00Z`).getUTCDay() + 6) % 7;
   const first = addDays(start, -weekday);
-  return Array.from({ length: Math.ceil((weekday + Number(end.slice(8))) / 7) * 7 }, (_, i) => addDays(first, i));
+  return Array.from({ length: fixedRows ? 42 : Math.ceil((weekday + Number(end.slice(8))) / 7) * 7 }, (_, i) => addDays(first, i));
 }
 export interface DateWindow { start: string; end: string }
 export function axisTicks(window: DateWindow, zoom: string) {
@@ -58,11 +58,11 @@ export function barPosition(start: string, end: string, window: DateWindow, dayW
 }
 export function viewQuery(lab: string, filters: BatchFilters, view: ListView, window: DateWindow, legacy = false) {
   if (view === 'rows') return batchQuery(lab, filters);
-  const before = filters.started_before && filters.started_before < window.end ? filters.started_before : window.end;
-  const after = view === 'calendar' ? window.start : legacy ? addDays(window.start, -120) : '';
-  return batchQuery(lab, filters, { started_before: before,
-    ...(after ? { started_after: filters.started_after > after ? filters.started_after : after } : {}),
-    ...(view === 'lanes' ? { active_after: window.start } : {}) });
+  if (legacy) return batchQuery(lab, filters);
+  return Object.fromEntries(Object.entries({ lab, capsule_set: filters.capsule_set, status: filters.status,
+    schedule_after: filters.started_after > window.start ? filters.started_after : window.start,
+    schedule_before: filters.started_before && filters.started_before < window.end ? filters.started_before : window.end,
+    order: '-started_on', limit: '200' }).filter(([, value]) => !!value));
 }
 export function visibleBatches(rows: BatchOut[], filters: BatchFilters, view: ListView, window: DateWindow, today: string) {
   return rows.filter(row => (!filters.capsule_set || row.capsule_set_id === filters.capsule_set)

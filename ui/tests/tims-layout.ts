@@ -2,19 +2,19 @@ import { expect, type Page } from '@playwright/test';
 // The third column hosts the picker/review, step timeline or matrix.
 const names = ['Capsule grid', 'Capsule details', 'Batch workspace'] as const;
 type Box = { x: number; y: number; width: number; height: number };
-export async function timsRegionBoxes(page: Page): Promise<Record<string, Box>> {
+export async function timsRegionBoxes(page: Page, regions: readonly string[] = names): Promise<Record<string, Box>> {
   // Include Svelte's flush and disclosure layout before both baseline and later reads.
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   const boxes: Record<string, Box> = {};
-  for (const name of names) {
+  for (const name of regions) {
     const box = await page.getByLabel(name, { exact: true }).boundingBox();
     expect(box, `${name} stays mounted`).not.toBeNull(); boxes[name] = box!;
   }
   return boxes;
 }
 export async function expectTimsRegionsStable(page: Page, before: Record<string, Box>) {
-  const after = await timsRegionBoxes(page);
-  for (const name of names) for (const field of ['x', 'y', 'width', 'height'] as const)
+  const after = await timsRegionBoxes(page, Object.keys(before));
+  for (const name of Object.keys(before)) for (const field of ['x', 'y', 'width', 'height'] as const)
     expect(Math.abs(after[name][field] - before[name][field]), `${name} ${field} shifted`).toBeLessThanOrEqual(2);
 }
 

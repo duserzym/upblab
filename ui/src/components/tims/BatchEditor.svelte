@@ -37,7 +37,7 @@
   import Icon from '../ui/Icon.svelte';
   import { formatCalendarDate } from '../../lib/calendar-date';
   import { batchHeaderSteps, recipeHeaderMeta } from '../../lib/tims-header';
-  let { id, methods, recipes, labName, onback, onlab }: { id: string; methods: MethodCode[]; recipes: RecipeOut[]; labName: string; onback: () => void; onlab: (lab: string) => void } = $props();
+  let { id, initialStep = null, methods, recipes, labName, onback, onlab }: { id: string; initialStep?: string | null; methods: MethodCode[]; recipes: RecipeOut[]; labName: string; onback: () => void; onlab: (lab: string) => void } = $props();
   let base = $state.raw<BatchDetail | null>(null), geometry = $state.raw<Record<string, MountGeometry>>({}), error = $state(''), geometryError = $state(''), busy = $state(false);
   let delivered = $state.raw<OutboxEntry[]>([]);
   const views = [
@@ -106,7 +106,13 @@
     const gen = ++generation, owner = source(), current = replies.capture(); busy = true; error = '';
     try {
       const result = await tims.batch(id); if (gen !== generation || !current()) return; base = result; groupRefresh++; delivered = []; if (result.readiness) refused = []; onlab(result.lab_id);
-      if (outlines) loadGeometry(result, revalidateGeometry);
+      if (outlines) {
+        loadGeometry(result, revalidateGeometry);
+        const requestedStep = result.steps.find(step => step.id === initialStep);
+        if (requestedStep) {
+          guided = 3; batchStep = spikingSessionId(requestedStep); selectedStep = requestedStep.id; view = 'Batch steps';
+        }
+      }
     } catch (e) { if (gen === generation && owner === source() && current()) error = String(e); } finally { if (gen === generation && current()) busy = false; }
   }
   function loadGeometry(result: BatchDetail, revalidate = false) {

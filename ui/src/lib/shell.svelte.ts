@@ -102,7 +102,8 @@ class Shell {
   view = $state<View>('home');
   timsBatch = $state<string | null>(null);
   timsRequest = $state(0);
-  async openTimsBatch(batchId: string) { this.timsBatch = batchId; this.timsRequest++; return this.show('tims'); }
+  timsStep = $state<string | null>(null);
+  async openTimsBatch(batchId: string, stepId: string | null = null) { this.timsStep = stepId; this.timsBatch = batchId; this.timsRequest++; return this.show('tims'); }
   modules = $state<InstalledModule[]>([]);
   links = $state<LinkRecord[]>([]);
   targets = $state<Record<ModuleTab, ModuleTarget | null>>({ images: null, sessions: null, people: null });

@@ -8,7 +8,7 @@ TIMS section. Opening a batch also selects its lab when that lab is loaded.
 
 Batches has Rows, Calendar and Lanes views. The choice is remembered per viewer
 and server with the guided-workflow preference mechanism, including an in-memory
-fallback when browser storage is blocked. Capsule set, inclusive start dates and
+fallback when browser storage is blocked. Capsule set, inclusive dates and
 fraction status apply automatically after 300 ms and are remembered per account
 and server, outside the URL. There is no Apply filters button.
 
@@ -24,32 +24,51 @@ on loaded rows, with a note while another page remains. States are Complete when
 Empty for zero capsules, In progress otherwise, and Open without counts.
 
 Calendar shows a Monday–Sunday month grid with Today and month navigation.
-It requests the intersection of the month and selected start-date filters, publishes
-each cursor page immediately and stops after ten pages with a “Showing first n”
-notice. Two chips fit in each day; “+n more” opens a keyboard-accessible dialog.
-Escape closes it and restores focus. Calendar months are cached for the session
-(up to 24 queries), partitioned by viewer and filters. Account, server, oversight,
-lab and batch-save changes clear that cache.
+Calendar and Lanes use each batch's compact `schedule` from the paged batch list;
+neither requests batch details per item. After and Before apply to step dates in
+these views; Rows retains batch start-date filtering. Requests intersect the visible
+window and date filters using `schedule_after` and `schedule_before`, preserving set
+and fraction-status filters. Each cursor page appears immediately. Ten automatic
+pages is the limit; a notice asks for narrower filters when more remain.
+
+Each capsule set appears on every dated step. A capsule record's `performed_on`
+overrides the batch step date; a null record date inherits it. Skipped capsules and
+retired fractions do not contribute. Different dates or temperatures get separate
+items with capsule counts. Undated steps have no calendar item. An empty set can
+show a scheduled batch step with zero capsules. Pills say, for example,
+**Krogh · CA 210 °C · 15** or **Krogh · Z1 · 9**. Dissolution uses mineral letters
+Z, A, R, T, G, B, M, X and O for zircon, apatite, rutile, titanite, garnet,
+baddeleyite, monazite, xenotime and other; mixed minerals show **Z1/A1**.
+Conversion stays **Z2**, as Boise recipes define no mineral-specific conversion
+codes. Loading is **Load**. Explicit P1–P4 method codes, or a numbered
+`cleaning_step` parameter on a wash, show **P1 HCl**, **P2 HF**, **P3 HCl** and
+**P4 HF**. Current defaults contain no numbered cleaning sequence; the nitric-acid
+wash keeps its method name. Other method names are shortened on the pill.
+
+Step kind sets the token-based colour, while labels and full titles identify the
+work without depending on colour. Titles include full method name, ISO date,
+capsule count and recorded temperature. Clicking opens the batch's guided Steps
+view with that step selected. Two pills fit per day; “+n more” opens a small list
+in a reserved strip below the grid. It takes no space from other cells and never
+floats. Escape or Close closes the list and restores focus. Six fixed-height week
+rows and the reserved strip keep the calendar size stable across months and
+expansion. Calendar months are cached for the session (up to 24 queries),
+partitioned by viewer and filters. Account, server, oversight, lab and batch-save
+changes clear the cache.
 
 Lanes shows the loaded active capsule-set catalog, including free sets. Load more
-set choices extends that catalog. Each batch spans its stored start and completion
-dates, or today while open. Inclusive overlapping ranges stack in separate tracks.
-Weeks and Months change the drawing scale; Earlier and Later extend the initial
-window (eight weeks before today through four weeks after) by four weeks. The
-label column stays fixed as the time axis scrolls inside its container. Requests
-use `active_after` and `started_before`, plus the shared filters, publish each page
-and stop after ten pages. These date positions and states are display logic only.
+set choices extends that catalog. Each step is positioned at its date, with label
+collisions packed into separate tracks. Weeks and Months change the drawing scale;
+Earlier and Later extend the initial window (eight weeks before today through
+four weeks after) by four weeks. The set column stays fixed while the time axis
+scrolls inside its container. These positions are display logic only.
 
-All views use `identity.get` through the current server target. In This computer
-mode that target is the local UPbDB service, including a read-only mirror. The
-normal ETag cache, cached desktop replies and offline-copy banner remain in use.
-Older servers and mirrors can omit every summary field: catalog names are reused,
-samples and spike progress show a dash, and completion/start dates still draw
-calendar chips and lanes. Missing counts mean Open unless completion is stored.
-When rows lack the new summary fields, date sorting falls back to loaded rows.
-For lanes, such a reply triggers a second scan with `started_after` 120 days before
-the window (or the stricter user filter); older open batches may be absent, and
-the view says so. No list view requests batch details or account names per row.
+All views use `identity.get` through the current server target, with the normal
+ETag cache, desktop cached replies and offline-copy banner. Older servers without
+`schedule` show clearly identified batch start dates instead; an empty schedule
+does not invent a start-date step. Missing summaries reuse catalog names and
+show dashes for samples and spike progress. Missing counts mean Open unless
+completion is stored. No list view requests details or account names per row.
 
 New batch forms use active capsule sets and mineral-specific active recipes. On a five-position
 puck, numbering starts at the front left and proceeds clockwise to the front

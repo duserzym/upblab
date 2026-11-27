@@ -30,6 +30,8 @@ it('builds Mon–Sun month grids across years and leap days without timezone shi
   expect(monthGrid('2026-11-25')[0]).toBe('2026-10-26');
   expect(monthGrid('2026-11-25').at(-1)).toBe('2026-12-06');
   expect(monthGrid('2021-02-01')).toHaveLength(28);
+  expect(monthGrid('2021-02-01', true)).toHaveLength(42);
+  expect(monthGrid('2026-09-01', true)).toHaveLength(42);
   expect(monthWindow('2024-02-20').end).toBe('2024-02-29');
   expect(shiftMonth('2026-12-25', 1)).toBe('2027-01-01');
 });
@@ -45,8 +47,9 @@ it('extends the drawing window and clips bars to it with an inclusive last day',
 it('intersects month and lane requests with shared filters and bounds older-server scans', () => {
   const filters = { ...emptyBatchFilters(), started_after: '2026-11-10', started_before: '2026-11-20', status: 'picked' };
   const window = monthWindow('2026-11-25');
-  expect(viewQuery('lab', filters, 'calendar', window)).toMatchObject({ started_after: '2026-11-10', started_before: '2026-11-20', order: '-started_on', limit: '200' });
-  expect(viewQuery('lab', emptyBatchFilters(), 'lanes', window, true)).toMatchObject({ started_after: '2026-07-04', active_after: '2026-11-01', started_before: '2026-11-30' });
+  expect(viewQuery('lab', filters, 'calendar', window)).toMatchObject({ schedule_after: '2026-11-10', schedule_before: '2026-11-20', order: '-started_on', limit: '200' });
+  expect(viewQuery('lab', emptyBatchFilters(), 'lanes', window)).toMatchObject({ schedule_after: '2026-11-01', schedule_before: '2026-11-30' });
+  expect(viewQuery('lab', filters, 'calendar', window)).not.toHaveProperty('started_after');
   const rows = [row('old-open', '2026-01-01'), row('old-complete', '2026-01-01', '2026-10-31'), row('nov', '2026-11-01'), row('dec', '2026-12-01')];
   expect(visibleBatches(rows, emptyBatchFilters(), 'lanes', window, '2026-11-25').map(row => row.id)).toEqual(['old-open', 'nov']);
   expect(visibleBatches(rows, emptyBatchFilters(), 'calendar', window, '2026-11-25').map(row => row.id)).toEqual(['nov']);
