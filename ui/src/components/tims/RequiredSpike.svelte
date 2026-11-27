@@ -12,25 +12,25 @@
   import { onlineOnlyReason } from '../../lib/outbox.svelte';
   import { ReplyScope } from '../../lib/tims-requests';
   import SpikePicker from './SpikePicker.svelte';
-  let { batch, addition, bottles = [], startWeight = '', historical = false, editable, formId, onstate, onsave, onaccept }: {
-    batch: BatchDetail; addition?: SpikeAddition; bottles?: SessionBottle[]; startWeight?: string; historical?: boolean; editable: boolean; formId: string; onstate: (canSave: boolean) => void;
+  let { batch, addition, pending = {}, bottles = [], startWeight = '', historical = false, editable, formId, onstate, onsave, onaccept }: {
+    batch: BatchDetail; addition?: SpikeAddition; pending?: Partial<SpikeInput>; bottles?: SessionBottle[]; startWeight?: string; historical?: boolean; editable: boolean; formId: string; onstate: (canSave: boolean) => void;
     onsave: (body: SpikeInput) => Promise<SpikeAddition>; onaccept: (row: SpikeAddition) => void;
   } = $props();
   const viewer = () => ({ server: identity.target?.server ?? '', account: identity.account?.id ?? identity.account?.username ?? '' });
   let olderBottles = $state(false);
   const bottleChoices = $derived(bottles.filter(b => batch.spike_versions[b.versionId]?.status !== 'withdrawn' && (olderBottles || batch.spike_versions[b.versionId]?.status !== 'superseded')));
   let saved = $state.raw(untrack(() => addition));
-  let version = $state(untrack(() => addition?.spike_version_id ?? (bottleChoices.length === 1 ? bottleChoices[0].versionId : '')));
+  let version = $state(untrack(() => addition?.spike_version_id ?? pending.spike_version_id ?? (bottleChoices.length === 1 ? bottleChoices[0].versionId : '')));
   let detail = $state.raw<VersionOut>();
   let bottleId = $state(untrack(() => bottles.find(b => b.versionId === version)?.bottleId ?? ''));
   let bottleMode = $state(untrack(() => !!addition?.bottle_before_g || !addition && bottles.length > 0));
   let weight = $state(untrack(() => addition?.spike_weight_g ?? ''));
   let before = $state(untrack(() => addition?.bottle_before_g ?? startWeight));
   let after = $state(untrack(() => addition?.bottle_after_g ?? ''));
-  let readability = $state(untrack(() => addition?.balance_readability_g ?? loadReadability(viewer())));
-  let byAccount = $state(untrack(() => !addition?.weighed_by_name || addition?.weighed_by_id === identity.account?.id));
-  let byName = $state(untrack(() => addition?.weighed_by_name ?? identity.account?.display_name ?? identity.account?.username ?? ''));
-  let at = $state(untrack(() => (addition?.weighed_at ?? new Date().toISOString()).slice(0, 19)));
+  let readability = $state(untrack(() => addition?.balance_readability_g ?? pending.balance_readability_g ?? loadReadability(viewer())));
+  let byAccount = $state(untrack(() => !(addition?.weighed_by_name ?? pending.weighed_by_name) || (addition?.weighed_by_id ?? pending.weighed_by_id) === identity.account?.id));
+  let byName = $state(untrack(() => addition?.weighed_by_name ?? pending.weighed_by_name ?? identity.account?.display_name ?? identity.account?.username ?? ''));
+  let at = $state(untrack(() => (addition?.weighed_at ?? pending.weighed_at ?? new Date().toISOString()).slice(0, 19)));
   let notes = $state(untrack(() => addition?.notes ?? ''));
   let full = $state(false), busy = $state(false), error = $state(''), message = $state('');
   let conflict = $state.raw<SpikeAddition>();
@@ -66,7 +66,7 @@
       const row = await onsave({ spike_version_id: version, spike_weight_g: used, bottle_before_g: bottleMode ? before : null, bottle_after_g: bottleMode ? after : null,
         balance_readability_g: readability, weighed_by_id: byAccount ? identity.account?.id : null,
         weighed_by_name: byAccount ? identity.account?.display_name || identity.account?.username : byName.trim(), weighed_at: new Date(at + 'Z').toISOString(), notes,
-        expected_updated_at: saved?.updated_at ?? null });
+        expected_updated_at: saved?.updated_at ?? pending.expected_updated_at ?? null, expected_absent: !saved });
       if (current()) { saved = row; saveReadability(viewer(), readability); onaccept(row); message = 'Spike saved.'; }
     } catch (e) {
       if (!current()) return;

@@ -2,17 +2,18 @@
   import { parameterLabel, type ParameterDefinition, type Parameters, type VersionOut } from '../../lib/tims-api';
   import { choices, parameterDefinitions, parameterKey, parameterValue } from '../../lib/tims-model';
   import SpikePicker from './SpikePicker.svelte';
-  let { definitions, values, onchange, disabled = false, fraction = false, inherited = {}, lab = '', knownVersions = {} }: {
-    definitions: ParameterDefinition[]; values: Parameters; onchange: (values: Parameters) => void; disabled?: boolean; fraction?: boolean; inherited?: Parameters; lab?: string; knownVersions?: Record<string, VersionOut>;
+  let { definitions, values, onchange, disabled = false, fraction = false, inherited = {}, lab = '', knownVersions = {}, group = false, mixedKeys = new Set<string>(), onfield }: {
+    group?: boolean; mixedKeys?: Set<string>; onfield?: (key: string, value: unknown) => void; definitions: ParameterDefinition[]; values: Parameters; onchange: (values: Parameters) => void; disabled?: boolean; fraction?: boolean; inherited?: Parameters; lab?: string; knownVersions?: Record<string, VersionOut>;
   } = $props();
-  function set(key: string, value: unknown) { const next = { ...values }; if (value === undefined) delete next[key]; else next[key] = value; onchange(next); }
+  function set(key: string, value: unknown) { const next = { ...values }; if (value === undefined) delete next[key]; else next[key] = value; onchange(next); onfield?.(key, value); }
 </script>
 <div class="fields">
-{#each parameterDefinitions(definitions, fraction) as d (parameterKey(d))}
+{#each parameterDefinitions(definitions, fraction || group) as d (parameterKey(d))}
   {@const key = parameterKey(d)}
   {@const override = Object.hasOwn(values, key)}
   {@const value = override ? values[key] : inherited[key]}
   <div class="stack field">
+    {#if mixedKeys.has(key)}<span class="small muted">{parameterLabel(d)} · Mixed</span>{/if}
     {#if fraction}<label class="small"><input type="checkbox" checked={override} {disabled} onchange={e => set(key, e.currentTarget.checked ? value ?? d.default ?? (d.type === 'multi_choice' ? [] : '') : undefined)} /> Override {parameterLabel(d)}{override ? ' · overridden' : ''}</label>{/if}
     {#if d.type === 'spike_version'}
       <span>{parameterLabel(d)}</span><SpikePicker value={String(value ?? '')} disabled={disabled || fraction && !override} {lab} {knownVersions} showComposition onchange={v => set(key, v)} />
@@ -21,11 +22,11 @@
     {:else}
       <label>{parameterLabel(d)}
       {#if d.type === 'choice'}
-        <select value={String(value ?? '')} disabled={disabled || fraction && !override} required={d.required && !fraction} onchange={e => set(key, parameterValue(d, e.currentTarget.value))}><option value="">Not recorded</option>{#each choices(d) as c}<option value={String(c.value)}>{c.label ?? c.value}</option>{/each}</select>
+        <select value={mixedKeys.has(key) ? "__mixed__" : String(value ?? '')} disabled={disabled || fraction && !override} required={d.required && !fraction && !group} onchange={e => set(key, parameterValue(d, e.currentTarget.value))}>{#if mixedKeys.has(key)}<option value="__mixed__" disabled>Mixed</option>{/if}<option value="">Not recorded</option>{#each choices(d) as c}<option value={String(c.value)}>{c.label ?? c.value}</option>{/each}</select>
       {:else if d.type === 'number' || d.type === 'integer'}
-        <input type="number" value={typeof value === 'number' ? value : ''} step={d.type === 'integer' ? 1 : 'any'} min={d.min} max={d.max} required={d.required && !fraction} disabled={disabled || fraction && !override} oninput={e => set(key, parameterValue(d, e.currentTarget.value))} />
+        <input type="number" value={typeof value === 'number' ? value : ''} step={d.type === 'integer' ? 1 : 'any'} min={d.min} max={d.max} required={d.required && !fraction && !group} disabled={disabled || fraction && !override} oninput={e => set(key, parameterValue(d, e.currentTarget.value))} />
       {:else}
-        <input type="text" value={String(value ?? '')} required={d.required && !fraction} disabled={disabled || fraction && !override} oninput={e => set(key, parameterValue(d, e.currentTarget.value))} />
+        <input type="text" value={String(value ?? '')} required={d.required && !fraction && !group} disabled={disabled || fraction && !override} oninput={e => set(key, parameterValue(d, e.currentTarget.value))} />
       {/if}</label>
     {/if}
   </div>

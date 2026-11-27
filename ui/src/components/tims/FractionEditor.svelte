@@ -38,7 +38,8 @@
   const isBlank = $derived(preparation === 'lab-blank');
   let error = $state(''), busy = $state(false), feedback = $state('');
   let overrides = $state.raw<Parameters>({}), skipped = $state(false), outcome = $state(''), outcomeNote = $state('');
-  let date = $state(''), protocolDraft = $state('');
+  let performedAt = $state('');
+  let date = $state(''), recordOperator = $state(''), protocolDraft = $state('');
   let bottleChoice = $state('');
   let spikeCanSave = $state(false);
   let repeatDraft = $state(false);
@@ -104,7 +105,9 @@
       const columnRecord = column ? readColumnNotes(record?.outcome_note ?? '') : { notes: record?.outcome_note ?? '', protocol: '' };
       const capsule = readCapsuleNotes(columnRecord.notes);
       outcomeNote = capsule.notes;
-      date = capsule.date;
+      date = record && Object.hasOwn(record, 'performed_on') ? record.performed_on ?? '' : capsule.date;
+      recordOperator = record?.operator_name ?? '';
+      performedAt = record?.performed_at?.slice(0,19) ?? '';
       protocolDraft = columnRecord.protocol;
       resetSpikeForm(false);
     });
@@ -138,7 +141,7 @@
     if (errors.length) { error = errors.join(' '); return; }
     const plainNotes = writeCapsuleNotes(outcomeNote, date);
     await run(() => tims.putRecord(batch.id, fraction.id, step!.id, {
-      parameters: overrides, skipped, outcome, outcome_note: column ? writeColumnNotes(plainNotes, protocolDraft) : plainNotes,
+      performed_on: date || null, performed_at: performedAt ? new Date(performedAt + 'Z').toISOString() : null, operator_name: recordOperator, parameters: overrides, skipped, outcome, outcome_note: column ? writeColumnNotes(plainNotes, protocolDraft) : plainNotes,
     }));
   }
 
@@ -242,7 +245,7 @@
           </div>
         {/if}
         {#key `${fraction.id}:${activeStep}:${repeatDraft}`}
-          <RequiredSpike {batch} {addition} bottles={(session?.bottles ?? []).map(bottle => ({ ...bottle, before: latestBottleReading(batch.spikes, sessionStepIds, bottle, batch.spike_versions)?.bottle_after_g ?? bottle.before }))} {startWeight} historical={historicalSpike} {editable} formId={`${uid}-spike`} onstate={canSave => spikeCanSave = canSave} onsave={saveSpike} onaccept={onspike} />
+          <RequiredSpike {batch} {addition} pending={repeatDraft ? {} : { ...batch.fraction_step_records.find(r => r.fraction_id === fraction.id && r.step_id === activeStep)?.spike_metadata, expected_updated_at: batch.fraction_step_records.find(r => r.fraction_id === fraction.id && r.step_id === activeStep)?.updated_at }} bottles={(session?.bottles ?? []).map(bottle => ({ ...bottle, before: latestBottleReading(batch.spikes, sessionStepIds, bottle, batch.spike_versions)?.bottle_after_g ?? bottle.before }))} {startWeight} historical={historicalSpike} {editable} formId={`${uid}-spike`} onstate={canSave => spikeCanSave = canSave} onsave={saveSpike} onaccept={onspike} />
         {/key}
         {#if repeatDraft}<button class="btn small" type="button" onclick={() => resetSpikeForm(false)}>Cancel entry</button>
         {:else if addition && editable}<button class="btn small" type="button" disabled={busy || !emptyRepeat && !!onlineOnlyReason()} onclick={() => resetSpikeForm(true)}>Add another spike entry</button>{/if}
@@ -260,6 +263,8 @@
         <form id={`${uid}-record`} class="stack" onsubmit={e => { e.preventDefault(); void saveRecord(); }}>
           {#if values.length}<p class="small muted">{values.map(p => `${parameterSummary(step.parameter_definitions.find(d => parameterKey(d) === p.key) ?? { name: p.key }, p.value, batch.spike_versions)}${p.overridden ? ' (overridden)' : ''}`).join(' · ')}</p>{/if}
           <label>Capsule date <input type="date" bind:value={date} disabled={!editable || busy} /></label>
+          <label>Capsule performed at (UTC, optional) <input type="datetime-local" bind:value={performedAt} disabled={!editable || busy} /></label>
+          <label>Capsule operator <input bind:value={recordOperator} placeholder={batch.operator_name || "Batch operator"} disabled={!editable || busy} /></label>
           {#if step.performed_on}<p class="small muted">Batch date · {step.performed_on}</p>{/if}
           <ParameterFields definitions={step.parameter_definitions.filter(d => !spikeKeys.includes(parameterKey(d)))} values={overrides} onchange={v => overrides = v} inherited={step.parameters} knownVersions={batch.spike_versions} fraction disabled={!editable || busy} lab={batch.lab_id} />
           <label class="check"><input type="checkbox" bind:checked={skipped} disabled={!editable || busy} /> Skipped</label>

@@ -475,3 +475,44 @@ sizes it checks at most 138 px of single-lab chrome, minimum discs of 170 px and
 well/label/caption collision checks accompany the pure layout proofs. A mocked 3000-row history list took 0.1 ms for two 50-row page requests;
 browsing history made zero requests before and after this change. This measures
 client overhead rather than network latency.
+
+## Edit a capsule group
+
+Click a capsule for its existing inspector. Cmd/Ctrl-click or Space toggles
+selection; Shift-click selects a range in puck order. Shift+arrow extends the
+selection from its anchor, and Esc clears it. The board header has Select puck,
+Select all and Clear selection icon buttons. Puck/all selection includes assigned
+capsules; empty capsules can still be opened individually. Selection rings and the
+count have reserved space. Multiple selections replace the capsule inspector with
+the Group editor inside the same column.
+
+Choose Fraction info, Spike, or a chemistry step in recipe order. Mixed fields
+remain untouched until edited. Preview lists the touched values, capsules with
+different values, and lost or dissolved-in-CA capsules that will be skipped.
+Confirm submits one atomic online request; Cancel keeps the draft without writing.
+A stale capsule refuses the whole request; refresh and review the selection again.
+Completed batches remain read only.
+
+Chemistry parameters inherit the batch step unless overridden. Capsule dates now
+have a structured `performed_on` field, with optional precise `performed_at` UTC
+time and capsule operator. Existing dates embedded in notes are copied by the
+server migration without removing the original notes. Group comments preserve
+capsule preparation labels, saved column protocols and legacy date blocks.
+When every remaining capsule is selected, chemistry steps with batch parameters
+also offer Set as batch default: this changes batch parameters/date and removes
+selected overrides for the touched default fields. Operator, precise time, outcome,
+skip flag and comments remain capsule records.
+
+Spike group edits change registered version, weighing date/time, analyst and balance
+readability, with active-solution/version review through the existing picker. Before
+weighing, these values are pending metadata on the step record; they never count as
+a spike addition or satisfy readiness. Enter weights opens compact per-capsule mass
+entry: Tab or Enter saves and advances; Shift+Tab goes back without saving. Each
+weight uses the existing spike PUT with the addition or pending-record revision.
+A changed addition or pending assignment refuses the weighing without advancing.
+
+Undo last group edit sends the returned previous values through the bulk endpoint,
+with the revisions from that edit. It adds history rather than removing it. An
+intervening edit or weighing causes a conflict; undo never overwrites newer work.
+Group history rows share an operation identifier and retain actor and before/after
+values. Selection and drafts stay local; group edits and weights require a connection.

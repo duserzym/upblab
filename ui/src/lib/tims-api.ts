@@ -24,7 +24,7 @@ export interface BatchCounts { positions: number; capsules: number; grain: numbe
 export interface BatchOut extends BaseOut { lab_id: string; capsule_set_id: string; started_on: string; operator_id: string | null; operator_name: string; recipe_id: string | null; recipe_snapshot: RecipeStep[]; recipe_name?: string | null; fraction_count?: number; samples?: { id: string; name: string }[]; counts?: BatchCounts; capsule_set_name?: string; capsule_set_code?: string; notes: string; retired_at: string | null; completed_at?: string | null; completed_by_name?: string | null }
 export interface ParameterDefinition { name: string; config_key?: string; meaning?: string; unit?: string | null; type?: string; choices?: (string | number | { value: string | number; label?: string })[]; default?: unknown; min?: number; max?: number; required?: boolean; scope?: 'batch' | 'fraction'; role?: 'parameter' | 'outcome' }
 export interface StepOut extends BaseOut { batch_id: string; ordinal: number; method_code: string; method_name: string; parameters: Parameters; parameter_definitions: ParameterDefinition[]; performed_on: string | null; notes: string }
-export interface FractionStepRecord extends BaseOut { fraction_id: string; step_id: string; parameters: Parameters; skipped: boolean; outcome: string; outcome_note: string }
+export interface FractionStepRecord extends BaseOut { performed_at?: string | null; performed_on?: string | null; operator_name?: string; spike_metadata?: Partial<SpikeInput>; fraction_id: string; step_id: string; parameters: Parameters; skipped: boolean; outcome: string; outcome_note: string }
 export interface SpikeAddition extends BaseOut { fraction_id: string; step_id: string; spike_version_id: string; spike_weight_g: string; bottle_before_g: string | null; bottle_after_g: string | null; bottle_difference_g: string | null; notes: string; warnings: string[]; weighed_by_id?: string | null; weighed_by_name?: string; weighed_by_display_name?: string | null; weighed_at?: string; balance_readability_g?: string | null; weight_uncertainty_g?: string | number | null; tracer?: TracerAmount[] }
 export interface TracerAmount { isotope: string; mol: number; mol_u1s: number | null; basis: 'concentration' | 'ratio'; ratio?: string; uncertainty_incomplete?: boolean }
 export interface CapsuleReadiness { capsule_number: number; fraction_id: string; capsule_label?: string | null; fraction_name?: string; grain: boolean; spike: boolean; missing: string[] }
@@ -51,8 +51,8 @@ export type RecipePatch = Partial<Pick<RecipeOut, 'mineral' | 'name' | 'steps' |
 export type BatchInput = Pick<BatchOut, 'capsule_set_id' | 'started_on'> & Partial<Pick<BatchOut, 'operator_id' | 'operator_name' | 'recipe_id' | 'notes'>>;
 export type BatchPatch = Partial<Pick<BatchOut, 'started_on' | 'operator_id' | 'operator_name' | 'notes' | 'retired_at'>>;
 export interface StepInput { method_code: string; parameters?: Parameters; performed_on?: string | null; notes?: string }
-export interface RecordInput { parameters?: Parameters; skipped?: boolean; outcome?: string; outcome_note?: string }
-export interface SpikeInput { spike_version_id?: string; spike_weight_g: string; bottle_before_g?: string | null; bottle_after_g?: string | null; notes?: string; weighed_by_id?: string | null; weighed_by_name?: string; weighed_at?: string; balance_readability_g?: string | null; expected_updated_at?: string | null }
+export interface RecordInput { performed_at?: string | null; performed_on?: string | null; operator_name?: string; parameters?: Parameters; skipped?: boolean; outcome?: string; outcome_note?: string }
+export interface SpikeInput { expected_absent?: boolean; spike_version_id?: string; spike_weight_g: string; bottle_before_g?: string | null; bottle_after_g?: string | null; notes?: string; weighed_by_id?: string | null; weighed_by_name?: string; weighed_at?: string; balance_readability_g?: string | null; expected_updated_at?: string | null }
 export interface VersionInput { lab_id?: string; subfraction?: string; subfraction_name?: string; version: string; supersedes_id?: string | null; status?: VersionStatus; calibrated?: string; source?: string; source_display?: string; locator?: string; notes?: string; composition: Composition }
 export interface SolutionInput { lab_id: string; registry_id: string; name: string; spike_type: string; aliases?: string[]; isotopes?: string[]; description?: string; first_version: VersionInput }
 export interface ListPage<T> { items: T[]; nextCursor: string | null; more(): Promise<ListPage<T> | null> }
@@ -136,6 +136,8 @@ function protocolForm(path: string, method: 'POST' | 'PATCH', body: ColumnProtoc
   return form;
 }
 export const tims = {
+  saveSpike: (batch: string, fraction: string, step: string, body: SpikeInput) => onlineForm<SpikeAddition>(`${recordPath(batch, fraction, step)}/spike`, 'PUT', body, `batch:${batch}`),
+  bulk: (batch: string, body: import('./tims-group').BulkInput) => onlineForm<import('./tims-group').BulkResult>(`${batchPath(batch)}/bulk`, 'POST', body, `batch:${batch}`),
   sampleChoices: (query: string) => firstPage<CapsuleSample>('/v1/samples', { limit: '50', q: query }),
   fractions: (filters: Record<string, string> = {}) => firstPage<FractionOut>('/v1/fractions', filters),
   grainFractions: (grain: string, atlas = false) => firstPage<FractionOut>(`/v1/grains/${atlas ? 'by-atlas/' : ''}${id(grain)}/fractions`),

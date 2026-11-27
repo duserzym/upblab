@@ -6,9 +6,9 @@
   import { puckBoardLayout, puckLabel, type Box } from '../../lib/tims-puck-layout';
   import GrainImage from './GrainImage.svelte';
 
-  let { batch, geometry, geometryError, selected, onselect, compact = false }: {
+  let { batch, geometry, geometryError, selected, selection = [], onselect, ongesture, compact = false }: {
     batch: BatchDetail; geometry: Record<string, MountGeometry>; geometryError: string;
-    compact?: boolean; selected: number | null; onselect: (position: number) => void;
+    selection?: number[]; ongesture?: (position: number, gesture: 'one' | 'toggle' | 'range') => void; compact?: boolean; selected: number | null; onselect: (position: number) => void;
   } = $props();
 
   const readiness = $derived(batchReadiness(batch));
@@ -78,8 +78,18 @@
           {@const detail = fraction ? [preparation && capsulePreparations[preparation], looseDetail, fraction.sample.name, spotNames, state, ...(outcomes.get(fraction.id) ?? []).map(r => r.outcome === 'fully_dissolved' && methods.get(r.step_id) === 'SP-TIMS-CA' ? 'dissolved during CA' : statusWords(r.outcome)), ...(fraction.sources.some(s => !s.retired_at && s.is_fragment) ? ['fragment'] : [])].filter(Boolean).join(' · ') : 'Prepare this capsule'}
           <button class="capsule" class:filled={!!fraction} type="button" data-testid="tims-capsule"
             use:looseLabelFit={`${layout.puck.wellSize}:${looseLabel}`}
-            aria-label={`${label} ${fraction?.name ?? 'empty'}${looseDetail ? ' · ' + looseDetail : ''}${preparation ? ' · ' + capsulePreparations[preparation] : ''}${spotNames ? ' · ' + spotNames : ''}`} aria-pressed={selected === position}
-            title={detail} style={boxStyle(slotLayout.well)} onclick={() => onselect(position)}>
+            aria-label={`${label} ${fraction?.name ?? 'empty'}${looseDetail ? ' · ' + looseDetail : ''}${preparation ? ' · ' + capsulePreparations[preparation] : ''}${spotNames ? ' · ' + spotNames : ''}`} aria-pressed={selection.length ? selection.includes(position) : selected === position}
+            title={detail} style={boxStyle(slotLayout.well)} onclick={e => ongesture ? ongesture(position, e.shiftKey ? 'range' : e.metaKey || e.ctrlKey ? 'toggle' : 'one') : onselect(position)}
+            onkeydown={e => {
+              if (!ongesture) return;
+              if (e.key === ' ') { e.preventDefault(); ongesture(position, 'toggle'); }
+              if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+                e.preventDefault();
+                const next = Math.max(1, Math.min(batch.capsule_set.positions, position + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1)));
+                ongesture(next, e.shiftKey ? 'range' : 'one');
+                const buttons = e.currentTarget.closest('.puck-canvas')?.querySelectorAll<HTMLButtonElement>('[data-testid=tims-capsule]'); buttons?.[next - 1]?.focus();
+              }
+            }}>
             <span class="well">
               {#if looseSource}<span class="fraction-mark loose-grain-mark" title={looseDetail}>{looseLabel}</span>
               {:else if source}<GrainImage {source} mount={source.mount_id ? geometry[source.mount_id] : undefined} size={layout.puck.wellSize - 2} lazy {geometryError} />

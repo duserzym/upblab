@@ -21,6 +21,8 @@
   import AtlasPicker from './AtlasPicker.svelte';
   import SampleCapsule from './SampleCapsule.svelte';
   import PuckSet from './PuckSet.svelte';
+  import GroupEditor from './GroupEditor.svelte';
+  import { emptySelection, selectCapsule, selectAll, selectPuck, type Selection, type UndoEdit, type BulkInput, type BulkResult } from '../../lib/tims-group';
   import StepEditor from './StepEditor.svelte';
   import ParameterFields from './ParameterFields.svelte';
   import History from './History.svelte';
@@ -47,9 +49,11 @@
   let refused = $state.raw<CapsuleReadiness[]>([]);
   const viewer = () => ({ server: identity.target?.server ?? '', account: identity.account?.id ?? identity.account?.username ?? '' });
   let view = $state('Capsules');
+  let selection = $state.raw<Selection>(emptySelection()), undo = $state.raw<UndoEdit | null>(null);
   let selectedStep = $state(''), batchStep = $state(''), selected = $state<number | null>(null);
   let picking = $state(false), pickerOpened = $state(false), imported = $state(''), editing = $state(false), started = $state(''), operator = $state(''), operatorAccount = $state(false), notes = $state('');
   let replacing = $state.raw<SourceOut>();
+  let groupRefresh = $state(0);
   let refreshRevision = $state(0), refineNote = $state('');
   const pendingRefines = new Map<string, { revision: MountRevision; until: number }>();
   let checkingRefines = false;
@@ -63,6 +67,8 @@
   let destroyed = false;
   onDestroy(() => { destroyed = true; replies.invalidate(); });
   const batch = $derived(base ? overlayBatch(base, [...delivered, ...outbox.entries]).batch : null);
+  const capsuleOrder = $derived(Array.from({ length: batch?.capsule_set.positions ?? 0 }, (_, i) => i + 1));
+  const selectedFractions = $derived(batch?.fractions.filter(f => selection.positions.includes(f.capsule_number!)).sort((a,b) => a.capsule_number! - b.capsule_number!) ?? []);
   const editable = $derived(!!batch && !batch.completed_at && timsRights.canEdit(batch.lab_id, `batch:${batch.id}`));
   const readiness = $derived(batch ? batchReadiness(batch) : null);
   const headerSteps = $derived(batch && readiness ? batchHeaderSteps(batch, readiness, guided) : []);
@@ -79,7 +85,7 @@
   const currentCapsuleStep = $derived(batch?.steps.find(s => s.id === selectedStep));
   const selectedMethod = $derived(methods.find(m => m.code === method));
   const source = () => `${identity.target?.server}:${identity.revision}`;
-  $effect(() => { void id; void identity.revision; void identity.target?.server; untrack(() => { guided = loadGuidedStep(viewer(), id); refused = []; generation++; geometryGeneration++; base = null; delivered = []; geometry = {}; selected = null; picking = false; pickerOpened = false; manualPreparation = null; replacing = undefined; pendingRefines.clear(); refineNote = ''; imported = ''; editing = false; add = false; void load(true); }); });
+  $effect(() => { void id; void identity.revision; void identity.target?.server; untrack(() => { guided = loadGuidedStep(viewer(), id); refused = []; generation++; geometryGeneration++; base = null; selection = emptySelection(); undo = null; delivered = []; geometry = {}; selected = null; picking = false; pickerOpened = false; manualPreparation = null; replacing = undefined; pendingRefines.clear(); refineNote = ''; imported = ''; editing = false; add = false; void load(true); }); });
   onMount(() => {
     const unsubscribe = outbox.subscribe(entry => {
       if (!base || !batchAffected(base, entry.objectKey)) return;
@@ -99,7 +105,7 @@
     if (destroyed) return;
     const gen = ++generation, owner = source(), current = replies.capture(); busy = true; error = '';
     try {
-      const result = await tims.batch(id); if (gen !== generation || !current()) return; base = result; delivered = []; if (result.readiness) refused = []; onlab(result.lab_id);
+      const result = await tims.batch(id); if (gen !== generation || !current()) return; base = result; groupRefresh++; delivered = []; if (result.readiness) refused = []; onlab(result.lab_id);
       if (outlines) loadGeometry(result, revalidateGeometry);
     } catch (e) { if (gen === generation && owner === source() && current()) error = String(e); } finally { if (gen === generation && current()) busy = false; }
   }
@@ -114,6 +120,7 @@
   }
 
   function choose(position: number, step = '') {
+    selection = { positions: [position], anchor: position };
     selected = position;
     selectedStep = step || (guided === 2 ? batch?.steps.find(s => s.method_code === 'SP-TIMS-SPIKE')?.id ?? '' : guided === 3 ? batch?.steps.find(s => s.method_code !== 'SP-TIMS-SPIKE')?.id ?? '' : '');
     imported = '';
@@ -123,6 +130,27 @@
     picking = !selectedStep && editable && (!next || !readCapsulePreparation(next.notes).preparation);
     if (picking) pickerOpened = true;
     view = 'Capsules';
+  }
+
+  function selectGroup(next: Selection) {
+    const position = next.positions.at(-1) ?? null;
+    if (next.positions.length === 1 && position !== null) choose(position);
+    else { selected = position; picking = false; replacing = undefined; }
+    selection = next;
+  }
+  function gesture(position: number, kind: 'one' | 'toggle' | 'range') {
+    if (kind === 'one' && selection.positions.length === 1 && selected === position) return;
+    if (kind === 'one') { choose(position, currentCapsuleStep?.method_code === 'SP-TIMS-SPIKE' ? spikingSessionId(currentCapsuleStep) : ''); return; }
+    selectGroup(selectCapsule(selection, position, capsuleOrder, kind));
+  }
+  function beginGroup() {
+    const gen = ++generation, current = replies.capture();
+    busy = false;
+    return () => gen === generation && current();
+  }
+  function groupResult(input: BulkInput, result: BulkResult) {
+    if (result.batch.id !== id) return;
+    generation++; base = result.batch; delivered = []; busy = false; undo = { input, result };
   }
 
   function guide(index: GuidedStep) {
@@ -365,12 +393,15 @@
         <section class="panel stack board" aria-label="Capsule grid" use:stableScroll>
           <div class="row heading">
             <h3>Capsule pucks</h3>
-            <span class="small muted">{Object.values(batch.capsule_map).filter(Boolean).length} of {batch.capsule_set.positions} assigned</span>
+            <span class="small muted selection-count" aria-live="polite">{selection.positions.length} capsules selected</span>
           </div>
-          <PuckSet compact {batch} {geometry} {geometryError} {selected}
-            onselect={position => {
-              if (selected !== position) choose(position, currentCapsuleStep?.method_code === 'SP-TIMS-SPIKE' ? spikingSessionId(currentCapsuleStep) : '');
-            }} />
+          <div class="selection-actions" role="group" aria-label="Capsule selection">
+            <IconButton size="small" icon="lanes" label="Select puck" disabled={selected === null} onclick={() => selectGroup(selectPuck(selected!, batch!.capsule_set.positions_per_puck, capsuleOrder.filter(n => !!batch!.capsule_map[String(n)])))} />
+            <IconButton size="small" icon="check" label="Select all" onclick={() => selectGroup(selectAll(capsuleOrder.filter(n => !!batch!.capsule_map[String(n)])))} />
+            <IconButton size="small" icon="close" label="Clear selection" disabled={!selection.positions.length} onclick={() => selectGroup(emptySelection())} />
+            <span class="small muted" title="Cmd/Ctrl-click toggles; Shift-click selects a range; Space toggles; Shift+arrows extend; Esc clears">Multi-select</span>
+          </div>
+          <PuckSet compact {batch} {geometry} {geometryError} {selected} selection={selection.positions} ongesture={gesture} onselect={choose} />
           <div class="row legend small muted"><span><i></i> Assigned</span><span><i class="empty"></i> Empty</span>{#if batch.capsule_set.positions_per_puck === 5}<span>Clockwise from front left</span>{/if}</div>
           <p class="board-status small muted" class:error={!!geometryError} class:quiet={!geometryError && selected !== null}
             title={geometryError ? `Grain outlines unavailable: ${geometryError}` : 'Select a capsule to prepare it or view its chemistry.'}>
@@ -379,7 +410,13 @@
         </section>
 
           <section class="panel stack inspector" aria-label="Capsule details">
-            {#if selected !== null}
+            {#if selection.positions.length > 1}
+              {#key `${selection.positions.join(',')}:${groupRefresh}`}
+                <GroupEditor {batch} fractions={selectedFractions} {editable} {undo} onbegin={beginGroup} onresult={groupResult}
+                  onundo={result => { if (result.batch.id !== id) return; generation++; base = result.batch; delivered = []; undo = null; busy = false; }}
+                  onweight={row => { if (base?.fractions.some(f => f.id === row.fraction_id)) { generation++; busy = false; base = { ...base, readiness: undefined, spikes: [...base.spikes.filter(s => s.id !== row.id && !(s.fraction_id === row.fraction_id && s.step_id === row.step_id)), row] }; } }} />
+              {/key}
+            {:else if selected !== null}
             <div class="row heading inspector-head">
               <div class="stack title"><h3 title={fraction?.name}>{label}{fraction ? ` · ${fraction.name}` : ''}</h3>
                 <span class="row capsule-progress"><StatusChip text={`grain ${capsuleReady?.grain ? '✓' : 'pending'}`} tone={capsuleReady?.grain ? 'success' : 'neutral'} /> <StatusChip text={`spike ${capsuleReady?.spike ? '✓' : 'pending'}`} tone={capsuleReady?.spike ? 'success' : 'neutral'} /></span>
@@ -388,7 +425,7 @@
               <div class="row">
                 <IconButton icon="chevron-left" label="Previous capsule" disabled={selected <= 1} onclick={() => choose(selected! - 1, selectedStep)} />
                 <IconButton icon="chevron-right" label="Next capsule" disabled={selected >= batch.capsule_set.positions} onclick={() => choose(selected! + 1, selectedStep)} />
-                <IconButton icon="close" label="Close capsule" onclick={() => { selected = null; picking = false; replacing = undefined; }} />
+                <IconButton icon="close" label="Close capsule" onclick={() => { selected = null; selection = emptySelection(); picking = false; replacing = undefined; }} />
               </div>
             </div>
 
@@ -489,6 +526,8 @@
   {/if}
 </section>
 
+<svelte:window onkeydown={e => { if (e.key === 'Escape' && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement)) selectGroup(emptySelection()); }} />
+
 <style>
   .batch, section, header { min-width: 0; }
   h2,h3,h4,p { margin: 0; }
@@ -513,6 +552,9 @@
   .board > .heading { height: 20px; flex: none; flex-wrap: nowrap; }
   .board > .heading h3 { font-size: .8rem; white-space: nowrap; }
   .board > .heading > span { font-size: .65rem; white-space: nowrap; }
+  .selection-actions { height:24px;flex:none;display:flex;align-items:center;gap:4px;overflow:hidden; }
+  .selection-actions > span { font-size:10px;white-space:nowrap; }
+  .selection-count { display:block;width:140px;flex:none;min-width:0;overflow:hidden;text-overflow:ellipsis; }
   .board-status { flex: none; height: 14px; line-height: 14px; font-size: .65rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .board-status.quiet { visibility: hidden; }
   .legend { flex: none; height: 12px; line-height: 12px; flex-wrap: nowrap; gap: 6px; font-size: .6rem; }
