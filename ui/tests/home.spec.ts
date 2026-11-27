@@ -27,6 +27,27 @@ const screenshotEnv = (globalThis as unknown as { process: { env: Record<string,
 type Call = [string, Record<string, unknown> | undefined];
 const calls = (page: Page) => page.evaluate(() => (window as unknown as { __fake: { calls: Call[] } }).__fake.calls);
 
+async function expectMatchingActionTiles(page: Page) {
+  // Move off the row so a hovered tile's accent border does not affect comparison.
+  await page.getByRole('heading', { name: 'UPb Lab', exact: true }).hover();
+  const tiles = page.getByTestId('open-panel').getByRole('button');
+  await expect(tiles).toHaveCount(5);
+  await expect.poll(() => tiles.evaluateAll(elements => new Set(elements.map(el => {
+    const style = getComputedStyle(el);
+    return JSON.stringify({ background: style.background, border: style.border });
+  })).size)).toBe(1);
+  for (const tile of await tiles.all()) {
+    const icon = tile.locator('svg');
+    await expect(icon).toHaveCount(1);
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveAttribute('fill', 'none');
+    await expect(icon).toHaveAttribute('stroke', 'currentColor');
+    expect(await icon.locator('path, rect, circle, line, polyline').count()).toBeGreaterThan(0);
+    // A blue outline against the old blue primary background was effectively empty.
+    expect(await icon.evaluate(el => getComputedStyle(el).color)).not.toBe(await tile.evaluate(el => getComputedStyle(el).backgroundColor));
+  }
+}
+
 /** grainatlas opens: desktop `grainatlas_launch` projects, web `window.open` URLs (recorded, not followed). */
 async function atlasOpens(page: Page, desktop: boolean): Promise<string[]> {
   if (desktop) return (await calls(page)).filter(([c]) => c === 'grainatlas_launch').map(([, a]) => String(a?.project));
@@ -115,7 +136,7 @@ for (const desktop of [true, false]) {
         expect(box.height).toBeGreaterThanOrEqual(32);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
-      await expect(page.getByTestId('open-panel').getByRole('button')).toHaveCount(5);
+      await expectMatchingActionTiles(page);
       const rows = await page.getByTestId('session-card').evaluateAll(cards => cards.map(c => ({ x: Math.round(c.getBoundingClientRect().x), y: Math.round(c.getBoundingClientRect().y) })));
       expect(new Set(rows.filter(r => r.y === rows[0].y).map(r => r.x)).size).toBe(1);
       await expect(page.getByTestId('mount-card')).toHaveCount(6);
@@ -185,6 +206,47 @@ for (const desktop of [true, false]) {
     expect((await atlasOpens(page, desktop))[1]).toContain('project-0');
     await expect(page.getByRole('tab', { name: 'Home', exact: true })).toHaveAttribute('aria-selected', 'true');
   });
+}
+
+for (const theme of ['light', 'dark']) {
+  for (const [width, height] of [[1440, 900], [1280, 800], [1024, 640]]) {
+    test(`disconnected Home action tiles and status stay separate in ${theme} at ${width} x ${height}`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await page.addInitScript(installFakeTauri, {
+        store: { mode: 'server', serverUrl: 'https://invented.invalid', lastTab: 'home', theme, themeChosen: true },
+        signedIn: true, offline: true, fixtures: reviewFixtures,
+        cached: { asOf: '2026-11-27T10:00:00Z', reason: 'unreachable' as const, detail: 'server unreachable: connection failed' },
+      });
+      await page.goto('./');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      // The shell's disconnected hint is OfflineBanner, in flow above Home.
+      // There is no "Not Connected" action-tile tooltip in the shell source.
+      const hint = page.getByTestId('offline-banner');
+      await expect(hint).toBeVisible();
+      await expect(hint).toContainText('Offline: showing data saved on this computer');
+      await expect(page.getByTestId('status-pills')).toContainText('Offline · saved data');
+      await expectMatchingActionTiles(page);
+      const tiles = page.getByTestId('open-panel').getByRole('button');
+      for (const tile of await tiles.all()) {
+        // Exercise both pointer and keyboard focus while the disconnected hint is visible.
+        await tile.hover();
+        await tile.focus();
+        const hintBox = (await hint.boundingBox())!;
+        expect(hintBox).not.toBeNull();
+        const tileBoxes = await tiles.evaluateAll(elements => elements.map(el => {
+          const { x, y, width, height } = el.getBoundingClientRect();
+          return { x, y, width, height };
+        }));
+        for (const box of tileBoxes) {
+          expect(box.width).toBeGreaterThan(0);
+          expect(box.height).toBeGreaterThan(0);
+          const overlaps = hintBox.x < box.x + box.width && hintBox.x + hintBox.width > box.x
+            && hintBox.y < box.y + box.height && hintBox.y + hintBox.height > box.y;
+          expect(overlaps).toBe(false);
+        }
+      }
+    });
+  }
 }
 
 test('eight sessions and eight mounts leave the first row of every section in view', async ({ page }) => {
