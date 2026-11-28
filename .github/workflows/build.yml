@@ -77,10 +77,9 @@ jobs:
           key: theseus-postgresql-${{ runner.os }}-${{ hashFiles('src-tauri/.cargo/config.toml') }}
 
       - name: Fetch pinned module builds
-        # grainatlas has no release URL yet (modules.lock.json TODO) and its
-        # local build is not in this checkout, so it is skipped and the Images
-        # tab shows its placeholder. The UPbDB service bundle has no
-        # release URL yet either: the installers are "Lab server only" builds
+        # GrainAtlas uses the published web archive pinned in modules.lock.json,
+        # verified by SHA-256. The UPbDB service bundle has no release URL yet:
+        # the installers are "Lab server only" builds
         # until UPbDB publishes it (docs/service-bundle-contract.md).
         run: node scripts/fetch-modules.mjs
 

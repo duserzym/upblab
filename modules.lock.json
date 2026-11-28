@@ -4,12 +4,11 @@
   "modules": [
     {
       "name": "grainatlas",
-      "version": "0.0.0-dev",
-      "url": null,
-      "sha256": null,
+      "version": "0.1.14",
+      "url": "https://github.com/duserzym/grainatlas/releases/download/v0.1.14/grainatlas-web-0.1.14.tar.gz",
+      "sha256": "a105ebb4021bd3e4ffda0c76e814b37fedb08712d498ed27c5cd4a610cc1d3f0",
       "local": "../grainatlas/ui/dist",
-      "entry": "index.html",
-      "todo": "Set url and sha256 to the grainatlas static web-build release asset (.tar.gz or .zip) once grainatlas publishes one (its roadmap phase 3); until then the local development build is used."
+      "entry": "index.html"
     },
     {
       "name": "upbdb-service",
