@@ -149,7 +149,7 @@
     {:else}<p class="faint small">Loading {title}…</p>{/if}
   </div>
 {:else}
-  {#key identity.revision}
+  {#key module === 'images' ? `${identity.revision}:${shell.atlasViewerReload}` : identity.revision}
   <iframe
     class="surface"
     bind:this={iframe}

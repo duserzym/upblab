@@ -104,3 +104,11 @@ it('opens one mount page and reuses one element snapshot for 5000 grain choices'
   expect(identity.get).toHaveBeenCalledTimes(1);
   console.info(`TIMS picker, 5000 grains and spots: baseline 1 mounted snapshot in ${baseline.toFixed(2)} ms; picker 1 additional paged list and no per-grain requests in ${(performance.now() - start).toFixed(2)} ms (mock network).`);
 });
+it('rejects an offline saved geometry reply on explicit revalidation while retaining the usable cache', async () => {
+  const value = { grains: [], spots: [], current_project_uuid: 'synthetic' };
+  vi.mocked(identity.get).mockResolvedValueOnce({ status: 200, body: value } as never);
+  await mountElements('synthetic');
+  vi.mocked(identity.get).mockResolvedValueOnce({ status: 200, body: value, cached: { reason: 'server_error', asOf: '2026-11-28T00:00:00Z', detail: 'Server returned 503: Synthetic outage' } } as never);
+  await expect(mountElements('synthetic', true)).rejects.toThrow('503: Synthetic outage');
+  expect(await mountElements('synthetic')).toBe(value);
+});

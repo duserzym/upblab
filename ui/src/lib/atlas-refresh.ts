@@ -4,6 +4,7 @@ import { identity } from './identity.svelte';
 import { overview } from './overview.svelte';
 import { review } from './review.svelte';
 import { sendCommand, moduleSurfaces } from './incoming';
+import { apiReplyMessage, revalidationError } from './server-error';
 
 interface AtlasProject { revision: number; mount_id: string; atlas_version: number | null }
 interface MountVersion { revision: number; atlasVersion: number | null }
@@ -64,9 +65,10 @@ export async function refreshAtlasProject(project: string, expectedMount?: strin
   const reply = await readAtlasProject(project);
   if (origin !== currentSource()) return;
   const b = reply.body;
+  if (revalidationError(reply)) throw new Error(revalidationError(reply));
   if (reply.status !== 200 || !b || typeof b.mount_id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$/.test(b.mount_id)
     || (expectedMount !== undefined && b.mount_id !== expectedMount) || !Number.isInteger(b.revision) || b.revision < 0
-    || (b.atlas_version !== null && (!Number.isInteger(b.atlas_version) || b.atlas_version < 0))) throw new Error('Atlas project unavailable');
+    || (b.atlas_version !== null && (!Number.isInteger(b.atlas_version) || b.atlas_version < 0))) throw new Error(`Atlas project unavailable: ${apiReplyMessage(reply)}`);
   await applyVersion(b.mount_id, { revision: b.revision, atlasVersion: b.atlas_version }, origin);
 }
 export async function atlasSyncedNotice(event: AtlasSyncedEvent) {

@@ -139,3 +139,38 @@ it('announces a fresh authentication when the same signed-in account renews its 
   expect(await identity.login('invented', 'invented-password')).toBe(true);
   expect(identity.authentication).toBe(before + 1);
 });
+
+it('conditionally revalidates Review dependencies and accepts a new content revision at the same image version', async () => {
+  const { oversight } = await import('./oversight.svelte'); oversight.reset();
+  vi.stubGlobal('sessionStorage', { getItem: () => 'synthetic-review-token' });
+  identity.target = { server: 'https://review-revalidation.invalid', key: 'review-revalidation' };
+  identity.state = { signedIn: true, account: { username: 'synthetic' }, offline: false };
+  let revision = 41;
+  const fixtures: Record<string, () => unknown> = {
+    '/v1/sessions/synthetic/results?run=chosen': () => ({ rows: Array.from({ length: 5000 }, (_, i) => ({ acquisition_id: `synthetic-${i}` })) }),
+    '/v1/sessions/synthetic/reductions': () => [],
+    '/v1/sessions/synthetic': () => ({ id: 'synthetic' }),
+    '/v1/mounts/synthetic': () => ({ id: 'synthetic', grain_count: 5000 }),
+    '/v1/mounts/synthetic/atlas': () => ({ current: { project_id: 'synthetic', version: 4 } }),
+    '/v1/atlas/projects/synthetic': () => ({ mount_id: 'synthetic', revision, atlas_version: 4 }),
+    '/v1/mounts/synthetic/elements': () => ({ revision, grains: [{ id: 'synthetic', polygon_um: [[revision, 0], [1, 1], [2, 0]] }], spots: [{ id: 'synthetic', grain_id: `synthetic-${revision}` }] }),
+  };
+  const fetch = vi.fn(async (url: string, init: RequestInit) => {
+    const path = url.replace(identity.target!.server, '');
+    const tag = path.includes('/elements') || path.includes('/projects/') ? `synthetic-content-${revision}` : 'synthetic-stable';
+    if (new Headers(init.headers).get('If-None-Match') === tag) return new Response(null, { status: 304 });
+    return Response.json(fixtures[path](), { headers: { ETag: tag } });
+  });
+  vi.stubGlobal('fetch', fetch);
+  const paths = Object.keys(fixtures);
+  const first = await Promise.all(paths.map(path => identity.get(path)));
+  const unchanged = await Promise.all(paths.map(path => identity.get(path)));
+  expect(unchanged).toEqual(first);
+  expect(fetch.mock.calls.slice(paths.length).every(([, init]) => new Headers(init.headers).has('If-None-Match'))).toBe(true);
+  revision = 42;
+  const changed = await Promise.all(paths.map(path => identity.get(path)));
+  expect(changed[5].body).toEqual({ mount_id: 'synthetic', revision: 42, atlas_version: 4 });
+  expect(changed[6].body).toMatchObject({ revision: 42, spots: [{ grain_id: 'synthetic-42' }] });
+  expect(changed[0].body).toBe(first[0].body);
+  expect(fetch).toHaveBeenCalledTimes(paths.length * 3);
+});

@@ -13,7 +13,7 @@ import { moduleSurfaces, sendCommand } from './incoming';
 import type { SessionOut, MountOut, RunOut } from './overview.svelte';
 import { assignSampleColors } from '../components/review/plot-data';
 import { normalise, parseScope, type ReviewScope, type ReviewSpot, type ResultTable, type ResultRow, type RunBrief, type DepthProfile } from './review-data';
-import { apiReplyMessage, ApiReadError } from './server-error';
+import { apiReplyMessage, revalidationError, ApiReadError } from './server-error';
 const enc = encodeURIComponent;
 type ScopeInput = {
   kind: 'session';
@@ -90,20 +90,32 @@ export class Review {
       await this.loadSelectedBatches(true);
     }
   }
-  async loadFractions() {
+  async loadFractions(preserve = true, revalidate = false) {
     const gen = ++this.fractionGeneration, source = this.currentSource();
     const current = () => gen === this.fractionGeneration && source === this.currentSource();
     const mounts = this.scope?.kind === 'mount' ? [this.scope.id] : [...new Set(this.rows.flatMap(row => row.mountId ? [row.mountId] : []))];
-    this.fractionError = ''; this.fractionNotice = ''; this.fractionMounts.clear();
+    this.fractionError = '';
     const loaded = new Map<string, FractionOut[]>(), errors: string[] = [], notices = new Map<string, string>();
+    if (preserve) {
+      for (const mount of mounts) if (this.fractionMounts.has(mount)) {
+        loaded.set(mount, this.fractions.filter(f => f.sources.some(s => s.mount_id === mount)));
+        notices.set(mount, this.fractionNotice);
+      }
+    } else this.fractionMounts.clear();
     const publish = () => {
       if (!current()) return;
       this.fractions = [...new Map([...loaded.values()].flat().map(f => [f.id, f])).values()];
-      this.fractionNotice = [...notices.values()].filter(Boolean).join('; ');
+      this.fractionNotice = [...new Set(notices.values())].filter(Boolean).join('; ');
     };
     await Promise.all(mounts.map(async mount => {
       try {
-        await mountFractions(mount, 10_000, value => { loaded.set(mount, value.items); notices.set(mount, value.showing); publish(); });
+        const previous = loaded.get(mount) ?? [];
+        const value = await mountFractions(mount, 10_000, value => {
+          // Keep the complete usable snapshot until every revalidated page arrives.
+          loaded.set(mount, preserve ? [...new Map([...previous, ...value.items].map(f => [f.id, f])).values()] : value.items);
+          notices.set(mount, value.showing); publish();
+        }, revalidate);
+        loaded.set(mount, value.items); notices.set(mount, value.showing); publish();
       } catch (error) {
         // Older UPbDB servers do not provide TIMS endpoints.
         if (error instanceof ApiReadError && [404, 405].includes(error.status)) {
@@ -122,7 +134,7 @@ export class Review {
     await Promise.all(batches.map(batch => {
       if (this.batchPending.has(batch)) return this.batchPending.get(batch);
       if (!revalidate && this.batches[batch]) return;
-      const pending = tims.batch(batch).then(detail => {
+      const pending = tims.batch(batch, revalidate).then(detail => {
         if (source === this.currentSource() && gen === this.batchGeneration) { this.batches = { ...this.batches, [batch]: detail }; delete this.batchErrors[batch]; }
       }).catch(error => {
         if (source !== this.currentSource() || gen !== this.batchGeneration) return;
@@ -149,6 +161,10 @@ export class Review {
   depthError = $state('');
   scrollVersion = $state(0);
   private generation = 0;
+  private refreshReadError = '';
+  private contextGeneration = 0;
+  private refreshPending: { context: string; details: boolean; promise: Promise<void> } | null = null;
+  get refreshContext() { return JSON.stringify([this.currentSource(), identity.signedIn, this.contextGeneration, this.scope]); }
   private depthGeneration = 0;
   private selectionGeneration = 0;
   private source = '';
@@ -156,6 +172,7 @@ export class Review {
   private listsPending: Promise<void> | null = null;
   private listGeneration = 0;
   clear() {
+    this.contextGeneration++; this.refreshPending = null;
     this.closeRegion(); this.regionResults.clear(); this.regionRows = []; this.regionFractions = []; this.fractionMounts.clear();
     this.batchGeneration++; this.batchPending.clear();
     this.fractionGeneration++; this.fractions = []; this.fractionError = ''; this.fractionNotice = ''; this.batches = {}; this.batchErrors = {};
@@ -213,7 +230,9 @@ export class Review {
     return (key === null ? undefined : this.rowsByKey.get(key)) ?? this.externalSpot;
   }
   private async get<T>(path: string): Promise<T> {
+    const generation = this.generation;
     const r = await identity.get<T>(path);
+    if (generation === this.generation && revalidationError(r)) this.refreshReadError = revalidationError(r);
     if (r.status !== 200) {
       if (r.status !== 401) void logWarn(`[review] ${path}: ${r.status} ${JSON.stringify(r.body)?.slice(0, 300)}`);
       throw new Error(r.status === 401 ? 'Sign in again to read results.' : apiReplyMessage(r));
@@ -221,6 +240,7 @@ export class Review {
     return r.body;
   }
   async open(scope: ScopeInput) {
+    this.contextGeneration++; this.refreshPending = null;
     this.closeRegion();
     this.groupView = true;
     this.selectionGeneration++;
@@ -248,13 +268,58 @@ export class Review {
       return sampleName ? { ...row, sampleName } : row;
     });
   }
-  async refresh() {
-    await this.load({ quiet: true, strict: true });
+  refresh({ lists = true, details = false } = {}) {
+    const context = this.refreshContext;
+    if (this.refreshPending?.context === context) {
+      this.refreshPending.details ||= details;
+      return this.refreshPending.promise;
+    }
+    const loaded = this.load({ quiet: true, strict: true, lists });
+    // load() can adopt a new identity synchronously before its first await.
+    const record = { context: this.refreshContext, details, promise: Promise.resolve() };
+    const promise = loaded.then(async () => {
+      if (record.context !== this.refreshContext || !record.details) return;
+      if (this.fractionError) throw new Error(this.fractionError);
+      await this.loadDepth({ preserve: true, strict: true });
+      if (this.refreshReadError) throw new Error(this.refreshReadError);
+      for (const match of this.selected ? spotFractions(this.selected, this.fractionIndex) : []) {
+        const batch = match.fraction.batch_id;
+        if (batch && this.batchErrors[batch]) throw new Error(this.batchErrors[batch]);
+      }
+    }).finally(() => { if (this.refreshPending === record) this.refreshPending = null; });
+    record.promise = promise;
+    this.refreshPending = record;
+    return promise;
   }
-  async load({ quiet = false, strict = false } = {}) {
+  /** Revalidate an open mount/area summary without changing its focus or selection. */
+  async refreshRegion() {
+    const region = this.region, gen = this.regionGeneration, context = this.refreshContext;
+    if (!region?.mount) return;
+    const current = () => gen === this.regionGeneration && context === this.refreshContext;
+    const inScope = this.scope?.kind === 'mount' && this.scope.id === region.mount;
+    const results = (inScope ? Promise.resolve(this.rows) : this.regionResults.load(this.currentSource(), region.mount, async path => {
+      const reply = await identity.get<{ spots: ResultRow[] }>(path);
+      const error = revalidationError(reply); if (error) throw new Error(error);
+      return reply;
+    }))
+      .then(rows => { if (current()) { this.regionRows = rows; this.regionError = ''; } });
+    const fractions = this.fractionMounts.has(region.mount) ? Promise.resolve().then(() => {
+      if (current()) { this.regionFractions = this.fractions; this.regionFractionNotice = this.fractionNotice; }
+    }) : mountFractions(region.mount, 10_000, value => {
+      if (current()) { this.regionFractions = value.items; this.regionFractionNotice = value.showing; }
+    }, true).catch(error => {
+      if (!(error instanceof ApiReadError && [404, 405].includes(error.status))) throw error;
+    });
+    const settled = await Promise.allSettled([results, fractions]);
+    if (!current()) return;
+    const failure = settled.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  }
+  async load({ quiet = false, strict = false, lists = true } = {}) {
     const source = this.currentSource();
     if (source !== this.source || !identity.target || !identity.signedIn) {
       this.closeRegion(); this.regionResults.clear(); this.fractionMounts.clear();
+      this.contextGeneration++;
       this.source = source;
       this.batches = {}; this.batchErrors = {}; this.batchPending.clear(); this.batchSource = source;
       this.listGeneration++;
@@ -267,6 +332,7 @@ export class Review {
     }
     quiet = quiet && this.state === 'ready';
     const gen = ++this.generation;
+    this.refreshReadError = '';
     const current = () => gen === this.generation && source === this.currentSource();
     if (!quiet) {
       this.depthGeneration++;
@@ -298,7 +364,7 @@ export class Review {
       const results = this.scopeResults(scope, quiet);
       if (!scope) await this.loadLists();
       const { rows: resultRows, runs, run, info } = await results.finally(() => {
-        if (scope && current())
+        if (scope && current() && lists)
           void this.loadLists().catch(err => logWarn(`[review] Could not refresh lists: ${String(err)}`));
       });
       if (!current()) return;
@@ -317,9 +383,16 @@ export class Review {
         this.selectedKey = rows.some(r => r.key === this.selectedKey) ? this.selectedKey : rows.find(r => !r.isReference)?.key ?? rows[0]?.key ?? null;
       }
       this.state = 'ready';
-      void this.loadFractions();
-      if (!quiet || !selected || (!keepExternal && !rows.some(r => r.key === selected.key))
-        || selected.acquisitionId !== this.selected?.acquisitionId || selected.runId !== this.selected?.runId)
+      const fractions = this.loadFractions(quiet, strict);
+      if (strict) {
+        await fractions;
+        if (!current()) return;
+        await this.refreshRegion();
+        if (!current()) return;
+      }
+      const manualDetails = this.refreshPending?.context === this.refreshContext && this.refreshPending.details;
+      if (!manualDetails && (!quiet || !selected || (!keepExternal && !rows.some(r => r.key === selected.key))
+        || selected.acquisitionId !== this.selected?.acquisitionId || selected.runId !== this.selected?.runId))
         void this.loadDepth();
     }
     catch (err) {
@@ -378,27 +451,31 @@ export class Review {
     return { rows, runs, run, info };
   }
 
-  async loadDepth() {
-    const gen = ++this.depthGeneration, spot = this.selected;
-    this.depth = null;
+  async loadDepth({ preserve = false, strict = false } = {}) {
+    const gen = ++this.depthGeneration, spot = this.selected, source = this.currentSource();
+    const current = () => gen === this.depthGeneration && source === this.currentSource();
+    const previous = preserve ? this.depth : null;
+    if (!preserve) this.depth = null;
     this.depthError = '';
     if (!spot?.acquisitionId || !spot.runId) {
+      this.depth = null;
       this.depthState = 'idle';
       return;
     }
-    this.depthState = 'loading';
+    if (!previous) this.depthState = 'loading';
     try {
       const depth = await this.get<DepthProfile>(`/v1/acquisitions/${enc(spot.acquisitionId)}/depth-profile?run=${enc(spot.runId)}`);
-      if (gen !== this.depthGeneration)
+      if (!current())
         return;
       this.depth = depth;
       this.depthState = 'ready';
     }
     catch (err) {
-      if (gen !== this.depthGeneration)
+      if (!current())
         return;
       this.depthError = String(err);
-      this.depthState = 'error';
+      this.depthState = previous ? 'ready' : 'error';
+      if (strict) throw err;
     }
   }
   select(spot: ReviewSpot, focus = true) {

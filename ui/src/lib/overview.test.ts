@@ -126,6 +126,16 @@ describe('refreshMount', () => {
     expect(overview.mounts[0].mount).not.toHaveProperty('ignored');
     expect(get.mock.calls.map(([path]) => path)).toEqual(['/v1/mounts/m1', '/v1/mounts/m1/atlas']);
   });
+  it.each(['summary', 'atlas', 'fallback'])('strict %s refresh reports HTTP diagnostics and retains the usable mount', async failure => {
+    const usable = overview.mounts[0];
+    get.mockImplementation(async (path: string) => {
+      if (failure === 'fallback' && path === '/v1/mounts/m1') return { status: 404, body: {} };
+      if (failure === 'atlas' && path === '/v1/mounts/m1') return { status: 200, body: usable.mount };
+      return { status: 503, body: { detail: 'Synthetic summary unavailable' } };
+    });
+    await expect(overview.refreshMount('m1', { strict: true })).rejects.toThrow('503: Synthetic summary unavailable');
+    expect(overview.mounts[0]).toBe(usable);
+  });
   it('keeps unrequested thumbnails lazy after refreshing a mount', async () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ files: {} }) });
     vi.stubGlobal('fetch', fetch);

@@ -16,6 +16,11 @@ export function apiReplyMessage(reply: { status: number; body: unknown; error?: 
   return reply.error || `Server returned ${reply.status}: ${serverMessage(reply.body, reply.status)}`;
 }
 
+/** A desktop saved copy remains usable, but does not establish a successful refresh. */
+export function revalidationError(reply: { cached?: { reason: 'unreachable' | 'server_error'; detail?: string } }): string {
+  return reply.cached ? `Could not revalidate saved data: ${reply.cached.detail || (reply.cached.reason === 'server_error' ? 'the server returned an error.' : 'the server could not be reached.')}` : '';
+}
+
 /** Keep HTTP status available even when an API reply is not JSON. */
 export class ApiReadError extends Error {
   constructor(public status: number, public body: unknown, message: string) { super(message); }

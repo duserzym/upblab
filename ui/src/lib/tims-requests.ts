@@ -57,5 +57,5 @@ export class OnlineAction<T> {
 
 export const grainImageScope = () => JSON.stringify([identity.target?.server, identity.account?.id, identity.revision, identity.authentication]);
 export function mountElements(id: string, revalidate = false) {
-  return grainImages.elements(grainImageScope(), id, () => read<MountGeometry>(`/v1/mounts/${encodeURIComponent(id)}/elements`), revalidate);
+  return grainImages.elements(grainImageScope(), id, () => read<MountGeometry>(`/v1/mounts/${encodeURIComponent(id)}/elements`, revalidate), revalidate);
 }

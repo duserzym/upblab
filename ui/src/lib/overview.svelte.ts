@@ -15,7 +15,7 @@ import { connectivity } from './connectivity.svelte';
 import { isDesktop, savedReads, logInfo } from './platform';
 import { identity } from './identity.svelte';
 import type { ApiReply } from './platform';
-import { apiReplyMessage } from './server-error';
+import { apiReplyMessage, revalidationError } from './server-error';
 
 export interface SessionOut {
   id: string;
@@ -293,6 +293,7 @@ class Overview {
     try {
       const reply = await this.get<MountOut>(`/v1/mounts/${encodeURIComponent(id)}`);
       if (!current()) return;
+      if (strict && revalidationError(reply)) throw new Error(revalidationError(reply));
       let mount: MountOut | undefined;
       if (reply.status === 200 && reply.body?.id === id) {
         // Detail replies contain other metadata that Home does not use.
@@ -300,13 +301,15 @@ class Overview {
         mount = { id, label, mount_type, grain_count, spot_count, owner, owner_name, creator };
       } else if (reply.status === 404 || reply.status === 405) {
         const list = await this.get<MountOut[]>(listPath('/v1/mounts', null, oversight.filters));
-        if (!current() || !isList<MountOut>(list)) return;
+        if (!current()) return;
+        if (strict && revalidationError(list)) throw new Error(revalidationError(list));
+        if (!isList<MountOut>(list)) { if (strict) throw new Error(apiReplyMessage(list)); return; }
         mount = list.body.find(m => m.id === id);
       }
-      if (!mount) { if (strict) throw new Error('Mount unavailable'); return; }
+      if (!mount) { if (strict) throw new Error(apiReplyMessage(reply)); return; }
       const reloadThumbnails = this.thumbnailSources.get(id)?.started === true
         || this.mounts.find(row => row.mount.id === id)?.thumbnails !== undefined;
-      const row = await this.mountRow(mount, gen, false);
+      const row = await this.mountRow(mount, gen, false, strict);
       if (strict && row.atlas === 'error') throw new Error('Mount atlas unavailable');
       if (!current()) return;
       const listed = this.mountList.findIndex(m => m.id === id);
@@ -318,6 +321,7 @@ class Overview {
       else this.mounts = [...this.mounts, row];
       // Already visible cards need a fresh manifest even if their project is unchanged.
       if (reloadThumbnails) await this.loadThumbnails(id);
+      return row;
     } catch (err) { if (strict) throw err; /* Keep the last readable mount while offline. */ }
   }
 
@@ -403,10 +407,11 @@ class Overview {
     };
   }
 
-  private async mountRow(mount: MountOut, gen: number, preserve = true): Promise<MountRow> {
+  private async mountRow(mount: MountOut, gen: number, preserve = true, strict = false): Promise<MountRow> {
     const server = identity.target?.server;
     try {
       const r = await this.get(`/v1/mounts/${encodeURIComponent(mount.id)}/atlas`);
+      if (strict && revalidationError(r)) throw new Error(revalidationError(r));
       if (r.status === 200) {
         const atlas = parseAtlas(r.body);
         const access = (r.body as { access?: unknown } | null)?.access;
@@ -421,7 +426,8 @@ class Overview {
       }
       if (gen === this.generation) this.thumbnailSources.delete(mount.id);
       if (r.status === 404 || r.status === 405) return { mount, atlas: null };
-    } catch { /* fall through */ }
+      if (strict) throw new Error(apiReplyMessage(r));
+    } catch (error) { if (strict) throw error; }
     return { mount, atlas: 'error' };
   }
 

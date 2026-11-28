@@ -620,3 +620,73 @@ describe('Review region lifecycle', () => {
     expect(review.region).toBeNull(); expect(review.regionRows).toEqual([]);
   });
 });
+
+it('shares manual/background result refreshes and preserves the selected spot and open region', async () => {
+  await review.open({ kind: 'mount', id: 'mount-demo' });
+  await review.showRegion({ type: 'lab.viewer.region', kind: 'mount', project: 'project-demo', mount: 'mount-demo', mountLabel: 'Synthetic mount', area: null, areaLabel: null, sample: null, spots: [] }, 'header');
+  const region = review.region, selected = review.selectedKey, previous = get.getMockImplementation()!;
+  let finish!: (value: ApiReply<unknown>) => void;
+  get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const pending = review.refresh();
+  expect(review.refresh()).toBe(pending);
+  finish({ status: 200, body: mountResults }); await pending;
+  expect(review.region).toBe(region); expect(review.selectedKey).toBe(selected);
+  expect(review.regionRows).toEqual(review.rows);
+  get.mockImplementation(previous);
+});
+it('a failed fraction revalidation retains the last usable fractions and the next retry reads again', async () => {
+  const { timsReviewFixtures } = await import('../../tests/fixtures/review');
+  const previous = get.getMockImplementation()!;
+  get.mockImplementation(async path => path in timsReviewFixtures ? { status: 200, body: timsReviewFixtures[path] } as never : previous(path));
+  await review.open({ kind: 'mount', id: 'mount-demo' });
+  await vi.waitFor(() => expect(review.fractions.length).toBeGreaterThan(0));
+  const usable = review.fractions;
+  get.mockImplementation(async path => path.startsWith('/v1/fractions?') ? { status: 503, body: { detail: 'Synthetic fractions unavailable' } } as never : previous(path));
+  await expect(review.refresh({ details: true })).rejects.toThrow('503');
+  expect(review.fractions).toEqual(usable);
+  get.mockClear();
+  get.mockImplementation(async path => path in timsReviewFixtures ? { status: 200, body: timsReviewFixtures[path] } as never : previous(path));
+  await review.refresh({ details: true });
+  expect(get.mock.calls.filter(([path]) => path.startsWith('/v1/fractions?'))).toHaveLength(1);
+});
+it('manual details revalidation joins a background refresh and retains usable depth on a failed retry', async () => {
+  await review.open({ kind: 'session', id: session.id });
+  await vi.waitFor(() => expect(review.depthState).toBe('ready'));
+  const depth = review.depth, previous = get.getMockImplementation()!;
+  let finish!: (value: ApiReply<unknown>) => void;
+  get.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const background = review.refresh();
+  expect(review.refresh({ lists: false, details: true })).toBe(background);
+  finish({ status: 200, body: table }); await background;
+  expect(get.mock.calls.filter(([path]) => path.includes('/depth-profile'))).toHaveLength(2);
+  get.mockImplementation(async path => path.includes('/depth-profile') ? { status: 503, body: { detail: 'Synthetic profile unavailable' } } as never : previous(path));
+  await expect(review.refresh({ lists: false, details: true })).rejects.toThrow('503');
+  expect(review.depth).toEqual(depth); expect(review.depthState).toBe('ready');
+});
+it('reopening the same scope invalidates the previous manual refresh context', async () => {
+  await review.open({ kind: 'session', id: session.id });
+  const previous = review.refreshContext;
+  await review.open({ kind: 'session', id: session.id });
+  expect(review.refreshContext).not.toBe(previous);
+});
+it('does not report a saved offline result reply as a successful manual revalidation', async () => {
+  await review.open({ kind: 'session', id: session.id });
+  const previous = get.getMockImplementation()!;
+  get.mockImplementation(async path => path.includes('/results?run=') ? {
+    status: 200, body: table, cached: { reason: 'server_error', asOf: '2026-11-28T00:00:00Z', detail: 'Server returned 503: Synthetic outage' },
+  } as never : previous(path));
+  await expect(review.refresh({ lists: false, details: true })).rejects.toThrow('503: Synthetic outage');
+  expect(review.state).toBe('ready'); expect(review.rows).toHaveLength(rows.length);
+});
+it('retains complete usable fractions when a later revalidation page fails', async () => {
+  const { timsFraction } = await import('../../tests/fixtures/review');
+  review.rows = rows.map(row => normalise(row)); review.scope = { kind: 'mount', id: 'mount-demo' };
+  const complete = Array.from({ length: 600 }, (_, index) => ({ ...timsFraction, id: `synthetic-${index}`, batch_id: null }));
+  get.mockResolvedValueOnce({ status: 200, body: complete } as never);
+  await review.loadFractions();
+  get.mockResolvedValueOnce({ status: 200, body: complete.slice(0, 500), nextCursor: 'synthetic-next' } as never)
+    .mockResolvedValueOnce({ status: 503, body: { detail: 'Synthetic page unavailable' } } as never);
+  await review.loadFractions(true, true);
+  expect(review.fractions).toHaveLength(600);
+  expect(review.fractionError).toContain('503');
+});

@@ -13,7 +13,7 @@ vi.mock('./platform', () => ({
 }));
 vi.mock('./identity.svelte', () => ({ identity: {}, SIGN_OUT_EVENTS: [] }));
 vi.mock('./opener.svelte', () => ({ opener: { seen: vi.fn(), outcome: vi.fn() } }));
-vi.mock('./shell.svelte', () => ({ shell: {} }));
+vi.mock('./shell.svelte', () => ({ shell: { atlasViewerPage: 0, atlasViewerReload: 0 } }));
 vi.mock('./settings.svelte', () => ({ settings: { reviewSplit: false, loaded: true, reviewInset: null, update: vi.fn(async () => {}) } }));
 vi.mock('./spot-actions', () => ({ dispatchSpotAction: vi.fn(async () => {}) }));
 

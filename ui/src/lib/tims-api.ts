@@ -1,6 +1,6 @@
 import { identity } from './identity.svelte';
 import { listPath, type ListPath } from './api-list';
-import { apiReplyMessage, ApiReadError } from './server-error';
+import { apiReplyMessage, revalidationError, ApiReadError } from './server-error';
 import { timsRights } from './tims-rights.svelte';
 import { oversight, WriteError } from './oversight.svelte';
 import { outbox, onlineOnlyReason } from './outbox.svelte';
@@ -60,32 +60,34 @@ export interface SolutionInput { lab_id: string; registry_id: string; name: stri
 export interface ListPage<T> { items: T[]; nextCursor: string | null; more(): Promise<ListPage<T> | null> }
 export class TimsReadError extends ApiReadError {}
 const readScope = () => JSON.stringify([identity.target?.server, identity.account?.id ?? identity.account?.username, identity.revision]);
-export async function read<T>(path: string): Promise<T> {
+export async function read<T>(path: string, revalidate = false): Promise<T> {
   const source = readScope();
   const reply = await identity.get<T>(path);
   if (source !== readScope()) throw new Error('The account or server changed during the request.');
+  if (revalidate && revalidationError(reply)) throw new Error(revalidationError(reply));
   if (reply.status !== 200) throw new TimsReadError(reply.status, reply.body, apiReplyMessage(reply));
   return reply.body;
 }
 /** First page is ready independently; each more() consumes one opaque cursor once. */
-export async function firstPage<T>(path: ListPath, filters: Record<string, string> = {}, cursor?: string): Promise<ListPage<T>> {
+export async function firstPage<T>(path: ListPath, filters: Record<string, string> = {}, cursor?: string, revalidate = false): Promise<ListPage<T>> {
   const source = readScope();
   const reply = await identity.get<T[]>(listPath(path, cursor, filters));
   if (source !== readScope()) throw new Error('The account or server changed during the request.');
+  if (revalidate && revalidationError(reply)) throw new Error(revalidationError(reply));
   if (reply.status !== 200 || !Array.isArray(reply.body)) throw new TimsReadError(reply.status, reply.body, apiReplyMessage(reply));
   let more: Promise<ListPage<T> | null> | undefined;
   const nextCursor = reply.nextCursor ?? null;
   if (nextCursor && nextCursor === cursor) throw new Error('The server repeated a list cursor.');
   return { items: reply.body, nextCursor, more: () => {
     if (source !== readScope()) return Promise.reject(new Error('The account or server changed. Reload this list.'));
-    return more ??= nextCursor ? firstPage<T>(path, filters, nextCursor).catch(error => { more = undefined; throw error; }) : Promise.resolve(null);
+    return more ??= nextCursor ? firstPage<T>(path, filters, nextCursor, revalidate).catch(error => { more = undefined; throw error; }) : Promise.resolve(null);
   } };
 
 }
 export interface BoundedFractions { items: FractionOut[]; truncated: boolean; showing: string }
-export async function mountFractions(mount: string, maximum = 10_000, progress?: (value: BoundedFractions) => void): Promise<BoundedFractions> {
+export async function mountFractions(mount: string, maximum = 10_000, progress?: (value: BoundedFractions) => void, revalidate = false): Promise<BoundedFractions> {
   if (!Number.isInteger(maximum) || maximum < 1) throw new Error('A positive fraction limit is required.');
-  let page: ListPage<FractionOut> | null = await firstPage('/v1/fractions', { mount, limit: '500' });
+  let page: ListPage<FractionOut> | null = await firstPage('/v1/fractions', { mount, limit: '500' }, undefined, revalidate);
   const items = new Map<string, FractionOut>(), seen = new Set<string>();
   let truncated = false;
   while (page) {
@@ -166,7 +168,7 @@ export const tims = {
   createColumnProtocol: (body: ColumnProtocolInput) => protocolForm('/v1/tims/column-protocols', 'POST', body),
   patchColumnProtocol: (protocol: string, body: ColumnProtocolPatch) => protocolForm(`/v1/tims/column-protocols/${id(protocol)}`, 'PATCH', body, `column-protocol:${protocol}`),
   batches: (filters: Record<string, string> = {}) => firstPage<BatchOut>('/v1/tims/batches', filters),
-  batch: (batch: string) => read<BatchDetail>(batchPath(batch)),
+  batch: (batch: string, revalidate = false) => read<BatchDetail>(batchPath(batch), revalidate),
   completeBatch: (batch: string) => onlineForm<BatchDetail>(`${batchPath(batch)}/complete`, 'POST', {}, `batch:${batch}`),
   reopenBatch: (batch: string) => onlineForm<BatchDetail>(`${batchPath(batch)}/reopen`, 'POST', {}, `batch:${batch}`),
   /** Before/after history of a fraction's spike additions (newest first); null on servers without it. */

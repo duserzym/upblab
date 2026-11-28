@@ -110,3 +110,44 @@ it('refreshes one refined mount for 5000 grains while retaining other mounts', a
   expect(elements).toHaveBeenCalledTimes(3); expect(listings).toHaveBeenCalledTimes(2); expect(other).toHaveBeenCalledTimes(1); expect(json).toHaveBeenCalledTimes(3);
   console.info(`TIMS refine, 5000 images: initial 6 shared metadata reads in ${beforeMs.toFixed(2)} ms; refresh adds 3 shared reads in ${(performance.now() - start).toFixed(2)} ms. Unchanged revision adds only one mount detail check.`);
 });
+
+it('shares element revalidation, preserves the usable snapshot on failure, and retries immediately', async () => {
+  const cache = new GrainImageCache();
+  const read = vi.fn().mockResolvedValue(inventedElements);
+  const before = await cache.elements('scope', 'mount', read);
+  let reject!: (error: Error) => void;
+  read.mockImplementationOnce(() => new Promise((_, fail) => { reject = fail; }));
+  const pending = cache.elements('scope', 'mount', read, true);
+  expect(cache.elements('scope', 'mount', read, true)).toBe(pending);
+  reject(new Error('Synthetic 503'));
+  await expect(pending).rejects.toThrow('503');
+  expect(await cache.elements('scope', 'mount', read)).toBe(before);
+  await cache.elements('scope', 'mount', read, true);
+  expect(read).toHaveBeenCalledTimes(3);
+});
+it('does not let a stale element request replace a newer account or invalidated mount snapshot', async () => {
+  const cache = new GrainImageCache();
+  let finish!: (value: typeof inventedElements) => void;
+  const old = cache.elements('first', 'mount', () => new Promise(resolve => { finish = resolve; }));
+  const next = { ...inventedElements, spots: [] };
+  await cache.elements('second', 'mount', async () => next);
+  finish(inventedElements); await old;
+  expect(await cache.elements('second', 'mount', async () => inventedElements)).toBe(next);
+  const oldMount = cache.elements('second', 'mount', () => new Promise(resolve => { finish = resolve; }), true);
+  cache.invalidateMount('mount');
+  await cache.elements('second', 'mount', async () => next);
+  finish(inventedElements); await oldMount;
+  expect(await cache.elements('second', 'mount', async () => inventedElements)).toBe(next);
+});
+it('follows an older pending element read with one shared explicit revalidation', async () => {
+  const cache = new GrainImageCache();
+  let finish!: (value: typeof inventedElements) => void;
+  const fresh = { ...inventedElements, spots: [] };
+  const read = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue(fresh);
+  const old = cache.elements('scope', 'mount', read);
+  const refreshed = cache.elements('scope', 'mount', read, true);
+  const second = cache.elements('scope', 'mount', read, true);
+  finish(inventedElements); await old;
+  expect(await refreshed).toBe(fresh); expect(await second).toBe(fresh);
+  expect(read).toHaveBeenCalledTimes(2);
+});

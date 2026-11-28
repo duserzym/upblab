@@ -9,6 +9,7 @@
   import { grainKey } from '../lib/review-layers';
   import ReviewLayers from '../components/review/ReviewLayers.svelte';
   import { review } from '../lib/review.svelte';
+  import { reviewRefresh } from '../lib/review-refresh.svelte';
   import { overview } from '../lib/overview.svelte';
   import { dateLabel, groupSpots, filterTimsSpots, isPlucked, spotGroupKey, type ReviewSpot } from '../lib/review-data';
   import { identity } from '../lib/identity.svelte';
@@ -232,6 +233,7 @@
   let lastVisibility = '';
   let displayedGroups = false;
   let displayedContext = '';
+  let displayedViewerPage = 0;
   $effect(() => {
     const inReview = active && split && review.state === 'ready';
     const projects = inReview ? visibility : {};
@@ -240,10 +242,12 @@
     const groupView = inReview && review.groupView;
     const focus = atlasFocus;
     const context = runContext;
+    const viewerPage = shell.atlasViewerPage;
     const signature = JSON.stringify({ projects, colors, groups });
     untrack(() => {
-      const opening = inReview && displayedContext !== context;
+      const opening = inReview && (displayedContext !== context || displayedViewerPage !== viewerPage);
       displayedContext = inReview ? context : '';
+      displayedViewerPage = viewerPage;
       if (!opening && !focus && (signature === lastVisibility || (!lastVisibility && !inReview))) return;
       // Keep a single pick in this command too: desktop command delivery coalesces
       // pending commands, so removing groups must not swallow the spot focus.
@@ -304,11 +308,14 @@
   <div class="toolbar glass">
     <ScopePicker {active}>
       {#snippet actions()}
+        <button class="btn refresh-database" disabled={review.state !== 'ready' || !review.scope || reviewRefresh.state === 'loading'}
+          aria-busy={reviewRefresh.state === 'loading'} aria-describedby="review-refresh-status" onclick={() => void reviewRefresh.refresh()}>{reviewRefresh.state === 'loading' ? 'Refreshing…' : 'Refresh database'}</button>
         <div class="layout-presets">{@render layoutButtons()}</div>
         <button class="chip layout-toggle" aria-expanded={layoutsOpen} aria-controls="review-layout-presets" onclick={() => layoutsOpen = !layoutsOpen}>Layout</button>
         <label class="split-toggle"><input type="checkbox" checked={settings.reviewSplit} onchange={e=>void settings.update({reviewSplit:e.currentTarget.checked})} /> SEM images</label>
       {/snippet}
     </ScopePicker>
+    <p id="review-refresh-status" class="small refresh-feedback" class:error={reviewRefresh.state === 'error'} role="status" aria-live="polite" aria-atomic="true">{reviewRefresh.message}{#if reviewRefresh.state === 'error'} Select Refresh database to retry.{/if}</p>
     {#if layoutsOpen}
       <div id="review-layout-presets" class="layout-drawer" role="group" aria-label="Layout presets" bind:this={layoutChoices}>{@render layoutButtons()}</div>
     {/if}
@@ -431,6 +438,9 @@
     .atlas-edit .edit-long {display:none;}
     .atlas-edit .edit-short {display:inline;}
   }
+  .refresh-database {font-size:0.75rem;white-space:nowrap;}
+  .refresh-feedback {margin:0;overflow-wrap:anywhere;}
+  .refresh-feedback:empty {position:absolute;}
   .layout-presets {display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
   .layout-toggle,.layout-drawer {display:none;}
   .layout-presets .chip {font-size:0.72rem;padding:3px 7px;}

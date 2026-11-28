@@ -107,6 +107,8 @@ class Shell {
   modules = $state<InstalledModule[]>([]);
   links = $state<LinkRecord[]>([]);
   targets = $state<Record<ModuleTab, ModuleTarget | null>>({ images: null, sessions: null, people: null });
+  atlasViewerReload = $state(0);
+  atlasViewerPage = $state(0);
   studio = $state<StudioRequest | null>(null);
   /** Overlays in the shell (dialogs) must hide native module webviews, which always paint on top. */
   get overlay() { return overlays.active; }

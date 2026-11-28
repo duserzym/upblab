@@ -16,6 +16,7 @@
   import OfflineBanner from './components/OfflineBanner.svelte';
   import { connectivity } from './lib/connectivity.svelte';
   import { review } from './lib/review.svelte';
+  import { reviewRefresh } from './lib/review-refresh.svelte';
   import { overview } from './lib/overview.svelte';
   import AtlasViewer from './components/AtlasViewer.svelte';
   import Sessions from './routes/Sessions.svelte';
@@ -161,15 +162,9 @@
       else if (id === 'module:reload' && (shell.view === 'sessions' || shell.view === 'people')) {
         void desktopModules.reload(shell.view);
       } else if (id === 'module:reload' && shell.view === 'review') {
-        void reviewRefresh();
+        void reviewRefresh.refresh();
       }
     });
-  }
-
-  async function reviewRefresh() {
-    const { review } = await import('./lib/review.svelte');
-    await review.load();
-    if (settings.reviewSplit) await desktopModules.reload('images');
   }
 
   // Cmd+W (native menu, src-tauri/src/menu.rs): close what is open, never the window.

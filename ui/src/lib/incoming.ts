@@ -117,6 +117,14 @@ export function moduleReady(tab: ModuleTab): void {
   if (tab !== 'images') return;
   imagesReportedReady = false;
   void publishImagesPresentation();
+  shell.atlasViewerPage++;
+}
+
+/** Reopen the read-only viewer so it reads the database overlay on startup. */
+export async function reloadReviewViewer(): Promise<void> {
+  if (shell.view !== 'review' || !settings.reviewSplit || !moduleSurfaces.has('images')) return;
+  if (isDesktop) await desktopModules.reload('images');
+  else shell.atlasViewerReload++;
 }
 
 /** Register early for bridge requests, then on load to deliver any waiting command. */

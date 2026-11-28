@@ -13,21 +13,42 @@ export class GrainImageCache {
   private manifests = new Map<string, { promise: Promise<GrainAtlas>; until: number }>();
   private mountManifests = new Map<string, Set<string>>();
   private mountGenerations = new Map<string, number>();
+  private geometryPending = new Map<string, { promise: Promise<MountGeometry>; revalidate: boolean }>();
   private geometry = new Map<string, Promise<MountGeometry>>();
   constructor(private json: (url: string) => Promise<GrainAtlas> = atlasJson, private now = Date.now) {}
-  clear() { this.generation++; this.scope = ''; this.listings.clear(); this.manifests.clear(); this.geometry.clear(); this.mountManifests.clear(); this.mountGenerations.clear(); }
+  clear() { this.generation++; this.scope = ''; this.listings.clear(); this.manifests.clear(); this.geometry.clear(); this.geometryPending.clear(); this.mountManifests.clear(); this.mountGenerations.clear(); }
   invalidateMount(mount: string) {
     this.geometry.delete(mount);
+    this.geometryPending.delete(mount);
     this.listings.delete(mount);
     this.mountGenerations.set(mount, (this.mountGenerations.get(mount) ?? 0) + 1);
     for (const key of this.mountManifests.get(mount) ?? []) this.manifests.delete(key);
     this.mountManifests.delete(mount);
   }
   private enter(scope: string) { if (scope !== this.scope) { this.clear(); this.scope = scope; } }
-  elements(scope: string, mount: string, read: () => Promise<MountGeometry>, revalidate = false) {
+  elements(scope: string, mount: string, read: () => Promise<MountGeometry>, revalidate = false): Promise<MountGeometry> {
     this.enter(scope);
-    if (revalidate || !this.geometry.has(mount)) this.geometry.set(mount, read());
-    return this.geometry.get(mount)!;
+    const generation = this.generation, mountGeneration = this.mountGenerations.get(mount) ?? 0;
+    const existing = this.geometryPending.get(mount);
+    if (existing) {
+      if (!revalidate || existing.revalidate) return existing.promise;
+      // A read already in flight may predate the external sync. Follow it with
+      // one shared explicit revalidation, even when that earlier read failed.
+      return existing.promise.catch(() => {}).then(() => {
+        if (generation !== this.generation || mountGeneration !== (this.mountGenerations.get(mount) ?? 0))
+          throw new Error('The account or server changed, or the mount was refreshed.');
+        return this.elements(scope, mount, read, true);
+      });
+    }
+    if (!revalidate && this.geometry.has(mount)) return this.geometry.get(mount)!;
+    const pending = read().then(value => {
+      if (generation === this.generation && mountGeneration === (this.mountGenerations.get(mount) ?? 0))
+        this.geometry.set(mount, Promise.resolve(value));
+      return value;
+    }).finally(() => { if (this.geometryPending.get(mount) === record) this.geometryPending.delete(mount); });
+    const record = { promise: pending, revalidate };
+    this.geometryPending.set(mount, record);
+    return pending;
   }
   async published(scope: string, server: string, mount: string, read: () => Promise<AtlasListing>, failed?: PublishedGrainAtlas): Promise<PublishedGrainAtlas> {
     this.enter(scope);
