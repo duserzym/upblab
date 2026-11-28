@@ -24,12 +24,12 @@ async function start(page: Page, options: Partial<FakeOptions> = {}) {
 }
 async function step(page: Page, number: number) { await rail(page).getByRole('list').getByRole('button').nth(number - 1).click(); }
 async function selectVersion(card: Locator) {
-  await card.getByRole('button', { name: 'Choose spike version' }).click();
+  await card.getByRole('button', { name: /^(Change|Choose spike)$/ }).click();
   const picker = card.getByRole('region', { name: 'Spike version picker' });
   await picker.getByLabel('Solution', { exact: true }).selectOption(publishedVersion.solution_id);
   await picker.getByLabel('Subfraction', { exact: true }).selectOption(publishedVersion.subfraction_id);
   await picker.getByLabel('Version', { exact: true }).selectOption(publishedVersion.id);
-  await picker.getByRole('button', { name: 'Apply reviewed version' }).click();
+  await picker.getByRole('button', { name: 'Use version' }).click();
 }
 const missingSpike = { ...batch, spikes: [] };
 test('guided navigation, next incomplete, persistence and browsing without writes', async ({ page }) => {

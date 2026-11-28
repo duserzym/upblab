@@ -4,15 +4,18 @@
   import { untrack, onMount, onDestroy } from 'svelte';
   import { identity } from '../../lib/identity.svelte';
   import { timsRights } from '../../lib/tims-rights.svelte';
-  import { tims, type ListPage, type SpikeSolution, type SpikeSubfraction, type CompactVersion, type VersionOut, type VersionStatus } from '../../lib/tims-api';
+  import { tims, TimsReadError, type ListPage, type SpikeSolution, type SpikeSubfraction, type CompactVersion, type VersionOut, type VersionStatus, type SpikeDefault } from '../../lib/tims-api';
   import { isotopeLabel, subfractionLabel, versionStatusLabel } from '../../lib/spike-format';
   import { shortCitation } from '../../lib/spike-reference';
-  import { outbox } from '../../lib/outbox.svelte';
+  import { onlineOnlyReason, outbox } from '../../lib/outbox.svelte';
+  import History from './History.svelte';
   import Composition from './Composition.svelte';
-  import { ReplyScope } from '../../lib/tims-requests';
+  import { OnlineAction, ReplyScope } from '../../lib/tims-requests';
   let { lab }: { lab: string } = $props();
   let rows = $state.raw<SpikeSolution[]>([]), page = $state.raw<ListPage<SpikeSolution> | null>(null);
   let solutionId = $state(''), versionId = $state(''), version = $state.raw<VersionOut | null>(null);
+  let spikeDefault = $state.raw<SpikeDefault | null>(null), defaultBusy = $state(false), defaultSupported = $state(true);
+  const defaultAction = new OnlineAction<SpikeDefault>();
   let error = $state(''), busy = $state(false), versionBusy = $state(false);
   let status = $state<VersionStatus>('current'), notes = $state(''), versionLab = $state<string | null>(null);
   let cache = $state.raw(new Map<string, VersionOut>());
@@ -28,7 +31,7 @@
     untrack(() => {
       replies.invalidate(); generation++; selection++; rows = []; page = null; version = null;
       solutionId = ''; versionId = ''; versionLab = null; versionBusy = false;
-      cache = new Map(); pending = new Map(); void load();
+      cache = new Map(); pending = new Map(); spikeDefault = null; defaultBusy = false; defaultSupported = true; void load(); void loadDefault();
     });
   });
   onMount(() => {
@@ -96,6 +99,18 @@
     try { await tims.patchVersion(version.id, { status, notes }); }
     catch (e) { if (current()) error = String(e); }
   }
+  async function loadDefault() {
+    const current = replies.capture();
+    try { const settings = await tims.spikeDefault(lab); if (current()) spikeDefault = settings; }
+    catch (e) { if (current()) { if (e instanceof TimsReadError && e.status === 404) defaultSupported = false; else error = String(e); } }
+  }
+  async function makeDefault() {
+    if (!selected || !timsRights.canEditLabProtocol(lab) || defaultBusy) return;
+    const current = replies.capture(); defaultBusy = true; error = '';
+    try { const settings = await defaultAction.send(`/v1/tims/labs/${encodeURIComponent(lab)}/spike-default`, 'PUT', { default_spike_solution_id: selected.id }); if (current()) spikeDefault = settings; }
+    catch (e) { if (current()) error = String(e); }
+    finally { if (current()) defaultBusy = false; }
+  }
   function listedVersion(v: CompactVersion): CompactVersion {
     return { ...v, ...Object.assign({}, ...outbox.pending(`spike_version:${v.id}`).map(e => e.body)) };
   }
@@ -120,6 +135,7 @@
 <section class="stack spikes" aria-label="Spikes">
   <header class="stack page-heading"><h2>Spikes</h2><p class="muted small">Registered values cannot be changed; a new calibration is added as a new version.</p></header>
   {#if error}<p class="error" role="status">{error}</p>{/if}
+  {#if spikeDefault?.id}<div class="row"><span class="small muted">Lab default spike</span><History kind="tims_settings" id={spikeDefault.id} /></div>{/if}
   <div class="master-detail">
     <section class="stack catalogue" aria-label="Spike solutions">
       <div class="solution-list">
@@ -127,7 +143,7 @@
           {@const count = currentCount(solution)}
           {@const aliases = [...new Set(solution.aliases.filter(a => a !== solution.name))]}
           <button class="panel solution" aria-pressed={solutionId === solution.id} aria-label={solution.name} onclick={() => selectSolution(solution)}>
-            <span class="row title-line"><strong>{solution.name}</strong><MetaChip text={solution.origin === 'registry' ? 'EARTHTIME' : 'Lab'} />{#if !solution.active}<StatusChip text="Inactive" />{/if}</span>
+            <span class="row title-line"><strong>{solution.name}</strong>{#if spikeDefault?.default_spike_solution_id === solution.id}<StatusChip text="Default" />{/if}<MetaChip text={solution.origin === 'registry' ? 'EARTHTIME' : 'Lab'} />{#if !solution.active}<StatusChip text="Inactive" />{/if}</span>
             {#if aliases.length}<span class="small muted">also {aliases.join(', ')}</span>{/if}
             {#if solution.isotopes.length}<span class="small muted" aria-label={solution.isotopes.join(' · ')}>{solution.isotopes.map(isotopeLabel).join(' · ')}</span>{/if}
             <span class="small muted">{count} current {count === 1 ? 'version' : 'versions'}</span>
@@ -140,6 +156,7 @@
       <article class="stack detail" aria-label="Selected spike">
         <header class="stack detail-heading">
           <h3>{selected.name}</h3>
+          {#if spikeDefault?.default_spike_solution_id === selected.id}<StatusChip text="Default" />{:else if defaultSupported && timsRights.canEditLabProtocol(lab)}<button class="btn small" type="button" disabled={!selected.active || defaultBusy || !!onlineOnlyReason()} onclick={() => void makeDefault()}>Make default</button>{/if}
           {#if selected.registry_id && selected.registry_id !== selected.name}<p class="small muted">{selected.registry_id}</p>{/if}
           {#if selected.description}<p class="small">{selected.description}</p>{/if}
           <div class="row"><MetaChip text={selected.origin === 'registry' ? 'EARTHTIME' : 'Lab'} />{#if !selected.active}<StatusChip text="Inactive" />{/if}<span class="small muted" aria-label={selected.isotopes.length ? `${selected.isotopes.join('–')} tracer` : undefined}>{selected.isotopes.length ? `${selected.isotopes.map(isotopeLabel).join('–')} tracer` : `Spike type ${selected.spike_type}`}</span></div>

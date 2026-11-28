@@ -11,7 +11,7 @@
   import { WriteError } from '../../lib/oversight.svelte';
   import { onlineOnlyReason } from '../../lib/outbox.svelte';
   import { ReplyScope } from '../../lib/tims-requests';
-  import SpikePicker from './SpikePicker.svelte';
+  import DefaultSpike from './DefaultSpike.svelte';
   let { batch, addition, pending = {}, bottles = [], startWeight = '', historical = false, editable, formId, onstate, onsave, onaccept }: {
     batch: BatchDetail; addition?: SpikeAddition; pending?: Partial<SpikeInput>; bottles?: SessionBottle[]; startWeight?: string; historical?: boolean; editable: boolean; formId: string; onstate: (canSave: boolean) => void;
     onsave: (body: SpikeInput) => Promise<SpikeAddition>; onaccept: (row: SpikeAddition) => void;
@@ -20,7 +20,7 @@
   let olderBottles = $state(false);
   const bottleChoices = $derived(bottles.filter(b => batch.spike_versions[b.versionId]?.status !== 'withdrawn' && (olderBottles || batch.spike_versions[b.versionId]?.status !== 'superseded')));
   let saved = $state.raw(untrack(() => addition));
-  let version = $state(untrack(() => addition?.spike_version_id ?? pending.spike_version_id ?? (bottleChoices.length === 1 ? bottleChoices[0].versionId : '')));
+  let version = $state(untrack(() => addition?.spike_version_id ?? (pending.spike_version_id || (bottleChoices.length === 1 ? bottleChoices[0].versionId : ''))));
   let detail = $state.raw<VersionOut>();
   let bottleId = $state(untrack(() => bottles.find(b => b.versionId === version)?.bottleId ?? ''));
   let bottleMode = $state(untrack(() => !!addition?.bottle_before_g || !addition && bottles.length > 0));
@@ -87,9 +87,9 @@
 </script>
 <section class="panel stack required-spike" aria-label="Required capsule spike">
   <div class="row"><h4>Spike assignment and weighing</h4><span class="badge">Required</span></div>
-  <p class="small muted">Pin the registered version, record the weighed mass, and check the tracer calculation for this capsule.</p>
+  <p class="small muted">Record the weighed mass and weighing details for this capsule.</p>
   <form id={formId} class="stack" onsubmit={event => { event.preventDefault(); void save(); }}>
-    <SpikePicker value={version} knownVersions={batch.spike_versions} lab={batch.lab_id} showComposition disabled={!editable || busy || historical}
+    <DefaultSpike value={version} knownVersions={batch.spike_versions} lab={batch.lab_id} disabled={!editable || busy || historical}
       onchange={chooseVersion} ondetail={row => detail = row} />
     {#if saved?.warnings.includes('spike_version_not_current')}<p class="small warning">{spikeWarnings.spike_version_not_current}</p>{/if}
     <label class="check"><input type="checkbox" bind:checked={bottleMode} disabled={!editable || busy || historical} /> Use bottle before and after</label>

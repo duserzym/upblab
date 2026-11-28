@@ -246,3 +246,37 @@ it('measures the old and new batch list page sizes with 500 invented rows and no
   expect(vi.mocked(identity.get).mock.calls.every(([path]) => path.startsWith('/v1/tims/batches?limit=200&'))).toBe(true);
   console.info(`Batch list mock network, 500 rows: before 1 request / ${beforeMs.toFixed(2)} ms; after 3 requests / ${(performance.now() - after).toFixed(2)} ms; first page 1 request in both; 0 detail reads.`);
 });
+
+
+it('reads one resolved default regardless of a large spike catalogue and writes only the lab setting', async () => {
+  const catalogue = Array.from({ length: 5000 }, (_, n) => ({ id: `synthetic-${n}` }));
+  const start = performance.now();
+  vi.mocked(identity.get).mockResolvedValueOnce({ status: 200, body: { version: catalogue[4321], source: 'default' } });
+  const resolved = await tims.spikeDefault('synthetic-lab');
+  expect(resolved.version?.id).toBe('synthetic-4321');
+  expect(identity.get).toHaveBeenCalledExactlyOnceWith('/v1/tims/labs/synthetic-lab/spike-default');
+  await tims.setSpikeDefault('synthetic-lab', 'synthetic-solution').send();
+  expect(identity.write).toHaveBeenCalledWith('/v1/tims/labs/synthetic-lab/spike-default', 'PUT', { default_spike_solution_id: 'synthetic-solution' }, expect.anything());
+  console.info(`TIMS default over 5000 mocked solutions: 1 request, ${(performance.now() - start).toFixed(1)} ms; previous manual picker: catalogue + selected version reads.`);
+});
+
+
+it('combines three sections into one write and response, with no per-capsule reads', async () => {
+  const { batch } = await import('../../tests/fixtures/tims');
+  const { bulkPayload, multiBulkPayload } = await import('./tims-group');
+  const selected = Array.from({ length: 60 }, (_, n) => ({ ...batch.fractions[0], id: `invented-${n}` }));
+  const step = batch.steps.find(s => s.method_code !== 'SP-TIMS-SPIKE')!;
+  const spike = batch.steps.find(s => s.method_code === 'SP-TIMS-SPIKE')!;
+  const drafts = { [step.id]: { operator_name: 'Synthetic' }, [spike.id]: { weighed_by_name: 'Synthetic' }, fraction: { notes: 'Shared' } };
+  const before = performance.now();
+  for (const [target, section] of [['step_record', step], ['spike', spike], ['fraction', undefined]] as const)
+    await tims.bulk(batch.id, bulkPayload(batch, selected, target, section, drafts[section?.id ?? 'fraction'])).send();
+  const beforeMs = performance.now() - before;
+  expect(identity.write).toHaveBeenCalledTimes(3);
+  vi.mocked(identity.write).mockClear();
+  const after = performance.now();
+  await tims.bulk(batch.id, multiBulkPayload(batch, selected, drafts)).send();
+  expect(identity.write).toHaveBeenCalledTimes(1);
+  expect(identity.get).not.toHaveBeenCalled();
+  console.info(`TIMS 60-capsule group / 3 sections: before 3 writes in ${beforeMs.toFixed(2)} ms; after 1 write in ${(performance.now() - after).toFixed(2)} ms; 0 follow-up reads (mock network).`);
+});

@@ -293,26 +293,19 @@ test('422 attention shows the server reason with Retry and Discard', async ({ pa
   const step = await openStep(page, 'Chemical abrasion'); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByLabel('Temperature (°C)').fill('195'); await step.getByRole('button', { name: 'Save step here' }).click();
   const edits = page.getByRole('complementary', { name: 'Saved edits' }); await expect(edits).toContainText('1 needs your attention'); await edits.getByText('1 needs your attention').click(); await expect(edits).toContainText('422'); await expect(edits).toContainText('Invented temperature refusal.'); await expect(edits.getByRole('button', { name: 'Retry' })).toBeVisible(); await edits.getByRole('button', { name: 'Discard' }).click(); await expect(edits).toHaveCount(0);
 });
-test('spike picker reviews composition and non-current warning before applying a registered version', async ({ page }) => {
-  await start(page); await openBatch(page); const step = await openStep(page, 'Spiking'); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByRole('button', { name: 'Choose spike version' }).click();
+test('spike picker chooses registered versions without composition review and keeps non-current warnings', async ({ page }) => {
+  await start(page); await openBatch(page); const step = await openStep(page, 'Spiking'); await step.getByRole('button', { name: 'Edit step' }).click(); await step.getByRole('button', { name: /^(Change|Choose spike)$/ }).click();
   const picker = page.getByRole('region', { name: 'Spike version picker' }); await expect(picker.getByLabel('Solution', { exact: true }).getByRole('option')).toHaveCount(solutions.length + 1); await picker.getByLabel('Solution', { exact: true }).selectOption('synthetic-solution'); await picker.getByLabel('Subfraction', { exact: true }).selectOption('synthetic-bottle'); await picker.getByRole('checkbox', { name: 'Show older versions' }).check(); await picker.getByLabel('Version', { exact: true }).selectOption(version.id);
-  await expect(picker.getByRole('table', { name: 'Concentrations (mol/g)', exact: true })).toContainText('0.001'); await expect(picker).toContainText('uncertainty not given'); await expect(picker).toContainText('not current'); expect(await writes(page)).toHaveLength(0);
-  await picker.getByRole('button', { name: 'Apply reviewed version' }).click(); await expect(picker).toHaveCount(0); expect(await writes(page)).toHaveLength(0);
-  await expect(step).toContainText('Selected version: Synthetic spike · Master · v1 (superseded)');
-  await step.getByRole('button', { name: 'Choose spike version' }).click();
+  await expect(picker.getByRole('region', { name: 'Spike composition' })).toHaveCount(0); await expect(picker).toContainText('not current'); expect(await writes(page)).toHaveLength(0);
+  await picker.getByRole('button', { name: 'Use version' }).click(); await expect(picker).toHaveCount(0); expect(await writes(page)).toHaveLength(0);
+  await expect(step).toContainText('Spike: Synthetic spike · v1');
+  await step.getByRole('button', { name: /^(Change|Choose spike)$/ }).click();
   await expect(picker.getByLabel('Solution', { exact: true }).getByRole('option')).toHaveCount(solutions.length + 1);
   expect(await readCount(page, '/v1/tims/spikes?limit=500')).toBe(1);
 });
-test('shared spike composition fits a 320 px picker with full stored precision', async ({ page }) => {
-  await start(page); await openBatch(page); const step = await openStep(page, 'Spiking');
-  await step.getByRole('button', { name: 'Edit step' }).click();
-  await step.getByRole('button', { name: 'Choose spike version' }).click();
-  const picker = page.getByRole('region', { name: 'Spike version picker' });
-  await picker.getByLabel('Solution', { exact: true }).selectOption(publishedVersion.solution_id);
-  await picker.getByLabel('Subfraction', { exact: true }).selectOption(publishedVersion.subfraction_id);
-  await picker.getByLabel('Version', { exact: true }).selectOption(publishedVersion.id);
-  const composition = picker.getByRole('region', { name: 'Spike composition' });
-  await expect(composition).toBeVisible();
+test('shared spike composition fits 320 px on the Spikes settings page', async ({ page }) => {
+  await start(page);
+  const { composition } = await openSpikes(page);
   await composition.evaluate(e => { e.style.width = '320px'; e.style.maxWidth = '100%'; });
   await composition.getByRole('checkbox', { name: 'Full precision', exact: true }).check();
   expect(await composition.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
@@ -1107,4 +1100,31 @@ test('refine polling pauses when hidden and stops after 10 minutes', async ({ pa
   expect(await readCount(page, '/v1/mounts/mount-demo')).toBe(3);
   expect(await readCount(page, '/v1/mounts/mount-demo/elements')).toBe(1);
   expect(await writes(page)).toEqual([]);
+});
+
+
+test('new batch quietly pins the lab default and Change opens the existing picker', async ({ page }) => {
+  await start(page);
+  await page.getByRole('button', { name: 'New batch', exact: true }).click();
+  const form = page.getByRole('form', { name: 'New batch', exact: true });
+  await expect(form).toContainText(`Spike: ${publishedVersion.solution_name} · ${publishedVersion.version}`);
+  await expect(form.getByText(/review/i)).toHaveCount(0);
+  await expect(form.getByRole('region', { name: 'Spike composition' })).toHaveCount(0);
+  await form.getByRole('button', { name: 'Change', exact: true }).click();
+  await expect(form.getByRole('region', { name: 'Spike version picker' })).toBeVisible();
+  await form.getByLabel('Active capsule set').selectOption(batch.capsule_set_id);
+  await reply(page, 'POST /v1/tims/batches', 200, batch);
+  await form.getByRole('button', { name: 'Create batch', exact: true }).click();
+  await expect.poll(() => writes(page)).toHaveLength(1);
+  expect((await writes(page))[0].body.spike_version_id).toBe(publishedVersion.id);
+});
+
+test('lab owners Make default on Spikes and see the Default chip', async ({ page }) => {
+  const setting = { id: 'invented-settings', lab_id: lab, default_spike_solution_id: null, version: null, source: 'choose' };
+  await start(page, { fixtures: { '/v1/labs': [{ id: lab, name: 'Invented lab', my_role: 'owner' }], [`/v1/tims/labs/${lab}/spike-default`]: setting } });
+  const { detail, catalogue } = await openSpikes(page);
+  await reply(page, `PUT /v1/tims/labs/${lab}/spike-default`, 200, { ...setting, default_spike_solution_id: publishedVersion.solution_id, version: publishedVersion, source: 'default' });
+  await detail.getByRole('button', { name: 'Make default', exact: true }).click();
+  await expect(catalogue.getByRole('button', { name: solutions[0].name, exact: true })).toContainText('Default');
+  expect((await writes(page))[0]).toMatchObject({ method: 'PUT', path: `/v1/tims/labs/${lab}/spike-default`, body: { default_spike_solution_id: publishedVersion.solution_id } });
 });

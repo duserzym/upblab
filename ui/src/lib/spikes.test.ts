@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { compile } from 'svelte/compiler';
 import source from '../components/tims/Spikes.svelte?raw';
 import { solutions, publishedVersion, labVersion, lab } from '../../tests/fixtures/tims';
-import type { ListPage, SpikeSolution, VersionOut } from './tims-api';
+import { TimsReadError, type ListPage, type SpikeSolution, type VersionOut, type SpikeDefault } from './tims-api';
 vi.mock('./identity.svelte', () => ({ identity: { target: { server: 'https://invented.example' }, account: { id: 'invented' }, revision: 1 } }));
 import { identity } from './identity.svelte';
 import { ReplyScope } from './tims-requests';
@@ -14,7 +14,8 @@ const { flushSync } = await import(/* @vite-ignore */ new URL('../../node_module
 const code = compile(source, { filename: 'Spikes.svelte', generate: 'client', dev: true }).js.code;
 const setup = code.slice(code.indexOf('export default function Spikes'), code.indexOf('var $$exports')).replace('export default ', '') + `
   $.pop();
-  return { choose, load, selectSolution,
+  return { choose, load, selectSolution, makeDefault, loadDefault,
+    get spikeDefault() { return $.get(spikeDefault); },
     get rows() { return $.get(rows); }, get version() { return $.get(version); },
     get solutionId() { return $.get(solutionId); }, get versionId() { return $.get(versionId); }
   };
@@ -30,14 +31,17 @@ function spikes(items = solutions) {
     spikes: vi.fn().mockResolvedValue(page(items)),
     version: vi.fn<(id: string) => Promise<VersionOut>>().mockImplementation(async id => id === publishedVersion.id ? publishedVersion : labVersion),
     patchVersion: vi.fn(),
+    spikeDefault: vi.fn<(lab: string) => Promise<SpikeDefault>>().mockResolvedValue({ id: null, lab_id: lab, default_spike_solution_id: null, version: publishedVersion, source: 'single_current' }),
   };
-  let instance!: { choose: (id: string, owner: string | null, refresh?: boolean) => Promise<void>; load: (more?: boolean) => Promise<void>; selectSolution: (solution: SpikeSolution) => void; rows: SpikeSolution[]; version: VersionOut | null; solutionId: string; versionId: string };
+  const rights = { canEditLabProtocol: vi.fn(() => true) };
+  const action = { send: vi.fn().mockResolvedValue({ id: 'invented-settings', lab_id: lab, default_spike_solution_id: items[0]?.id, version: publishedVersion, source: 'default' }) };
+  let instance!: { makeDefault: () => Promise<void>; loadDefault: () => Promise<void>; spikeDefault: SpikeDefault | null; choose: (id: string, owner: string | null, refresh?: boolean) => Promise<void>; load: (more?: boolean) => Promise<void>; selectSolution: (solution: SpikeSolution) => void; rows: SpikeSolution[]; version: VersionOut | null; solutionId: string; versionId: string };
   const destroy: (() => void)[] = [];
   stops.push(client.effect_root(() => {
-    instance = new Function('$', 'untrack', 'onDestroy', 'onMount', 'tims', 'identity', 'ReplyScope', 'outbox', 'props', setup)(client, client.untrack, (fn: () => void) => destroy.push(fn), () => {}, api, identity, ReplyScope, { pending: () => [] }, { get lab() { return client.get(owner); } });
+    instance = new Function('$', 'untrack', 'onDestroy', 'onMount', 'tims', 'identity', 'ReplyScope', 'OnlineAction', 'timsRights', 'TimsReadError', 'outbox', 'props', setup)(client, client.untrack, (fn: () => void) => destroy.push(fn), () => {}, api, identity, ReplyScope, class { send = action.send; }, rights, TimsReadError, { pending: () => [] }, { get lab() { return client.get(owner); } });
   }));
   stops.push(() => destroy.forEach(fn => fn())); flushSync();
-  return { instance, api, lab: (id: string) => { client.set(owner, id); flushSync(); } };
+  return { instance, api, rights, action, lab: (id: string) => { client.set(owner, id); flushSync(); } };
 }
 it('selects the first solution and prefers its published current master even when listed last', async () => {
   const solution = { ...solutions[0], subfractions: [...solutions[0].subfractions].reverse() };
@@ -90,4 +94,26 @@ it('publishes thousands of rows with one automatic detail read and pages only on
   await s.instance.load(true); expect(next).toHaveBeenCalledTimes(1);
   expect(s.instance.rows).toHaveLength(3001); expect(s.api.version).toHaveBeenCalledTimes(1);
   expect(s.api.patchVersion).not.toHaveBeenCalled();
+});
+
+it('loads a lab default once and restricts Make default to lab owners', async () => {
+  const s = spikes(); await settle();
+  expect(s.api.spikeDefault).toHaveBeenCalledExactlyOnceWith(lab);
+  s.rights.canEditLabProtocol.mockReturnValue(false);
+  await s.instance.makeDefault(); expect(s.action.send).not.toHaveBeenCalled();
+  s.rights.canEditLabProtocol.mockReturnValue(true);
+  await s.instance.makeDefault();
+  expect(s.action.send).toHaveBeenCalledExactlyOnceWith(`/v1/tims/labs/${lab}/spike-default`, 'PUT', { default_spike_solution_id: solutions[0].id });
+  expect(s.instance.spikeDefault?.default_spike_solution_id).toBe(solutions[0].id);
+});
+it('does not apply a default-setting reply after switching labs', async () => {
+  const s = spikes(); await settle();
+  let finish!: (value: SpikeDefault) => void;
+  s.api.spikeDefault.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const stale = s.instance.loadDefault();
+  s.lab('another-invented-lab'); await settle();
+  finish({ id: 'stale-settings', lab_id: lab, default_spike_solution_id: solutions[0].id, version: publishedVersion, source: 'default' });
+  await stale; await settle();
+  expect(s.instance.spikeDefault?.id).not.toBe('stale-settings');
+  expect(s.api.spikeDefault).toHaveBeenCalledTimes(3);
 });

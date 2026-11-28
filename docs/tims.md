@@ -233,8 +233,10 @@ earlier versions are disclosed on request. Composition tables show reference
 precision, uncertainties and provenance, with Full precision for stored numbers.
 Version details are reused within the current lab and identity scope. Status and
 notes editing remains in a separate disclosure: members may edit private
-versions, and public versions require a superuser. The batch spike picker uses
-the same tables before Apply; withdrawn versions cannot be applied. Non-current
+versions, and public versions require a superuser. Composition review stays on
+this Spikes page. Lab owners can Make default on an active solution; its Default chip identifies the lab setting. New batches quietly
+pin that solution’s current registered calibration. The quiet Spike line offers
+Change to open the picker; withdrawn versions cannot be applied. Non-current
 versions carry a warning, including any warning returned with a spike addition.
 Bottle differences come from the server. Creating spikes and versions is not included.
 
@@ -505,10 +507,13 @@ capsules; empty capsules can still be opened individually. Selection rings and t
 count have reserved space. Multiple selections replace the capsule inspector with
 the Group editor inside the same column.
 
-Choose Fraction info, Spike, or a chemistry step in recipe order. Mixed fields
-remain untouched until edited. Preview lists the touched values, capsules with
-different values, and lost or dissolved-in-CA capsules that will be skipped.
-Confirm submits one atomic online request; Cancel keeps the draft without writing.
+Open any of the sections in recipe order: Spike at its recipe position, each
+chemistry step, then Fraction info. Each keeps its own draft when collapsed. Only
+touched fields apply; Mixed stays untouched. One combined preview groups changes
+by step and lists differing existing values and skipped lost or dissolved-in-CA
+capsules. Confirm submits every edited section in one atomic online request;
+Cancel keeps all drafts without writing. Apply keeps the editor, open sections and
+capsule selection in place, ready for the next edit.
 A stale capsule refuses the whole request; refresh and review the selection again.
 Completed batches remain read only.
 
@@ -523,7 +528,7 @@ selected overrides for the touched default fields. Operator, precise time, outco
 skip flag and comments remain capsule records.
 
 Spike group edits change registered version, weighing date/time, analyst and balance
-readability, with active-solution/version review through the existing picker. Before
+readability, with registered-version selection through the existing picker. Before
 weighing, these values are pending metadata on the step record; they never count as
 a spike addition or satisfy readiness. Enter weights opens compact per-capsule mass
 entry: Tab or Enter saves and advances; Shift+Tab goes back without saving. Each
@@ -531,7 +536,32 @@ weight uses the existing spike PUT with the addition or pending-record revision.
 A changed addition or pending assignment refuses the weighing without advancing.
 
 Undo last group edit sends the returned previous values through the bulk endpoint,
-with the revisions from that edit. It adds history rather than removing it. An
-intervening edit or weighing causes a conflict; undo never overwrites newer work.
+for every edited section in one call, with the revisions from that edit. It adds
+history rather than removing it. An intervening edit or weighing causes a conflict; undo never overwrites newer work.
 Group history rows share an operation identifier and retain actor and before/after
 values. Selection and drafts stay local; group edits and weights require a connection.
+
+
+## Lab default spike (2026-11-27)
+
+The default is a solution choice per lab in UPbDB, not a rewritten calibration or
+a per-user preference. Lab owners and superusers set it on Spikes with Make
+default; history records changes. The current version is resolved for each new
+batch, then pinned to its exact registered version id in the copied recipe and
+batch step. A nullable batch pin also keeps the setup choice when steps are
+added later without a recipe. Existing batch and capsule pins always win over a
+later default.
+
+A single current lab-private calibration of the default solution takes precedence
+over its public master. Multiple current lab calibrations require Choose spike;
+no bottle is guessed. Without a configured solution, exactly one active current
+version visible to this lab is the fallback. Otherwise a plain sentence explains
+Choose spike. Change opens the existing picker without composition review. An
+older server without this setting also offers Choose spike. Weights, weighing
+metadata, required per-capsule additions and validation are unchanged.
+
+Group sections and previews scroll inside the existing inspector. The region
+stability checks cover selection, opening and collapsing sections, preview and
+Apply at 1440 × 900, 1280 × 800 and 1024 × 640, with at most 2 px movement
+of the three bench regions (1 px for wells). These browser checks require the
+supervisor’s Chromium and WebKit run.

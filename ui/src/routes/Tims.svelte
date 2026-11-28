@@ -14,6 +14,7 @@
   import Recipes from '../components/tims/Recipes.svelte';
   import CapsuleSets from '../components/tims/CapsuleSets.svelte';
   import Spikes from '../components/tims/Spikes.svelte';
+  import DefaultSpike from '../components/tims/DefaultSpike.svelte';
   import PickNotes from '../components/tims/PickNotes.svelte';
   let { active }: { active: boolean } = $props();
   const sections = ['Batches', 'Recipes', 'Capsule sets', 'Spikes', 'Import pick notes'] as const;
@@ -22,6 +23,7 @@
   let refresh = $state(0);
   let sets = $state.raw<CapsuleOut[]>([]), setPage = $state.raw<ListPage<CapsuleOut> | null>(null), recipes = $state.raw<RecipeOut[]>([]), recipePage = $state.raw<ListPage<RecipeOut> | null>(null), methods = $state.raw<MethodCode[]>([]);
   let filters = $state<BatchFilters>(emptyBatchFilters()), labError = $state(''), methodError = $state(''), catalogError = $state(''), error = $state(''), creating = $state(false), loadedSource = $state(''), prefLoaded = $state(false);
+  let spikeVersion = $state(''), spikeLoading = $state(false);
   let capsuleSetId = $state(''), started = $state(new Date().toISOString().slice(0, 10)), useAccount = $state(true), operator = $state(''), recipe = $state(''), mineral = $state('zircon'), notes = $state('');
   let formGeneration = 0, labsGeneration = 0, methodsGeneration = 0, setsGeneration = 0, recipesGeneration = 0;
   let formBusy = $state(false);
@@ -37,7 +39,7 @@
   $effect(() => { void source; untrack(() => { clearTimsNames(); batchMonths.clear(); sets = []; recipes = []; methods = []; labs = []; lab = ''; loadedSource = ''; labPage = null; error = ''; labError = ''; methodError = ''; catalogError = ''; prefLoaded = false; creating = false; if (!active) shell.timsBatch = null; }); });
   $effect(() => { if (active && identity.signedIn && shell.serverUrl && loadedSource !== source) { const owner = source; untrack(() => { loadedSource = owner; void loadLabs(); void loadMethods(); }); } });
   $effect(() => { void shell.timsRequest; if (shell.timsBatch) untrack(() => section = 'Batches'); });
-  $effect(() => { void lab; void source; untrack(() => { listReplies.invalidate(); formReplies.invalidate(); if (lab) { creating = false; capsuleSetId = ''; recipe = ''; operator = ''; notes = ''; setPage = null; recipePage = null; void catalogs(); void loadBatches(); } }); });
+  $effect(() => { void lab; void source; untrack(() => { listReplies.invalidate(); formReplies.invalidate(); if (lab) { creating = false; capsuleSetId = ''; spikeVersion = ''; recipe = ''; operator = ''; notes = ''; setPage = null; recipePage = null; void catalogs(); void loadBatches(); } }); });
   $effect(() => { if (!prefLoaded || !identity.account?.id || !identity.target) return; const body = JSON.stringify({ lab, filters }); const key = preferenceKey(identity.target.server, identity.account.id); untrack(() => { try { localStorage.setItem(key, body); } catch { /* Settings may be unavailable in a private window. */ } }); });
   onMount(() => { const saved = (event: Event) => { const key = (event as CustomEvent<{ objectKey: string }>).detail?.objectKey; if (ready && section === 'Batches' && !shell.timsBatch && key?.startsWith('batch:')) void loadBatches(); }; window.addEventListener('tims-saved', saved); return () => { window.removeEventListener('tims-saved', saved); }; });
   async function loadLabs(more = false) {
@@ -64,9 +66,10 @@
   }
   function loadBatches() { batchMonths.clear(); refresh++; }
   async function createBatch() {
-    const settled = formReplies.capture(), current = formReplies.capture(() => [shell.view, capsuleSetId, started, useAccount, operator, recipe, mineral, notes]); formBusy = true; error = '';
+    if (formBusy || spikeLoading) return;
+    const settled = formReplies.capture(), current = formReplies.capture(() => [shell.view, capsuleSetId, started, useAccount, operator, recipe, mineral, notes, spikeVersion]); formBusy = true; error = '';
     try {
-      const row = await creation.send('/v1/tims/batches', 'POST', { capsule_set_id: capsuleSetId, started_on: started, operator_id: useAccount ? identity.account?.id : null, operator_name: useAccount ? identity.account?.display_name || identity.account?.username || '' : operator, recipe_id: recipe || null, notes });
+      const row = await creation.send('/v1/tims/batches', 'POST', { capsule_set_id: capsuleSetId, started_on: started, operator_id: useAccount ? identity.account?.id : null, operator_name: useAccount ? identity.account?.display_name || identity.account?.username || '' : operator, recipe_id: recipe || null, notes, ...(spikeVersion ? { spike_version_id: spikeVersion } : {}) });
       if (!current()) return;
       formBusy = false; creating = false; await shell.openTimsBatch(row.id);
     } catch (e) { if (current()) error = String(e); } finally { if (settled()) formBusy = false; }
@@ -88,9 +91,9 @@
     {#if !lab}<section class="panel stack"><h2>{labBusy ? 'Loading labs…' : !labPage ? 'Labs unavailable' : 'No lab membership'}</h2><p>{labBusy ? 'Reading your lab memberships from UPbDB.' : !labPage ? 'Could not read lab membership from the server.' : 'Ask a lab owner to add your account to a lab.'}</p></section>
     {:else if section === 'Batches'}
       {#if shell.timsBatch}{#key source + shell.timsBatch}<BatchEditor id={shell.timsBatch} initialStep={shell.timsStep} {methods} {recipes} labName={labs.length === 1 ? labs.find(l => l.id === lab)?.name || labs.find(l => l.id === lab)?.handle || lab : ''} onback={() => { shell.timsBatch = null; void loadBatches(); void catalogs(); }} onlab={owner => { if (eligibleLabs.some(l => l.id === owner)) lab = owner; }} />{/key}{:else}
-      <div class="row batch-heading"><h2>Batches</h2><button class="btn small" class:primary={!creating} disabled={!editable || !!onlineOnlyReason()} title={onlineOnlyReason()} onclick={() => { formGeneration++; formBusy = false; creating = !creating; void catalogs(); }}>New batch</button></div>
+      <div class="row batch-heading"><h2>Batches</h2><button class="btn small" class:primary={!creating} disabled={!editable || !!onlineOnlyReason()} title={onlineOnlyReason()} onclick={() => { formGeneration++; formBusy = false; creating = !creating; if (creating) spikeVersion = ''; void catalogs(); }}>New batch</button></div>
       {#if setPage?.nextCursor}<button class="btn" onclick={() => void catalogs('sets')}>Load more set choices</button>{/if}
-      {#if creating}<form class="panel stack" aria-label="New batch" onsubmit={e => { e.preventDefault(); void createBatch(); }}><h3>New batch</h3><label>Active capsule set <select required bind:value={capsuleSetId}><option value="">Choose capsule set</option>{#each sets.filter(s => s.active) as s}<option value={s.id}>{s.name} {s.code}</option>{/each}</select></label><label>Started date <input type="date" required bind:value={started} /></label><label><input type="checkbox" bind:checked={useAccount} /> Use my account as operator</label><label>Operator name <input bind:value={operator} disabled={useAccount} /></label><label>Mineral <select bind:value={mineral} onchange={() => recipe = ''}>{#each minerals as m}<option value={m}>{m}</option>{/each}</select></label><label>Active recipe <select bind:value={recipe}><option value="">No recipe</option>{#each recipes.filter(r => r.active && r.mineral === mineral) as r}<option value={r.id}>{r.name}</option>{/each}</select></label>{#if recipePage?.nextCursor}<button class="btn" type="button" onclick={() => void catalogs('recipes')}>Load more recipe choices</button>{/if}<label>Notes <textarea bind:value={notes}></textarea></label><button class="btn primary" disabled={!editable || formBusy || !!onlineOnlyReason()}>Create batch</button></form>{/if}
+      {#if creating}<form class="panel stack" aria-label="New batch" onsubmit={e => { e.preventDefault(); void createBatch(); }}><h3>New batch</h3><label>Active capsule set <select required bind:value={capsuleSetId}><option value="">Choose capsule set</option>{#each sets.filter(s => s.active) as s}<option value={s.id}>{s.name} {s.code}</option>{/each}</select></label><label>Started date <input type="date" required bind:value={started} /></label><label><input type="checkbox" bind:checked={useAccount} /> Use my account as operator</label><label>Operator name <input bind:value={operator} disabled={useAccount} /></label><label>Mineral <select bind:value={mineral} onchange={() => recipe = ''}>{#each minerals as m}<option value={m}>{m}</option>{/each}</select></label><label>Active recipe <select bind:value={recipe}><option value="">No recipe</option>{#each recipes.filter(r => r.active && r.mineral === mineral) as r}<option value={r.id}>{r.name}</option>{/each}</select></label>{#if recipePage?.nextCursor}<button class="btn" type="button" onclick={() => void catalogs('recipes')}>Load more recipe choices</button>{/if}<DefaultSpike value={spikeVersion} {lab} disabled={!editable || formBusy} onchange={id => spikeVersion = id} onloading={loading => spikeLoading = loading} /><label>Notes <textarea bind:value={notes}></textarea></label><button class="btn primary" disabled={!editable || formBusy || spikeLoading || !!onlineOnlyReason()}>Create batch</button></form>{/if}
       {#key source + lab}<BatchList {lab} {filters} {sets} {recipes} {refresh} viewer={{ server: identity.target?.server ?? shell.serverUrl, account: oversight.viewAs?.username ?? identity.account?.id ?? identity.account?.username ?? '' }}>
         {#snippet filterControls()}
           <form class="filters row" aria-label="Batch filters" onsubmit={e => e.preventDefault()}>

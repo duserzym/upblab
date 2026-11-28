@@ -9,6 +9,7 @@
   import ParameterFields from './ParameterFields.svelte';
   import { labProtocol, labProtocols, useLabProtocols } from '../../lib/tims-lab-protocols.svelte';
   import ColumnProtocol from './ColumnProtocol.svelte';
+  import DefaultSpike from './DefaultSpike.svelte';
   import SpikePicker from './SpikePicker.svelte';
 
   let { step, batch, lab, editable, index, total, move, refresh, knownVersions = {}, spikes = [], sessionStepIds }: {
@@ -116,7 +117,7 @@
               {#if !inUse}<button class="btn small" type="button" disabled={!editable || busy} aria-label={`Remove ${bottle.label}`} onclick={() => bottles = bottles.filter(row => row !== bottle)}>Remove</button>{/if}
             </div>
           {/each}
-          <SpikePicker value={pickerVersion} onchange={addBottle} disabled={!editable || busy} {lab} {knownVersions} showComposition />
+          <DefaultSpike value={pickerVersion} onchange={addBottle} disabled={!editable || busy} {lab} {knownVersions} />
         </fieldset>
       {/if}
       {#if column}<ColumnProtocol reference={columnProtocol(parameters.scheme)} loadError={labProtocols.state(lab).error} labProtocol={labProtocol(lab, columnProtocol(parameters.scheme)?.scheme)} value={protocolDraft} saved={!!columnNotes.protocol} onchange={value => protocolDraft = value} />{/if}
@@ -128,6 +129,7 @@
       </div>
     </form>
   {:else}
+    {#if spiking}<SpikePicker value={String(step.parameters.spike_version ?? '')} {lab} {knownVersions} disabled={!editable || busy} onchange={(id, version, spikeType) => { toggleEdit(); addBottle(id, version, spikeType); }} />{/if}
     <p class="small muted">{spiking ? 'Spiking date' : 'Performed on'} · {step.performed_on ?? 'Not recorded'}</p>
     {#if parameterDefinitions(definitions).length}
       <ul>{#each parameterDefinitions(definitions) as d}

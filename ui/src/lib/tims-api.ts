@@ -22,7 +22,7 @@ export type ColumnProtocolInput = Pick<ColumnProtocolOut, 'lab_id' | 'scheme' | 
 export type ColumnProtocolPatch = Partial<Pick<ColumnProtocolOut, 'title' | 'text' | 'attribution' | 'source_url'>> & { revision: number };
 export interface BatchCounts { positions: number; capsules: number; grain: number; spike: number; ready: number }
 export interface ScheduleItem { step_id: string; method_code: string; step_name: string; date: string; capsule_count: number; minerals: string[]; temperature_c?: number | null; parameters?: Parameters }
-export interface BatchOut extends BaseOut { schedule?: ScheduleItem[]; lab_id: string; capsule_set_id: string; started_on: string; operator_id: string | null; operator_name: string; recipe_id: string | null; recipe_snapshot: RecipeStep[]; recipe_name?: string | null; fraction_count?: number; samples?: { id: string; name: string }[]; counts?: BatchCounts; capsule_set_name?: string; capsule_set_code?: string; notes: string; retired_at: string | null; completed_at?: string | null; completed_by_name?: string | null }
+export interface BatchOut extends BaseOut { schedule?: ScheduleItem[]; default_spike_version_id?: string | null; lab_id: string; capsule_set_id: string; started_on: string; operator_id: string | null; operator_name: string; recipe_id: string | null; recipe_snapshot: RecipeStep[]; recipe_name?: string | null; fraction_count?: number; samples?: { id: string; name: string }[]; counts?: BatchCounts; capsule_set_name?: string; capsule_set_code?: string; notes: string; retired_at: string | null; completed_at?: string | null; completed_by_name?: string | null }
 export interface ParameterDefinition { name: string; config_key?: string; meaning?: string; unit?: string | null; type?: string; choices?: (string | number | { value: string | number; label?: string })[]; default?: unknown; min?: number; max?: number; required?: boolean; scope?: 'batch' | 'fraction'; role?: 'parameter' | 'outcome' }
 export interface StepOut extends BaseOut { batch_id: string; ordinal: number; method_code: string; method_name: string; parameters: Parameters; parameter_definitions: ParameterDefinition[]; performed_on: string | null; notes: string }
 export interface FractionStepRecord extends BaseOut { performed_at?: string | null; performed_on?: string | null; operator_name?: string; spike_metadata?: Partial<SpikeInput>; fraction_id: string; step_id: string; parameters: Parameters; skipped: boolean; outcome: string; outcome_note: string }
@@ -34,6 +34,7 @@ export type VersionStatus = 'current' | 'superseded' | 'withdrawn';
 export interface CompactVersion { id: string; version: string; status: VersionStatus; source: string; source_display: string; content_sha256: string; calibrated?: string }
 export interface SpikeSubfraction extends BaseOut { lab_id: string | null; origin: string; sub_id: string; name: string; notes: string; versions: CompactVersion[] }
 export interface SpikeSolution extends BaseOut { registry_id: string; name: string; aliases: string[]; spike_type: string; isotopes: string[]; description: string; origin: string; lab_id: string | null; active: boolean; subfractions: SpikeSubfraction[] }
+export interface SpikeDefault { id: string | null; lab_id: string; default_spike_solution_id: string | null; version: VersionOut | null; source: 'default' | 'single_current' | 'choose' }
 export interface CompositionValue { value: number; unit?: 'mol/g'; uncertainty?: number; uncertainty_type?: '1sd_rel_pct' | '2sd_rel_pct' | '1sd_abs' | '2sd_abs' }
 export interface Composition { concentrations: Record<string, CompositionValue>; ratios: Record<string, CompositionValue> }
 export interface VersionOut extends BaseOut { solution_id: string; registry_id: string; solution_name: string; subfraction_id: string; subfraction: string; subfraction_name: string; version: string; status: VersionStatus; supersedes_id: string | null; calibrated: string; source: string; source_display: string; locator: string; notes: string; composition: Composition; content_sha256: string; registry_revision: string; is_current: boolean }
@@ -49,7 +50,7 @@ export type CapsuleInput = Pick<CapsuleOut, 'lab_id' | 'name'> & Partial<Pick<Ca
 export type CapsulePatch = Partial<Pick<CapsuleOut, 'name' | 'code' | 'positions' | 'active' | 'notes'>>;
 export type RecipeInput = Pick<RecipeOut, 'lab_id' | 'mineral' | 'name'> & Partial<Pick<RecipeOut, 'steps' | 'active' | 'notes'>>;
 export type RecipePatch = Partial<Pick<RecipeOut, 'mineral' | 'name' | 'steps' | 'active' | 'notes'>>;
-export type BatchInput = Pick<BatchOut, 'capsule_set_id' | 'started_on'> & Partial<Pick<BatchOut, 'operator_id' | 'operator_name' | 'recipe_id' | 'notes'>>;
+export type BatchInput = Pick<BatchOut, 'capsule_set_id' | 'started_on'> & Partial<Pick<BatchOut, 'operator_id' | 'operator_name' | 'recipe_id' | 'notes'>> & { spike_version_id?: string | null };
 export type BatchPatch = Partial<Pick<BatchOut, 'started_on' | 'operator_id' | 'operator_name' | 'notes' | 'retired_at'>>;
 export interface StepInput { method_code: string; parameters?: Parameters; performed_on?: string | null; notes?: string }
 export interface RecordInput { performed_at?: string | null; performed_on?: string | null; operator_name?: string; parameters?: Parameters; skipped?: boolean; outcome?: string; outcome_note?: string }
@@ -137,6 +138,8 @@ function protocolForm(path: string, method: 'POST' | 'PATCH', body: ColumnProtoc
   return form;
 }
 export const tims = {
+  spikeDefault: (lab: string) => read<SpikeDefault>(`/v1/tims/labs/${id(lab)}/spike-default`),
+  setSpikeDefault: (lab: string, solution: string | null) => onlineForm<SpikeDefault>(`/v1/tims/labs/${id(lab)}/spike-default`, 'PUT', { default_spike_solution_id: solution }),
   saveSpike: (batch: string, fraction: string, step: string, body: SpikeInput) => onlineForm<SpikeAddition>(`${recordPath(batch, fraction, step)}/spike`, 'PUT', body, `batch:${batch}`),
   bulk: (batch: string, body: import('./tims-group').BulkInput) => onlineForm<import('./tims-group').BulkResult>(`${batchPath(batch)}/bulk`, 'POST', body, `batch:${batch}`),
   sampleChoices: (query: string) => firstPage<CapsuleSample>('/v1/samples', { limit: '50', q: query }),
@@ -185,7 +188,7 @@ export const tims = {
   patchVersion: (version: string, body: { status?: VersionStatus; notes?: string }) => edit(`spike_version:${version}`, `/v1/tims/spikes/versions/${id(version)}`, body),
   previewNotes: (body: PickNoteRequest) => onlineForm<PickNotePlan>('/v1/tims/pick-notes/preview', 'POST', body),
   importNotes: (body: PickNoteRequest & { status?: FractionStatus }) => onlineForm<{ plan: PickNotePlan; created: Record<string, string[]> }>('/v1/tims/pick-notes/import', 'POST', body),
-  history: (kind: 'fraction' | 'batch' | 'capsule_set' | 'recipe' | 'column-protocol' | 'spike_solution' | 'spike_version', object: string) => firstPage<HistoryRow>(`/v1/history/${kind}/${id(object)}`),
+  history: (kind: 'fraction' | 'batch' | 'capsule_set' | 'recipe' | 'column-protocol' | 'tims_settings' | 'spike_solution' | 'spike_version', object: string) => firstPage<HistoryRow>(`/v1/history/${kind}/${id(object)}`),
 };
 export const capsuleLabel = (fraction: Pick<FractionOut, 'capsule_label'>) => fraction.capsule_label ?? 'No capsule';
 export { statusWords } from './tims-model';

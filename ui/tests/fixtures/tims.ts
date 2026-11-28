@@ -50,6 +50,7 @@ export const fixtures: Record<string, unknown> = {
   [`/v1/tims/batches/${batch.id}`]: batch,
   '/v1/method-codes?q=SP-TIMS': methods,
   '/v1/tims/spikes': solutions,
+  [`/v1/tims/labs/${lab}/spike-default`]: { id: null, lab_id: lab, default_spike_solution_id: publishedVersion.solution_id, version: publishedVersion, source: 'default' },
   [`/v1/tims/spikes/versions/${version.id}`]: version,
   ...Object.fromEntries([publishedVersion, labVersion, earlierVersion, withdrawnVersion].map(v => [`/v1/tims/spikes/versions/${v.id}`, v])),
   ...atlasFixtures,

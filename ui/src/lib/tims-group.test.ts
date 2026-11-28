@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { batch as fixture } from '../../tests/fixtures/tims';
-import { emptySelection, selectAll, selectCapsule, selectPuck, mixed, groupValue, bulkPayload, groupPreview, undoPayload, groupRevision, type BulkResult } from './tims-group';
+import { emptySelection, selectAll, selectCapsule, selectPuck, mixed, groupValue, bulkPayload, groupPreview, undoPayload, groupRevision, type BulkResult, multiBulkPayload, combinedPreview, groupSections } from './tims-group';
 const order = Array.from({ length: 15 }, (_, i) => i + 1);
 const batch = () => structuredClone(fixture);
 
@@ -59,7 +59,7 @@ describe('group drafts and preview', () => {
     const b = batch(), step = b.steps[0];
     b.fractions[0].status = 'picked'; b.fractions[1].status = 'lost';
     step.performed_on = '2026-11-20'; b.fraction_step_records = [];
-    expect(groupPreview(b, b.fractions, 'step_record', step, { performed_on: '2026-11-27' })).toBe('Apply to 1 capsule: performed on → 2026-11-27; 1 capsule already had a different value (K1); 1 capsule lost or dissolved in CA and skipped (K2)');
+    expect(groupPreview(b, b.fractions, 'step_record', step, { performed_on: '2026-11-27' })).toBe('Apply to 1 capsule: performed on → 2026-11-27; 1 capsule already had a different value (K1: 2026-11-20); 1 capsule lost or dissolved in CA and skipped (K2)');
   });
   it('previews a registered spike name and touched parameter', () => {
     const b = batch();
@@ -87,5 +87,55 @@ describe('group drafts and preview', () => {
     b.spikes = []; b.fraction_step_records = [{ ...f, id: 'pending', updated_at: '2026-11-27T12:00:00Z', fraction_id: f.id, step_id: step.id, parameters: {}, skipped: false, outcome: '', outcome_note: '', spike_metadata: { spike_version_id: 'v', weighed_by_name: 'Synthetic' } }];
     expect(groupRevision(b, f.id, 'spike', step.id)).toBe('2026-11-27T12:00:00Z');
     expect(groupValue(b, f, 'spike', step)).toMatchObject({ spike_version_id: 'v', weighed_by_name: 'Synthetic' });
+  });
+});
+
+
+describe('combined group apply', () => {
+  it('orders every section by recipe, keeps independent touched fields and per-section defaults', () => {
+    const b = batch(); b.steps.reverse();
+    const chemistry = b.steps.find(s => s.method_code !== 'SP-TIMS-SPIKE')!;
+    const spike = b.steps.find(s => s.method_code === 'SP-TIMS-SPIKE')!;
+    const drafts = { [chemistry.id]: { performed_on: '2026-11-27' }, [spike.id]: { weighed_by_name: 'Synthetic' }, fraction: { notes: 'Shared' } };
+    const input = multiBulkPayload(b, b.fractions, drafts, { [chemistry.id]: true });
+    expect(groupSections(b).at(-1)?.key).toBe('fraction');
+    expect(input.operations.map(op => op.target)).toEqual(groupSections(b).filter(s => s.key in drafts).map(s => s.target));
+    expect(input.operations.find(op => op.step_id === chemistry.id)).toMatchObject({ set: drafts[chemistry.id], batch_default: true, expected_step: chemistry.updated_at });
+    expect(input.operations.find(op => op.step_id === spike.id)?.set).toEqual({ weighed_by_name: 'Synthetic' });
+    expect(input.operations.at(-1)?.set).toEqual({ notes: 'Shared' });
+    expect(input.operations.every(op => !Object.hasOwn(op.set, 'parameters'))).toBe(true);
+    expect(input).not.toHaveProperty('target');
+  });
+  it('previews all sections and explicit defaults with differing old values and skipped labels', () => {
+    const b = batch(), step = b.steps[0];
+    b.fraction_step_records = []; b.fractions[0].status = 'picked'; b.fractions[1].status = 'lost';
+    step.performed_on = '2026-11-20';
+    const preview = combinedPreview(b, b.fractions, { [step.id]: { performed_on: '2026-11-27' }, fraction: { notes: 'Shared' } }, {}, { [step.id]: true });
+    expect(preview).toContain(`${step.method_name}: Apply to 1 capsule: performed on → 2026-11-27`);
+    expect(preview).toContain('K1: 2026-11-20');
+    expect(preview).toContain('skipped (K2)');
+    expect(preview).toContain('Set batch parameters/date');
+    expect(preview).toContain('\nFraction info: Apply to 1 capsule: notes → Shared');
+  });
+  it('undo restores all operations and defaults using only revisions from that apply', () => {
+    const b = batch(), step = b.steps[0];
+    const input = multiBulkPayload(b, b.fractions, { [step.id]: { operator_name: 'New' }, fraction: { notes: 'New' } });
+    const result: BulkResult = { batch: b, previous: {}, previous_default: null, skipped_fraction_ids: [], operations: input.operations.map(op => ({
+      target: op.target, step_id: op.step_id ?? null, previous: Object.fromEntries(b.fractions.map(f => [f.id, op.target === 'fraction' ? { notes: 'Old' } : { operator_name: '' }])),
+      previous_default: op.step_id ? { performed_on: '2026-11-20' } : null, skipped_fraction_ids: [],
+    })) };
+    const newer = batch(); newer.fractions.forEach(f => f.updated_at = '2099-01-01T00:00:00Z');
+    const undo = undoPayload({ input, result }, newer);
+    expect(undo).toEqual({ fraction_ids: b.fractions.map(f => f.id), operations: result.operations!.map(op => ({
+      target: op.target, ...(op.step_id ? { step_id: op.step_id } : {}), set: {}, restore: op.previous,
+      expected: Object.fromEntries(b.fractions.map(f => [f.id, groupRevision(b, f.id, op.target, op.step_id ?? undefined)])),
+      ...(op.previous_default ? { restore_default: op.previous_default, expected_step: step.updated_at } : {}),
+    })) });
+  });
+  it('does not accidentally submit sections that were only opened, or apply missing combined undo values', () => {
+    const b = batch();
+    expect(multiBulkPayload(b, b.fractions, {}).operations).toEqual([]);
+    const input = multiBulkPayload(b, b.fractions, { fraction: { notes: 'New' } });
+    expect(() => undoPayload({ input, result: { batch: b, previous: {}, previous_default: null, skipped_fraction_ids: [] } }, b)).toThrow('combined undo');
   });
 });

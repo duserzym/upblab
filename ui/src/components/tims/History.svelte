@@ -5,7 +5,7 @@
   import { historyChanges } from '../../lib/tims-model';
   import { ReplyScope } from '../../lib/tims-requests';
   import IconButton from '../ui/IconButton.svelte';
-  let { kind, id, iconOnly = false }: { kind: 'batch' | 'recipe' | 'capsule_set' | 'column-protocol'; id: string; iconOnly?: boolean } = $props();
+  let { kind, id, iconOnly = false }: { kind: 'batch' | 'recipe' | 'capsule_set' | 'column-protocol' | 'tims_settings'; id: string; iconOnly?: boolean } = $props();
   let open = $state(false), busy = $state(false), error = $state('');
   let rows = $state.raw<HistoryRow[]>([]), page = $state.raw<ListPage<HistoryRow> | null>(null);
   let generation = 0;
