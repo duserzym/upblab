@@ -1,4 +1,5 @@
 <script lang="ts">
+  import BatchMonthGrid from './BatchMonthGrid.svelte';
   import IconButton from '../ui/IconButton.svelte';
   import { onDestroy, tick, untrack, type Snippet } from 'svelte';
   import { identity } from '../../lib/identity.svelte';
@@ -9,7 +10,7 @@
   import { loadListView, saveListView, type ListView } from '../../lib/tims-guidance';
   import { formatCalendarDate } from '../../lib/calendar-date';
   import { operatorName } from '../../lib/tims-display';
-  import { axisTicks, daysBetween, monthWindow, monthGrid, shiftMonth, defaultLaneWindow, extendLaneWindow, batchState, batchSetName, batchSamples, hasBatchSummary, viewQuery, visibleBatches } from '../../lib/tims-batch-list';
+  import { axisTicks, daysBetween, monthWindow, shiftMonth, defaultLaneWindow, extendLaneWindow, batchState, batchSetName, batchSamples, hasBatchSummary, viewQuery, visibleBatches } from '../../lib/tims-batch-list';
   import { batchEvents, packScheduleLane, scheduleTitle, type BatchEvent } from '../../lib/tims-schedule';
   import { batchMonths, collectBatchPages, type BatchSnapshot } from '../../lib/tims-batch-pages';
   import SegmentedControl from '../ui/SegmentedControl.svelte';
@@ -21,9 +22,7 @@
   let month = $state(`${today.slice(0, 7)}-01`), window = $state(defaultLaneWindow(today)), zoom = $state('weeks');
   let rows = $state.raw<BatchOut[]>([]), page = $state.raw<ListPage<BatchOut> | null>(null), busy = $state(false), error = $state(''), truncated = $state(false), legacy = $state(false);
   let sort = $state<'date' | 'set'>('date'), ascending = $state(false), generation = 0;
-  let returnFocus: HTMLButtonElement | undefined;
-  let overflowDay = $state('');
-  let overflowRegion = $state<HTMLDivElement>(), monthHeading = $state<HTMLElement>();
+  let monthHeading = $state<HTMLElement>();
   let laneScroll = $state<HTMLDivElement>();
   const period = $derived(view === 'calendar' ? monthWindow(month) : window);
   const query = $derived(viewQuery(lab, filters, view, period));
@@ -37,9 +36,7 @@
     const comparison = sort === 'set' ? name(a).localeCompare(name(b)) : a.started_on.localeCompare(b.started_on);
     return (ascending ? comparison : -comparison) || a.id.localeCompare(b.id);
   }));
-  const days = $derived(monthGrid(month, true));
   const missingSchedule = $derived(view !== 'rows' && rows.some(row => row.schedule === undefined));
-  const dayRows = $derived(new Map(days.map(day => [day, events.filter(item => item.date === day)])));
   const monthTitle = $derived(new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${month}T00:00:00Z`)));
   const dayWidth = $derived(zoom === 'weeks' ? 22 : 8);
   const axisWidth = $derived((daysBetween(window.start, window.end) + 1) * dayWidth);
@@ -50,7 +47,7 @@
   $effect(() => {
     const request = { ...query }, selectedView = view, key = JSON.stringify([viewer, request]); void refresh;
     const gen = ++generation;
-    untrack(() => { overflowDay = ''; rows = []; page = null; error = ''; busy = true; truncated = false; legacy = false; });
+    untrack(() => { rows = []; page = null; error = ''; busy = true; truncated = false; legacy = false; });
     // Coalesce date typing and consecutive filter changes into one read.
     const timer = setTimeout(() => { void load(request, selectedView, key, gen); }, 300);
     return () => { clearTimeout(timer); generation++; };
@@ -97,18 +94,12 @@
     finally { if (gen === generation) busy = false; }
   }
   function toggleSort(column: 'date' | 'set') { ascending = column === sort ? !ascending : column === 'set'; sort = column; }
-  async function showMore(day: string, button: HTMLButtonElement) {
-    overflowDay = overflowDay === day ? '' : day; returnFocus = button;
-    if (overflowDay) { await tick(); overflowRegion?.focus({ preventScroll: true }); }
-  }
-  function closeMore() { overflowDay = ''; returnFocus?.focus({ preventScroll: true }); }
   async function selectMonth(value: string) {
     month = value;
     await tick(); monthHeading?.focus({ preventScroll: true });
   }
 </script>
-<svelte:window onkeydown={event => { if (event.key === 'Escape' && overflowDay) closeMore(); }} />
-<div class="batch-views stack">
+<div class="batch-views stack" class:calendar-view={view === 'calendar'}>
   <div class="row view-toolbar">
     <SegmentedControl label="Batch list view" options={[{ value: 'rows', label: 'Rows' }, { value: 'calendar', label: 'Calendar' }, { value: 'lanes', label: 'Lanes' }]} value={view} onchange={selectView} size="small" />
     {@render filterControls?.()}
@@ -146,24 +137,7 @@
     </section>
     {#if page?.nextCursor}<button class="btn" disabled={busy} onclick={() => void more()}>Load more batches</button>{/if}
   {:else if view === 'calendar'}
-    <section class="calendar" aria-label="Batch calendar">
-      <div class="weekdays" aria-hidden="true">{#each ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as day}<span>{day}</span>{/each}</div>
-      <div class="month-grid">
-        {#each days as day (day)}
-          {@const batches = dayRows.get(day) ?? []}
-          <div class="day" class:outside={day.slice(0, 7) !== month.slice(0, 7)} class:today={day === today}>
-            <time datetime={day} aria-current={day === today ? 'date' : undefined} title={formatCalendarDate(day)}>{Number(day.slice(8))}</time>
-            {#each batches.slice(0, 2) as item (item.key)}<button class="calendar-chip" data-kind={item.kind} aria-label={eventLabel(item)} title={scheduleTitle(item, name(item.batch))} onclick={() => openEvent(item)}>{item.legacy ? name(item.batch) : eventLabel(item)}</button>{/each}
-            {#if batches.length > 2}<button class="more-chip" aria-expanded={overflowDay === day} aria-controls="calendar-overflow" aria-label={`${batches.length - 2} more steps on ${day}`} onclick={event => showMore(day, event.currentTarget)}>+{batches.length - 2} more</button>{/if}
-          </div>
-        {/each}
-      </div>
-      <div id="calendar-overflow" class="calendar-overflow" bind:this={overflowRegion} role="region" aria-label={overflowDay ? `More steps on ${overflowDay}` : 'Calendar overflow'} tabindex="-1">
-        {#if overflowDay}<div class="row"><strong>{formatCalendarDate(overflowDay)}</strong><button class="btn small" onclick={closeMore}>Close</button></div>
-          {#each (dayRows.get(overflowDay) ?? []).slice(2) as item (item.key)}<button class="calendar-chip" data-kind={item.kind} aria-label={eventLabel(item)} title={scheduleTitle(item, name(item.batch))} onclick={() => openEvent(item)}>{eventLabel(item)}</button>{/each}
-        {/if}
-      </div>
-    </section>
+    <BatchMonthGrid resetKey={JSON.stringify([viewer, query, refresh])} {month} {today} {events} {name} {eventLabel} chipText={item => item.legacy ? name(item.batch) : eventLabel(item)} {openEvent} />
   {:else}
     <!-- The scrollable region is a keyboard scroll target as well as containing tabbable bars. -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -190,9 +164,5 @@
   .view-toolbar.period-toolbar { flex-wrap: nowrap; min-height: 30px; }
   .month-title { flex: none; width: 10rem; white-space: nowrap; }
   .loading-status { flex: 0 1 10rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* In short windows, scroll the weeks rather than placing Close below the
-     workspace viewport. The overflow region always keeps its reserved 76 px. */
-  .calendar .weekdays { flex: none; }
-  .calendar .month-grid { flex: 0 1 360px; min-height: 0; overflow: auto; }
-  .batch-views{min-width:0;gap:8px}.batch-table{border:1px solid var(--hairline);border-radius:var(--radius-sm);overflow:hidden;background:var(--glass)}.batch-views:has(.calendar){flex:1;min-height:430px}.view-toolbar{flex:none;flex-wrap:wrap;gap:8px;box-shadow:0 1px var(--hairline)}p{margin:0}table{width:100%;table-layout:fixed;border-collapse:collapse}th{text-align:left;font-size:12px;font-weight:500;color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--hairline);background:var(--glass-strong)}th:nth-child(1){width:22%}th:nth-child(2){width:17%}th:nth-child(3){width:19%}th:nth-child(4){width:17%}th:nth-child(5){width:25%}th button{border:0;background:transparent;color:inherit;cursor:pointer;padding:2px 0}td{padding:0;border-bottom:1px solid var(--hairline)}.batch-row{display:grid;grid-template-columns:22fr 17fr 19fr 17fr 25fr;width:100%;gap:0;align-items:center;padding:8px 0;border:0;background:transparent;text-align:left;cursor:pointer;overflow-wrap:anywhere}.batch-row>*{min-width:0;padding:0 8px}.batch-row strong{font-size:13px;font-weight:600}.batch-row time{font-size:12px;font-variant-numeric:tabular-nums}.batch-row .truncate{font-size:13px}tbody tr:last-child td{border-bottom:0}.batch-row:hover{background:var(--row-hover)}button:focus-visible,.lane-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}.secondary{display:block;margin-top:3px;font-size:12px}.truncate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.calendar{min-width:0;min-height:0;display:flex;flex-direction:column;flex:1}.weekdays,.month-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}.weekdays{font-size:12px;color:var(--text-muted);text-align:center;padding:4px}.month-grid{flex:none;height:360px;grid-template-rows:repeat(6,60px);border-top:1px solid var(--hairline);border-left:1px solid var(--hairline)}.day{min-width:0;overflow:hidden;padding:2px;display:flex;flex-direction:column;gap:1px;border-right:1px solid var(--hairline);border-bottom:1px solid var(--hairline);background:var(--glass)}.day time{font-size:11px;line-height:12px;flex:none}.outside{background:transparent;color:var(--text-muted)}.today{box-shadow:inset 0 0 0 2px var(--accent)}.calendar-chip,.more-chip{display:block;min-width:0;width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;font-size:11px;line-height:12px;padding:0 3px;flex:none;border:1px solid var(--hairline);border-radius:var(--radius-sm);cursor:pointer;background:var(--glass-strong);color:var(--text-muted)}.more-chip{border:0;background:transparent;color:var(--accent)}.calendar-overflow{height:76px;flex:none;overflow:auto;border:1px solid var(--hairline);padding:4px;box-sizing:border-box;display:flex;flex-wrap:wrap;align-content:flex-start;gap:4px}.calendar-overflow .row{width:100%}.calendar-overflow .calendar-chip{width:auto;max-width:100%;padding:3px 6px}.calendar-chip,.lane-bar{--step-colour:var(--text-muted);color:var(--text);background:color-mix(in srgb,var(--step-colour) 16%,var(--glass-strong));border:1px solid color-mix(in srgb,var(--step-colour) 65%,var(--hairline));border-left:3px solid var(--step-colour)}[data-kind=abrasion]{--step-colour:var(--warning)}[data-kind=dissolution]{--step-colour:var(--danger)}[data-kind=conversion]{--step-colour:var(--kind-sample_registered)}[data-kind=cleaning]{--step-colour:var(--accent)}[data-kind=loading]{--step-colour:var(--ok)}.lane-scroll{max-width:100%;overflow:auto;max-height:calc(100dvh - 370px);border:1px solid var(--hairline);border-radius:var(--radius-sm)}.lane-row{display:grid;grid-template-columns:130px minmax(0,1fr);border-bottom:1px solid var(--hairline)}.lane-label{position:sticky;left:0;z-index:2;background:var(--glass-strong);backdrop-filter:blur(20px);padding:6px;overflow-wrap:anywhere;border-right:1px solid var(--hairline);font-size:12px}.lane-track{position:relative;min-width:0;overflow:hidden}.axis{height:32px;position:sticky;top:0;z-index:3;background:var(--glass-strong)}.axis time{position:absolute;font-size:10px;white-space:nowrap;top:7px}.today-line{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);pointer-events:none;z-index:1}.lane-bar{position:absolute;height:26px;padding:2px 5px;border-radius:var(--radius-sm);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;font-size:11px}@media(max-width:1100px){.batch-row{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:6px}.batch-row>span:nth-child(4){grid-column:2}.batch-row>span:nth-child(5){grid-column:3}thead th:nth-child(n+4){display:none}th:nth-child(n){width:33%}.calendar-chip,.more-chip{font-size:10px;padding:0 2px}.day{padding:2px;gap:1px}}
+  .batch-views{min-width:0;gap:8px}.batch-table{border:1px solid var(--hairline);border-radius:var(--radius-sm);overflow:hidden;background:var(--glass)}.batch-views.calendar-view{flex:1;min-height:430px}.view-toolbar{flex:none;flex-wrap:wrap;gap:8px;box-shadow:0 1px var(--hairline)}p{margin:0}table{width:100%;table-layout:fixed;border-collapse:collapse}th{text-align:left;font-size:12px;font-weight:500;color:var(--text-muted);padding:4px 8px;border-bottom:1px solid var(--hairline);background:var(--glass-strong)}th:nth-child(1){width:22%}th:nth-child(2){width:17%}th:nth-child(3){width:19%}th:nth-child(4){width:17%}th:nth-child(5){width:25%}th button{border:0;background:transparent;color:inherit;cursor:pointer;padding:2px 0}td{padding:0;border-bottom:1px solid var(--hairline)}.batch-row{display:grid;grid-template-columns:22fr 17fr 19fr 17fr 25fr;width:100%;gap:0;align-items:center;padding:8px 0;border:0;background:transparent;text-align:left;cursor:pointer;overflow-wrap:anywhere}.batch-row>*{min-width:0;padding:0 8px}.batch-row strong{font-size:13px;font-weight:600}.batch-row time{font-size:12px;font-variant-numeric:tabular-nums}.batch-row .truncate{font-size:13px}tbody tr:last-child td{border-bottom:0}.batch-row:hover{background:var(--row-hover)}button:focus-visible,.lane-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}.secondary{display:block;margin-top:3px;font-size:12px}.truncate{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.lane-bar{--step-colour:var(--text-muted);color:var(--text);background:color-mix(in srgb,var(--step-colour) 16%,var(--glass-strong));border:1px solid color-mix(in srgb,var(--step-colour) 65%,var(--hairline));border-left:3px solid var(--step-colour)}[data-kind=abrasion]{--step-colour:var(--warning)}[data-kind=dissolution]{--step-colour:var(--danger)}[data-kind=conversion]{--step-colour:var(--kind-sample_registered)}[data-kind=cleaning]{--step-colour:var(--accent)}[data-kind=loading]{--step-colour:var(--ok)}.lane-scroll{max-width:100%;overflow:auto;max-height:calc(100dvh - 370px);border:1px solid var(--hairline);border-radius:var(--radius-sm)}.lane-row{display:grid;grid-template-columns:130px minmax(0,1fr);border-bottom:1px solid var(--hairline)}.lane-label{position:sticky;left:0;z-index:2;background:var(--glass-strong);backdrop-filter:blur(20px);padding:6px;overflow-wrap:anywhere;border-right:1px solid var(--hairline);font-size:12px}.lane-track{position:relative;min-width:0;overflow:hidden}.axis{height:32px;position:sticky;top:0;z-index:3;background:var(--glass-strong)}.axis time{position:absolute;font-size:10px;white-space:nowrap;top:7px}.today-line{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);pointer-events:none;z-index:1}.lane-bar{position:absolute;height:26px;padding:2px 5px;border-radius:var(--radius-sm);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;font-size:11px}@media(max-width:1100px){.batch-row{grid-template-columns:repeat(3,minmax(0,1fr));row-gap:6px}.batch-row>span:nth-child(4){grid-column:2}.batch-row>span:nth-child(5){grid-column:3}thead th:nth-child(n+4){display:none}th:nth-child(n){width:33%}}
 </style>
