@@ -154,6 +154,7 @@
   @keyframes update-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { svg.busy { animation: none; } }
   .updates-popover { position: fixed; inset: auto; margin: 0; width: min(360px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; padding: var(--space-4); color: var(--text); box-shadow: var(--glass-shadow); overflow-wrap: anywhere; gap: var(--space-3); }
+  .updates-popover { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .updates-popover:not(:popover-open) { display: none; }
   p { margin: 0; }
   .card-heading { justify-content: space-between; }

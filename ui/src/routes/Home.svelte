@@ -458,6 +458,11 @@
   .spot-key > div { position: absolute; z-index: 2; right: 0; top: 100%; width: 15rem; padding: var(--space-3); gap: var(--space-1); background: var(--glass-strong); }
   .spot-key span { display: flex; align-items: center; gap: var(--space-1); }
   .spot-key i { width: 0.6rem; height: 0.45rem; flex: none; border-radius: 2px; }
+  .upload-panels, .upload-panels > .upload-expansion, .spot-key > div {
+    background: var(--plot-bg);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
   .mineral-group { gap: var(--space-2); }
   .mineral-group h3 { margin: 0; gap: var(--space-1); text-transform: capitalize; }
   .grow { flex: 1; min-width: 0; margin: 0; }
